@@ -1,3 +1,4 @@
 .venv
 resources/260317_issue13_esmlandscape/data/
 sample_notebook_dennis.ipynb
+resources/*/data/
