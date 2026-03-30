@@ -1,3 +1,22 @@
+# ------------------------------------------------------------------------------------------------------------------
+# NOTE:
+
+# residue mapping
+# start blank: MGSSHHHHHHSSGLVPR (length 17)
+# GSHMRGPNPTAASLEASAGPFTVRSFTVSRPSGYGAGTVYYPTNAGGTVGAIAIVPGYTARQSSIKWWGPRLASHGFVVITIDTNSTLDQPSSRSSQQMAALRQVASLNGTSSSPIYGKVDTARMGVMGWSMGGGGSLISAANNPSLKAAAPQAPWDSSTNFSSVTVPTLIFACENDSIAPVNSSALPIYDSMSRNAKQFLEINGGSHSCANSGNSNQALIGKKGVAWMKRFMDNDTRYSTFACENPNSTRVSDFRTANCSLE (length 263)
+# end blank: DPAANKARKEAELAAATAEQ (length 20)
+
+# in PDB labelled 30 - 292 (shifted by 29 AA) (length 263)
+# in PDB labelled S-160
+# in PDB labelled D-206
+# in PDB labelled H-237
+
+# index number of catalytic residues from sequence without starting and ending blanked out sequences
+# in pure sequence indexed S-131
+# in pure sequence indexed D-177
+# in pure sequence indexed H-208
+# ------------------------------------------------------------------------------------------------------------------
+
 #!/usr/bin/env python
 # coding: utf-8
 
