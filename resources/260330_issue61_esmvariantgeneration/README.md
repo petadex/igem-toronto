@@ -9,7 +9,8 @@ Prototype pipeline for generating PETase sequence variants using ESM‑2 with si
 | File | Purpose |
 |---|---|
 | `esm2_mutationvariant_prototype.py` | Runs the full ESM‑2 mutagenesis workflow: loads PETase sequence + structure, identifies catalytic‑pocket interface residues, masks positions, samples variants at multiple temperatures, and outputs ranked sequences. |
-| `notes.md` | Additional notes on PETase residue numbering, PDB alignment, and masking logic
+| `notes.md` | Additional notes on PETase residue numbering, PDB alignment, masking logic, and test variants generated |
+| `PETase.pdb` | PDB file used for generation of the ten test variants |
 
 ---
 
@@ -20,7 +21,7 @@ Prototype pipeline for generating PETase sequence variants using ESM‑2 with si
 - `fair-esm` for loading the ESM‑2 model
 - `biopython` for PDB structure parsing
 - A PETase PDB structure file (AlphaFold or crystal structure)
-- PETase sequence aligned to the PDB residue numbering
+- PETase sequence aligned to the PDB residue numbering (sequence with N and C terminal domains removed to align with the PDB file for generating the ten test variants: `GSHMRGPNPTAASLEASAGPFTVRSFTVSRPSGYGAGTVYYPTNAGGTVGAIAIVPGYTARQSSIKWWGPRLASHGFVVITIDTNSTLDQPSSRSSQQMAALRQVASLNGTSSSPIYGKVDTARMGVMGWSMGGGGSLISAANNPSLKAAAPQAPWDSSTNFSSVTVPTLIFACENDSIAPVNSSALPIYDSMSRNAKQFLEINGGSHSCANSGNSNQALIGKKGVAWMKRFMDNDTRYSTFACENPNSTRVSDFRTANCSLE`)
 
 Install dependencies (`pip install torch biopython fair-esm`)
 
