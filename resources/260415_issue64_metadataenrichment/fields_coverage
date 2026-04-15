@@ -1,0 +1,27 @@
+┌─────────────────────────────────────┬────────────┬──────────┐
+│             column_name             │ null_count │ null_pct │
+│               varchar               │   int64    │  double  │
+├─────────────────────────────────────┼────────────┼──────────┤
+│ collection_date_sam                 │    6800728 │    0.822 │
+│ geo_loc_name_sam                    │    4852674 │   0.5866 │
+│ biosamplemodel_sam                  │    4773360 │    0.577 │
+│ country                             │    4402537 │   0.5321 │
+│ geo_loc_name_country_calc           │    4354344 │   0.5263 │
+│ geo_loc_name_country_continent_calc │    4354344 │   0.5263 │
+│ biome                               │    4317802 │   0.5219 │
+│ confidence                          │    4078628 │    0.493 │
+│ elevation                           │    4049966 │   0.4895 │
+│ latitude                            │    4047948 │   0.4893 │
+│ longitude                           │    4047948 │   0.4893 │
+│ library_name                        │    2110519 │   0.2551 │
+│ bioproject                          │      18229 │   0.0022 │
+│ sample_name                         │       5952 │   0.0007 │
+│ sample_acc                          │       5952 │   0.0007 │
+│ biosample                           │       5952 │   0.0007 │
+│ organism                            │       5969 │   0.0007 │
+│ mbytes                              │       5944 │   0.0007 │
+│ sra_study                           │       4306 │   0.0005 │
+│ center_name                         │        155 │      0.0 │
+│ avgspotlen                          │         22 │      0.0 │
+│ mbases                              │         22 │      0.0 |
+└─────────────────────────────────────┴────────────┴──────────┘
