@@ -1,6 +1,6 @@
 # Issue 18: Signal Sequences
 
-This folder contains the resources and results for issue 18: predicting signal sequences. Is a work in progress.
+This folder contains the resources and results for issue 18: predicting signal sequences. Is a work in progress(currently contains results of small-scale analysis, not yet database wide)
 
 - fix_fasta.py: when downloaded, the fasta sequences had a formatting issue (specifically line breaks appeared literally as \n), so this script was used to fix the formatting
 - sequences.fasta: the raw fastaa sequences (602 sequences total)
