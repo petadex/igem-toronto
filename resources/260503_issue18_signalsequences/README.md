@@ -7,5 +7,7 @@ This folder contains the resources and results for issue 18: predicting signal s
 - sequences_fixed.fasta: the fastaa sequences properly formatted using fix_fasta.py
 - other_summary.csv: the signal sequences prediction results of all the sequences acquired from using the "other" option in SignalP6.0
 - eukarya_summary.csv: the signal sequences prediction results of all the sequences acquired from using the "eukarya" option in SignalP6.0
+- processed_entries_eukarya.other: the sequences from sequences_fixed.fasta after cleaving any signal peptide sequences (if present), based on the prediction results from other_summary.csv
+- processed_entries_eukarya.fasta: the sequences from sequences_fixed.fasta after cleaving any signal peptide sequences (if present), based on the prediction results from eukarya_summary.csv
 - results_69EFE3B10031...: the localization prediction of the first 301 sequences from sequences_fixed.fasta
 - results_69EFF9660038...: the localization prediction of the latter 301 sequences from sequences_fixed.fasta
