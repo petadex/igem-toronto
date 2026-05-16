@@ -12,4 +12,4 @@ This folder contains the resources and results for issue 18: predicting signal s
 - results_69EFE3B10031...: the localization prediction of the first 301 sequences from sequences_fixed.fasta
 - results_69EFF9660038...: the localization prediction of the latter 301 sequences from sequences_fixed.fasta
 
-- clusters_processed_entries.fasta: the predicted mature sequences of the protein clusters (64730 sequences)
+- clusters_processed_entries.fasta: the predicted mature sequences of the family representatives (64730 sequences total)
