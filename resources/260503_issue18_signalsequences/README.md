@@ -11,3 +11,5 @@ This folder contains the resources and results for issue 18: predicting signal s
 - processed_entries_eukarya.fasta: the sequences from sequences_fixed.fasta after cleaving any signal peptide sequences (if present), based on the prediction results from eukarya_summary.csv
 - results_69EFE3B10031...: the localization prediction of the first 301 sequences from sequences_fixed.fasta
 - results_69EFF9660038...: the localization prediction of the latter 301 sequences from sequences_fixed.fasta
+
+- clusters_processed_entries.fasta: the predicted mature sequences of the protein clusters (64730 sequences)
