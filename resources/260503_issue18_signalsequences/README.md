@@ -3,8 +3,8 @@
 This folder contains the resources and results for issue 18: predicting signal sequences. Is a work in progress(currently contains results of small-scale analysis, not yet database wide)
 
 - fix_fasta.py: when downloaded, the fasta sequences had a formatting issue (specifically line breaks appeared literally as \n), so this script was used to fix the formatting
-- sequences.fasta: the raw fastaa sequences (602 sequences total)
-- sequences_fixed.fasta: the fastaa sequences properly formatted using fix_fasta.py
+- sequences.fasta: the raw fasta sequences (602 sequences total)
+- sequences_fixed.fasta: the fasta sequences properly formatted using fix_fasta.py
 - other_summary.csv: the signal sequences prediction results of all the sequences acquired from using the "other" option in SignalP6.0
 - eukarya_summary.csv: the signal sequences prediction results of all the sequences acquired from using the "eukarya" option in SignalP6.0
 - processed_entries_eukarya.other: the sequences from sequences_fixed.fasta after cleaving any signal peptide sequences (if present), based on the prediction results from other_summary.csv
