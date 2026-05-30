@@ -1,0 +1,14 @@
+[project]
+name = "260513-issue34-esm-controls"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "ipykernel>=7.2.0",
+    "matplotlib>=3.10.9",
+    "numpy>=2.4.6",
+    "pandas>=3.0.3",
+    "psycopg2-binary>=2.9.12",
+    "umap-learn>=0.5.12",
+]
