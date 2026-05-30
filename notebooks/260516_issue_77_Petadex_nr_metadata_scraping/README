@@ -35,7 +35,7 @@ Heavy-duty browser automation tools designed to handle documents hidden behind c
 ## Data Schema Summary
 * **Total Aggregated Source Listings:** ~12,000
 * **Unique Consolidated Targets:** 10,386 unique DOIs
-* **Pipeline Extraction Success Rate:** 96.34% (10,006 valid documents secured)
+* **Pipeline Extraction Success Rate:** 96.30% (10,002 valid documents secured) which can be found at https://petadexstorage.blob.core.windows.net/petadex-metadata-papers
 
 ## Dependencies
 This pipeline requires standard data science libraries (`pandas`, `tqdm`, `beautifulsoup4`) alongside specialized networking and automation modules:
