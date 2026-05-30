@@ -1,10 +1,10 @@
-# Petadex nr metadata scraping pipeline (read me made using AI cause I could not be bothered lol sorry)
+# Petadex nr metadata scraping pipeline (read me made using AI cause I could not be bothered lol sorry, also the comments in my code and some of the code itself like print statements and functions were also made with ai)
 
 An automated pipeline designed to construct a comprehensive full-text literature corpus for domain-specific language model fine-tuning. The workflow maps biological database identifiers to academic literature, resolves cross-repository duplicates, and handles authenticated bulk retrieval across multiple publisher APIs and institutional proxies.
 
 ## Pipeline Architecture
 
-The harvesting process is divided into six chronological phases. It begins with raw biological identifiers and concludes with a cleanly formatted, deduplicated file directory ready for machine learning ingestion.
+The harvesting process is divided into five chronological phases. It begins with raw biological identifiers and concludes with a cleanly formatted, deduplicated file directory ready for machine learning ingestion.
 
 ### Phase 1: Database Identifier Mapping
 Queries biological literature APIs to map protein accession numbers from local target databases to unique PubMed Identifiers (PMIDs).
@@ -32,10 +32,6 @@ Heavy-duty browser automation tools designed to handle documents hidden behind c
 * **`phase5_custom_repository_scraper.py`**: Utilizes `undetected_chromedriver` and `PyAutoGUI` to navigate target repositories and simulate user interactions for PDF retrieval. Includes robust state recovery for uninterrupted batch processing.
 * **`phase5_ezproxy_authenticated_fetcher.py`**: Automates retrieval through an institutional EZProxy portal. Features manual authentication handoff, adaptive human pacing (jitter), and scheduled system pauses to evade automated bot detection rate limits.
 
-### Phase 6: Dataset Auditing & Corpus Consolidation
-* **`final_master_audit.py`**: Scans all output directories and utilizes the Phase 3 master ledger (the Rosetta Stone) to map DOIs back to PMIDs. It performs strict deduplication favoring PDFs over XMLs and outputs a final CSV manifest of all secured files.
-* **`build_final_corpus.py`**: Physically copies all deduplicated files from their scattered extraction directories into a single unified `CONSOLIDATED_SCIBERT_CORPUS` folder. It standardizes all filenames to their universal PMIDs to ensure clean data loading during model training.
-
 ## Data Schema Summary
 * **Total Aggregated Source Listings:** ~12,000
 * **Unique Consolidated Targets:** 10,386 unique DOIs
@@ -46,4 +42,5 @@ This pipeline requires standard data science libraries (`pandas`, `tqdm`, `beaut
 * `biopython`
 * `curl_cffi`
 * `undetected-chromedriver`
+* `selenium`
 * `PyAutoGUI`
