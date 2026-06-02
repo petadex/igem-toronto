@@ -1,0 +1,25 @@
+enzyme_name,organism,plastic,ec_number,uniprot,year,source
+LCC,Leaf-branch compost metagenome,PET,3.1.1.101,G9BY57,2012,PAZy
+IsPETase,Ideonella sakaiensis 201-F6,PET,3.1.1.101,A0A0K8P8H7,2016,PAZy
+TfCut2,Thermobifida fusca KW3,PET,3.1.1.101,Q47RJ6,2010,PAZy
+ThermoPETase,Engineered variant of IsPETase,PET,3.1.1.101,,2019,PAZy
+FAST-PETase,Engineered variant of IsPETase,PET,3.1.1.101,,2022,PAZy
+ICCG LCC,Engineered LCC variant,PET,3.1.1.101,,2020,PAZy
+PHL7,Pseudomonas lini DSM 16768,PET,3.1.1.101,A0A6M3YWE3,2021,PAZy
+PET2,Metagenome,PET,3.1.1.101,,2020,PAZy
+BhrPETase,Bhargavaea cecembensis,PET,3.1.1.101,,2023,PAZy
+CsPETase,Cryptosporangium aurantiacum,PET,3.1.1.101,,2023,PAZy
+PHB depolymerase (R. pickettii),Ralstonia pickettii,PHB,3.1.1.75,P20594,1994,PAZy
+PhaZ7,Paucimonas lemoignei,PHB,3.1.1.75,Q9F3L4,2001,PAZy
+PhaZSpo,Bacillus megaterium,PHB,3.1.1.75,O87625,2000,PAZy
+PHO depolymerase,Pseudomonas fluorescens GK13,PHA,3.1.1.76,,1994,PAZy
+PlaA,Pseudomonas stutzeri,PLA,3.1.1.-,Q9ZIQ4,2003,PAZy
+PlaC,Pseudomonas sp. DS04-T,PLA,3.1.1.-,,2012,PAZy
+PCL depolymerase,Alcaligenes faecalis T1,PCL,3.1.1.74,P16417,1993,PAZy
+PBSA depolymerase,Bacillus pumilus KT,PBSA,3.1.1.-,,2004,PAZy
+NylB,Arthrobacter sp. KI72,Nylon,3.5.1.84,P10163,1992,PAZy
+NylA,Arthrobacter sp. KI72,Nylon,3.5.1.-,P10162,1992,PAZy
+PueA,Pseudomonas chlororaphis,PU,3.1.1.-,Q9X4G0,2000,PAZy
+PueB,Pseudomonas chlororaphis,PU,3.1.1.-,Q9X4G1,2000,PAZy
+Pfl_1298 lipase,Pseudomonas fluorescens SBW25,PU,3.1.1.3,Q4KE02,2008,PAZy
+PES hydrolase,Pelosinus sp. UFO1,PES,3.1.1.-,,2019,PAZy
