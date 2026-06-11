@@ -12,7 +12,7 @@ Verified facts about s3://esm-protein-atlas (public, --no-sign-request):
   - structure_blob == brotli( msgpack-numpy( {sequence, atom37_positions, atom37_mask,
                        residue_index, confidence(=pLDDT), ...} ) )
 
-Install:  pip install pylance pyarrow msgpack numpy brotli zstandard boto3
+Install:  pip install pylance pyarrow msgpack numpy brotli zstandard boto3 tqdm
 
 Output model (content-addressed):
   - PDBs are keyed by protein_hash:  <outdir>/<hash>.pdb  (or s3://bucket/prefix/<hash>.pdb)
@@ -21,16 +21,31 @@ Output model (content-addressed):
   - found_hashes.tsv lists which hashes actually have a structure (drives resume + the join).
   - "which ORFs have a structure?"  ==  orf_map rows whose protein_hash is in found_hashes.
 """
-import os, hashlib, time
+import os, io, time, hashlib
 import numpy as np
 import lance, brotli, msgpack
 import zstandard as zstd
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+from itertools import islice
+try:
+    from tqdm import tqdm
+except ImportError:                                   # graceful no-op if tqdm is absent
+    class tqdm:
+        def __init__(self, iterable=None, **kw): self.iterable = iterable
+        def __iter__(self): return iter(self.iterable or [])
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def update(self, n=1): pass
+        def set_postfix(self, **kw): pass
+        @staticmethod
+        def write(msg, *a, **k): print(msg)
 
 STORAGE = {"aws_skip_signature": "true"}          # anonymous public-bucket access
-DATASETS = [
-    "s3://esm-protein-atlas/v1/folds/folds_atlas.lance",
-    "s3://esm-protein-atlas/v1/folds/folds_1B.lance",
-]
+DATASETS = {                                       # short name -> Lance dataset URI
+    "atlas": "s3://esm-protein-atlas/v1/folds/folds_atlas.lance",   #       6.6M representative set
+    "1b":    "s3://esm-protein-atlas/v1/folds/folds_1B.lance",      # 1,095M full set
+}
+DATASET_ORDER = ["atlas", "1b"]                    # default query order (cheaper set first)
 OUTDIR = "pdbs"
 BATCH = 4000                                       # hashes per indexed query
 
@@ -126,10 +141,11 @@ def parse_fasta(path, orf_map_path=None):
             if mf:
                 mf.write(f"{hid}\t{h}\n")
 
-    opener = (zstd.open if path.endswith(".zst") else open)
     try:
-        with opener(path, "rt") as f:
-            for line in f:
+        with tqdm(total=_input_size(path), unit="B", unit_scale=True,
+                  unit_divisor=1024, desc="parse") as pbar:
+            for line in _iter_lines(path):
+                pbar.update(len(line) + 1)            # ~bytes read (progress only, approximate)
                 line = line.strip()
                 if line.startswith(">"):
                     flush()
@@ -137,7 +153,7 @@ def parse_fasta(path, orf_map_path=None):
                     seq = []
                 elif line:
                     seq.append(line)
-        flush()
+            flush()
     finally:
         if mf:
             mf.close()
@@ -147,47 +163,136 @@ def _parse_s3(uri):
     bucket, _, key = uri[5:].partition("/")           # uri == s3://bucket/prefix...
     return bucket, key.strip("/")
 
+def _s3_read_client():
+    # Anonymous client for PUBLIC input buckets (e.g. petadex) -- no credentials needed,
+    # matching the anonymous Atlas access. (Signed boto3 is only used for WRITING output.)
+    import boto3
+    from botocore import UNSIGNED
+    from botocore.config import Config
+    return boto3.client("s3", config=Config(signature_version=UNSIGNED))
+
+def _input_size(path):
+    # Total bytes of the input, for the parse progress bar; None if unknown (bar still
+    # runs, just without a percentage / ETA).
+    try:
+        if path.startswith("s3://"):
+            bucket, key = _parse_s3(path)
+            return _s3_read_client().head_object(Bucket=bucket, Key=key)["ContentLength"]
+        return os.path.getsize(path)
+    except Exception:
+        return None
+
+def _iter_lines(path):
+    # Yields text lines from a local path OR an s3:// URI (so the 100+ GB input never
+    # has to land on the VM's disk); handles .zst transparently in both cases.
+    if path.startswith("s3://"):
+        bucket, key = _parse_s3(path)
+        body = _s3_read_client().get_object(Bucket=bucket, Key=key)["Body"]
+        if path.endswith(".zst"):
+            reader = zstd.ZstdDecompressor().stream_reader(body)
+            yield from io.TextIOWrapper(reader, encoding="utf-8")
+        else:
+            for raw in body.iter_lines(chunk_size=1 << 20):
+                yield raw.decode("utf-8", "replace")
+    else:
+        opener = (zstd.open if path.endswith(".zst") else open)
+        with opener(path, "rt") as f:
+            yield from f
+
 def batched(it, n):
     it = list(it)
     for i in range(0, len(it), n):
         yield it[i:i+n]
 
-def count_hits(hashes, dsets):
-    """Dry-run: query protein_hash only (no structure_blob, no PDB writes) and
-    report how many sequences are present in the Atlas, broken down by dataset."""
-    remaining = set(hashes)
+def hashes_from_map(path):
+    # Load the SET of unique protein_hashes from a previously written orf_map
+    # (orf_id<TAB>protein_hash, optionally .zst). Lets the download skip re-parsing the
+    # full FASTA: reads ~2-3 GB instead of 116 GB, and does no md5 work.
+    hashes = set()
+    it = _iter_lines(path)
+    next(it, None)                                    # skip the header row
+    for line in tqdm(it, desc="load orf_map", unit="row", unit_scale=True):
+        line = line.rstrip("\n")
+        if line:
+            hashes.add(line.rsplit("\t", 1)[-1])      # protein_hash is the last column
+    return hashes
+
+def _scan_retry(ds, columns, filt, attempts=4):
+    # Lance reads the dataset in byte ranges over S3; cross-region range fetches
+    # occasionally time out. Retry the batch with backoff, then give up (return None)
+    # so one transient blip can't kill the run -- skipped hashes are simply picked up
+    # on the next resume (download) or slightly undercounted (count).
+    for i in range(attempts):
+        try:
+            return ds.scanner(columns=columns, filter=filt).to_table().to_pylist()
+        except Exception as e:
+            if i == attempts - 1:
+                tqdm.write(f"  WARN batch failed after {attempts} tries, skipping: {e}")
+                return None
+            time.sleep(2 ** i)                        # 1s, 2s, 4s backoff
+
+def _ibatch(seq, n):                                  # lazy fixed-size slices of an indexable
+    for i in range(0, len(seq), n):
+        yield seq[i:i+n]
+
+def _bounded(ex, fn, items, max_inflight):
+    # Run fn over items with at most max_inflight futures alive at once, yielding each
+    # result as it completes. Never materializes all futures/chunks, so memory stays flat
+    # no matter how many items there are (the 124M-hash run would OOM otherwise).
+    it = iter(items)
+    inflight = set()
+    for x in islice(it, max_inflight):
+        inflight.add(ex.submit(fn, x))
+    while inflight:
+        done, inflight = wait(inflight, return_when=FIRST_COMPLETED)
+        for f in done:
+            yield f.result()
+            nxt = next(it, None)
+            if nxt is not None:
+                inflight.add(ex.submit(fn, nxt))
+
+def count_hits(hashes, dsets, workers=16):
+    """Dry-run: query protein_hash only (no structure_blob, no files) and report how
+    many sequences are present in the Atlas, broken down by dataset. Batches are queried
+    concurrently; the `remaining`/`hits` state is updated only on the main thread."""
     n_total = len(hashes)
+    remaining = hashes                                # operate in place -- no duplicate set
     per_ds = {}
-    t0 = time.time()
-    for u, ds in dsets:                               # representative set first, then 1B
-        if not remaining:
-            break
-        name = u.rstrip("/").split("/")[-1]
-        hits = 0
-        for chunk in batched(remaining, BATCH):
-            q = ",".join(f"'{h}'" for h in chunk)
-            tbl = ds.scanner(columns=["protein_hash"],   # hash-only: no blob over the wire
-                             filter=f"protein_hash IN ({q})").to_table().to_pylist()
-            for r in tbl:
-                h = r["protein_hash"]
-                if h in remaining:
-                    remaining.discard(h); hits += 1
-            checked = n_total - len(remaining)
-            print(f"  [{name}] hits {hits} | "
-                  f"{checked/max(time.time()-t0,1e-9):.0f} resolved/s | "
-                  f"{len(remaining)} unmatched", end="\r")
-        per_ds[name] = hits
-        print()
+
+    def query_chunk(ds, chunk):                       # hash-only: no blob over the wire
+        q = ",".join(f"'{h}'" for h in chunk)
+        tbl = _scan_retry(ds, ["protein_hash"], f"protein_hash IN ({q})")
+        return [r["protein_hash"] for r in tbl] if tbl else []
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for u, ds in dsets:                           # representative set first, then 1B
+            if not remaining:
+                break
+            name = u.rstrip("/").split("/")[-1]
+            hits = 0
+            pending = list(remaining)                 # one snapshot (~1 GB at 124M); safe vs mutation
+            n_batches = (len(pending) + BATCH - 1) // BATCH
+            with tqdm(total=n_batches, desc=f"count {name}", unit="batch") as pbar:
+                for found in _bounded(ex, lambda c, ds=ds: query_chunk(ds, c),
+                                      _ibatch(pending, BATCH), workers * 2):
+                    for h in found:
+                        if h in remaining:
+                            remaining.discard(h); hits += 1
+                    pbar.update(1)
+                    pbar.set_postfix(hits=hits, unmatched=len(remaining))
+            per_ds[name] = hits
     total = n_total - len(remaining)
     print(f"\nHIT RATE: {total}/{n_total} = {100*total/max(n_total,1):.2f}% present in Atlas")
     for name, n in per_ds.items():
         print(f"  {n:>9} from {name}")
     print(f"  {len(remaining):>9} not found in any dataset")
 
-def download(hashes, dsets, outdir=OUTDIR, s3_dest=None, fmt="cif"):
+def download(hashes, dsets, outdir=OUTDIR, s3_dest=None, fmt="cif", workers=16):
     # Writes one structure per unique sequence, keyed by protein_hash, to
-    # <outdir>/<hash>.<fmt> or s3://bucket/prefix/<hash>.<fmt>. Appends each resolved
-    # hash to found_hashes.tsv, the resume ledger + join key for ORF lookup.
+    # <outdir>/<hash>.<fmt> or s3://bucket/prefix/<hash>.<fmt>. Atlas queries + decode
+    # + upload run concurrently across `workers` threads (the work is I/O-bound).
+    # found_hashes.tsv is the resume ledger + ORF-lookup join key; it is written only
+    # from the main thread as batches complete, so no file-write locking is needed.
     serialize = (lambda blob, h: blob_to_cif(blob, h)) if fmt == "cif" \
                 else (lambda blob, h: blob_to_pdb(blob))
     ctype = {"cif": "chemical/x-mmcif", "pdb": "chemical/x-pdb"}[fmt]
@@ -198,12 +303,16 @@ def download(hashes, dsets, outdir=OUTDIR, s3_dest=None, fmt="cif"):
         with open(found_path) as fh:
             next(fh, None)                            # skip header
             done = {line.split("\t", 1)[0] for line in fh if line.strip()}
-    remaining = set(hashes) - done
-    print(f"{len(hashes)} unique sequences | {len(done)} already done | {len(remaining)} to fetch")
+    n0 = len(hashes)
+    hashes.difference_update(done)                    # in place -- avoid a 124M-set copy
+    remaining = hashes
+    print(f"{n0} unique sequences | {len(done)} already done | "
+          f"{len(remaining)} to fetch | {workers} workers")
 
     s3 = bucket = prefix = None
     if s3_dest:
         import boto3
+        # one shared low-level client (boto3 clients are thread-safe for put_object)
         s3 = boto3.client("s3")
         bucket, prefix = _parse_s3(s3_dest)
 
@@ -215,49 +324,73 @@ def download(hashes, dsets, outdir=OUTDIR, s3_dest=None, fmt="cif"):
             with open(os.path.join(outdir, f"{h}.{fmt}"), "w") as fh:
                 fh.write(text)
 
-    found = 0; t0 = time.time()
+    def process_chunk(ds, chunk):
+        # one worker: query a batch, then decode + upload every hit; return found hashes
+        q = ",".join(f"'{h}'" for h in chunk)
+        tbl = _scan_retry(ds, ["protein_hash", "structure_blob"], f"protein_hash IN ({q})")
+        if not tbl:
+            return []
+        got = []
+        for r in tbl:
+            h = r["protein_hash"]
+            try:
+                put(h, serialize(r["structure_blob"], h))
+                got.append(h)
+            except Exception as e:                    # a bad structure must not kill the batch
+                tqdm.write(f"  WARN {h}: {e}")
+        return got
+
+    found = 0
     write_header = not os.path.exists(found_path)
-    with open(found_path, "a") as ff:
+    with open(found_path, "a") as ff, ThreadPoolExecutor(max_workers=workers) as ex:
         if write_header:
             ff.write("protein_hash\tsource_dataset\n")
         for u, ds in dsets:                           # try representative set first, then 1B
             if not remaining:
                 break
             src = u.rstrip("/").split("/")[-1]
-            for chunk in batched(remaining, BATCH):
-                q = ",".join(f"'{h}'" for h in chunk)
-                tbl = ds.scanner(columns=["protein_hash", "structure_blob"],
-                                 filter=f"protein_hash IN ({q})").to_table().to_pylist()
-                for r in tbl:
-                    h = r["protein_hash"]
-                    if h not in remaining:
-                        continue
-                    put(h, serialize(r["structure_blob"], h))
-                    ff.write(f"{h}\t{src}\n")
-                    remaining.discard(h); found += 1
-                ff.flush()                            # crash-safe: persist ledger per batch
-                print(f"  found {found} | {found/max(time.time()-t0,1e-9):.0f}/s | "
-                      f"{len(remaining)} unmatched", end="\r")
+            pending = list(remaining)                 # one snapshot; bounded submission below
+            n_batches = (len(pending) + BATCH - 1) // BATCH
+            with tqdm(total=n_batches, desc=f"download {src}", unit="batch") as pbar:
+                for got in _bounded(ex, lambda c, ds=ds: process_chunk(ds, c),
+                                    _ibatch(pending, BATCH), workers * 2):
+                    for h in got:
+                        if h in remaining:
+                            ff.write(f"{h}\t{src}\n")
+                            remaining.discard(h); found += 1
+                    ff.flush()                        # crash-safe: persist ledger per batch
+                    pbar.update(1)
+                    pbar.set_postfix(found=found, unmatched=len(remaining))
     dest = s3_dest if s3_dest else outdir
     print(f"\nDone: {found} structures written to {dest} ; "
           f"{len(remaining)} sequences not in the atlas.")
     print(f"Found-set ledger: {found_path}")
 
 def main(fasta, count_only=False, sample=None, seed=0,
-         orf_map=None, s3_dest=None, outdir=OUTDIR, fmt="cif"):
-    hashes = parse_fasta(fasta, orf_map_path=orf_map)
-    print(f"{len(hashes)} unique sequences parsed from {fasta}")
-    if orf_map:
-        print(f"full orf_id -> protein_hash index written to {orf_map}")
+         orf_map=None, s3_dest=None, outdir=OUTDIR, fmt="cif", workers=16,
+         hashes_from=None, datasets=None):
+    if hashes_from:                                   # reuse a banked orf_map -> no re-parse
+        hashes = hashes_from_map(hashes_from)
+        print(f"{len(hashes)} unique hashes loaded from {hashes_from}")
+    else:
+        hashes = parse_fasta(fasta, orf_map_path=orf_map)
+        print(f"{len(hashes)} unique sequences parsed from {fasta}")
+        if orf_map:
+            print(f"full orf_id -> protein_hash index written to {orf_map}")
     if sample is not None and sample < len(hashes):
         import random
         hashes = set(random.Random(seed).sample(list(hashes), sample))
         print(f"sampled down to {len(hashes)} sequences (seed={seed})")
-    dsets = [(u, lance.dataset(u, storage_options=STORAGE)) for u in DATASETS]
+    names = [n.strip() for n in datasets.split(",")] if datasets else DATASET_ORDER
+    bad = [n for n in names if n not in DATASETS]
+    if bad:
+        raise SystemExit(f"unknown --datasets {bad}; choose from {list(DATASETS)}")
+    print(f"querying datasets: {', '.join(names)}")
+    dsets = [(DATASETS[n], lance.dataset(DATASETS[n], storage_options=STORAGE)) for n in names]
     if count_only:
-        count_hits(hashes, dsets)
+        count_hits(hashes, dsets, workers=workers)
     else:
-        download(hashes, dsets, outdir=outdir, s3_dest=s3_dest, fmt=fmt)
+        download(hashes, dsets, outdir=outdir, s3_dest=s3_dest, fmt=fmt, workers=workers)
 
 if __name__ == "__main__":
     import argparse
@@ -274,11 +407,21 @@ if __name__ == "__main__":
                     help="write the full orf_id->protein_hash index here (.tsv or .tsv.zst); "
                          "join against found_hashes.tsv to see which ORFs have a structure")
     ap.add_argument("--s3", dest="s3_dest", default=None, metavar="s3://bucket/prefix",
-                    help="upload <hash>.pdb objects here instead of writing them locally")
+                    help="upload <hash>.<format> objects here instead of writing locally")
     ap.add_argument("--outdir", default=OUTDIR,
                     help=f"local output dir for structures + found_hashes.tsv (default {OUTDIR})")
     ap.add_argument("--format", dest="fmt", choices=["cif", "pdb"], default="cif",
                     help="structure file format (default cif)")
+    ap.add_argument("--workers", type=int, default=16,
+                    help="concurrent Atlas-query/upload threads (default 16)")
+    ap.add_argument("--hashes-from", dest="hashes_from", default=None, metavar="ORF_MAP",
+                    help="load unique hashes from a saved orf_map (.tsv/.tsv.zst) instead of "
+                         "re-parsing the FASTA -- much faster for the download run")
+    ap.add_argument("--datasets", default=None, metavar="LIST",
+                    help="comma list of Atlas datasets to query: atlas,1b "
+                         "(default both, atlas first; e.g. --datasets 1b for the 1B set only)")
     args = ap.parse_args()
     main(args.fasta, count_only=args.count, sample=args.sample, seed=args.seed,
-         orf_map=args.orf_map, s3_dest=args.s3_dest, outdir=args.outdir, fmt=args.fmt)
+         orf_map=args.orf_map, s3_dest=args.s3_dest, outdir=args.outdir,
+         fmt=args.fmt, workers=args.workers,
+         hashes_from=args.hashes_from, datasets=args.datasets)
