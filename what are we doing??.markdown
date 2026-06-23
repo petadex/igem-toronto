@@ -77,7 +77,8 @@ This is a hard deadline, please get things done by then.
 - **Declan**
   - ??
 - **David**
-  - 
+  - A michelis-menten page
+  - ??
 
 
 ## Scraping Experiment
@@ -92,3 +93,7 @@ We are going to take as many papers as possible that have plastic-degrading enzy
 4. Where the agents and the humans disagree, we need to figure out who is right.
 5. At the end, we will have scraped ~250 papers and a confidence interval we have in the model to predict correctly.
 6. If the confidence is high, we can apply this to all papers.
+
+PETra
+<img width="225" height="297" alt="image" src="https://github.com/user-attachments/assets/1dd88ea4-8bf2-447f-9f73-b11aca7b7adc" />
+
