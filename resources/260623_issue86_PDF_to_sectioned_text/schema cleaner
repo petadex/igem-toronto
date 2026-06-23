@@ -1,0 +1,99 @@
+import os
+import json
+import re
+from collections import defaultdict
+
+INPUT_DIR = r"C:\Users\somna\source\repos\why do i have so many directories\final_unified_dataset"
+OUTPUT_DIR = r"C:\Users\somna\Downloads\Metadata_Unified_Schema_Refined"
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+TARGET_HEADERS = {
+    "abstract": "Abstract",
+    "summary": "Abstract",
+    "introduction": "Introduction",
+    "background": "Introduction",
+    "materials": "Methods",
+    "methods": "Methods",
+    "experimentaldetails": "Methods",
+    "materialsandmethods": "Methods",
+    "results": "Results",
+    "findings": "Results",
+    "discussion": "Discussion",
+    "conclusion": "Conclusion",
+    "conclusions": "Conclusion",
+    "acknowledgements": "Acknowledgements",
+    "references": "References"
+}
+
+GENERIC_TAGS = {"Body_Text", "Front_Matter", "Other_Missing_From_Grobid", "Section_Header"}
+FLOATING_TAGS = {"Footer_or_Artifact", "Page_Number", "Journal_Metadata", "Title_or_Authors"}
+
+change_log = defaultdict(int)
+
+def process_corpus():
+    if not os.path.exists(INPUT_DIR):
+        print(f"Error: Input directory not found: {INPUT_DIR}")
+        return
+        
+    json_files = [f for f in os.listdir(INPUT_DIR) if f.lower().endswith('.json')]
+    print(f"Processing {len(json_files)} files...\n")
+    print("-" * 60)
+    print("LIVE DETECTION LOG:")
+    print("-" * 60)
+    
+    for filename in json_files:
+        in_path = os.path.join(INPUT_DIR, filename)
+        out_path = os.path.join(OUTPUT_DIR, filename)
+        
+        with open(in_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            
+        content = data.get("content", [])
+        cascade_tag = None
+        
+        for block in content:
+            original_section = block.get("section", "")
+            text = block.get("text", "").strip()
+            
+            text_clean = re.sub(r'[^a-zA-Z]', '', text).lower()
+            
+            if len(text) < 100 and text_clean in TARGET_HEADERS:
+                if original_section in GENERIC_TAGS:
+                    new_tag = TARGET_HEADERS[text_clean]
+                    cascade_tag = new_tag  
+                    
+                    log_key = (original_section, text, new_tag)
+                    if change_log[log_key] == 0:
+                        print(f"New trigger found: [{original_section}] with text '{text}' -> identified as [{new_tag}] and cascading down.")
+                    change_log[log_key] += 1
+                    
+                    block["section"] = new_tag
+                    continue
+            
+            if original_section in FLOATING_TAGS:
+                pass 
+            elif original_section in GENERIC_TAGS:
+                if cascade_tag:
+                    block["section"] = cascade_tag
+            else:
+                cascade_tag = None
+
+        with open(out_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+            
+    print("\n" + "=" * 70)
+    print("FINAL SUMMARY OF SECTION CHANGES (TOTAL COUNTS)")
+    print("=" * 70)
+    
+    if not change_log:
+        print("No changes were necessary.")
+        return
+        
+    sorted_log = sorted(change_log.items(), key=lambda item: item[1], reverse=True)
+    
+    for (old_tag, txt, new_tag), count in sorted_log:
+        print(f"Count: {count:<5} | Changed [{old_tag}] containing '{txt}' to [{new_tag}]")
+
+if __name__ == "__main__":
+    process_corpus()
