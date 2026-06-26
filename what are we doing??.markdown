@@ -23,9 +23,8 @@ This is a hard deadline, please get things done by then.
   - Validated PDBs (experimental)
   - Predicted PDBs (ESM, AF)
   - Prediction and measurement quality metrics
-  - Fold all 90% centroids using ESMFold2 (or 60%/30% centroids if too expensive)
-    - With PETadex MSAs
-    - With PTMs
+  - Benchmark ESMFold2 base against EMSFold2 (with PETadex MSA + PETadexESM)
+    - with PTMs?
 - **Angela**
   - DeepLoc
   - SignalP
