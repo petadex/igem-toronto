@@ -75,7 +75,7 @@ from functools import lru_cache
 # Reuse the single-oligo prototype for the optional (junk-gated) degenerate pass.
 try:
     from greedy_oligo import (
-        design_oligo, expand_degenerate_codon, AA_BY_CODON,
+        design_oligo, expand_degenerate_codon, AA_BY_CODON, IUPAC,
     )
     _HAVE_GREEDY = True
 except Exception:  # pragma: no cover
@@ -208,6 +208,42 @@ def _hamming(a, b):
     return sum(1 for x, y in zip(a, b) if x != y)
 
 
+# --------------------------------------------------------------------------- #
+# Type IIS domestication + reserved backbone overhangs (Golden Gate).
+#
+#   * FORBIDDEN_SITES: the assembly enzyme's own recognition site must not occur
+#     ANYWHERE inside a produced full-length sequence, or the enzyme would cut it
+#     internally. Default BsmBI/Esp3I = CGTCTC (+ its reverse complement GAGACG);
+#     overridden from --gg-enzyme in main(). Enforced by actually BACK-TRANSLATING
+#     the design to concrete codons (Section 6b): synonymous codons are chosen so
+#     no expansion of any assembled full-length sequence contains the site.
+#   * BACKBONE_OVERHANGS: the destination vector opens with these two fusion sites
+#     to receive the insert's outer ends, so INTERNAL junctions must not use them
+#     (nor cross-react with them) -- unless we deliberately share them in a
+#     shared-overhang / minimal-plasmid design (then the first/last fragment, which
+#     mates the backbone, is excluded from the ban).
+# --------------------------------------------------------------------------- #
+FORBIDDEN_SITES = frozenset({"CGTCTC", "GAGACG"})
+BACKBONE_OVERHANGS = frozenset({"CGGA", "GGTG"})
+
+
+def _has_forbidden_site(nt):
+    """True if a concrete DNA string contains any forbidden Type IIS site."""
+    return any(site in nt for site in FORBIDDEN_SITES)
+
+
+def _degenerate_has_forbidden(oligo_iupac):
+    """True if SOME expansion of an IUPAC-coded oligo could contain a forbidden
+    site -- i.e. a window whose per-position ambiguity sets can all match it. Used
+    to reject a degenerate-codon oligo (which carries IUPAC ambiguity codes, not
+    plain ACGT) unless every expansion is site-free."""
+    for site in FORBIDDEN_SITES:
+        for i in range(len(oligo_iupac) - len(site) + 1):
+            if all(site[k] in IUPAC[oligo_iupac[i + k]] for k in range(len(site))):
+                return True
+    return False
+
+
 def _const_aa(j):
     """The single residue at column j if it is constant & gap-free, else None."""
     col = {s[j] for s in _ALIGNED}
@@ -235,10 +271,12 @@ def _gg_conflict(a, b):
     return a == b or _hamming(a, _revcomp(b)) <= 1
 
 
-def _gg_overhangs_at(p, L):
+def _gg_overhangs_at(p, L, reserved=frozenset()):
     """Achievable, individually high-fidelity 4-nt overhangs straddling boundary p
-    (synonymous codon choice on the two constant flanking residues). Empty set =>
-    Level-1 illegal for Golden Gate here."""
+    (synonymous codon choice on the two constant flanking residues). An overhang is
+    kept only if SOME synonymous flanking-codon pair realizes it without spelling a
+    forbidden Type IIS site in the junction (domesticable), and it does not cross-
+    react with any reserved backbone overhang. Empty set => illegal for GG here."""
     if p <= 0 or p >= L:
         return frozenset()
     laa, raa = _const_aa(p - 1), _const_aa(p)
@@ -248,9 +286,27 @@ def _gg_overhangs_at(p, L):
     for lc in _CODON_BY_AA[laa]:
         for rc in _CODON_BY_AA[raa]:
             oh = lc[1:] + rc[:2]        # 2 nt from each side = 4-nt overhang
-            if _overhang_ok(oh):
-                ohs.add(oh)
+            if not _overhang_ok(oh):
+                continue
+            if _has_forbidden_site(lc + rc):
+                continue                # this synonymous context spells the site
+            if any(_gg_conflict(oh, r) for r in reserved):
+                continue                # collides with a reserved backbone overhang
+            ohs.add(oh)                 # kept: >=1 domesticated context exists
     return frozenset(ohs)
+
+
+def _gg_pin_codons(p, oh):
+    """Recover a concrete, domesticated synonymous codon pair (lc, rc) for the two
+    constant residues flanking boundary p that realizes overhang `oh` with no
+    forbidden site in lc+rc. These become the pinned junction codons (last codon of
+    the left fragment, first codon of the right fragment). Returns (lc, rc)."""
+    laa, raa = _const_aa(p - 1), _const_aa(p)
+    for lc in _CODON_BY_AA[laa]:
+        for rc in _CODON_BY_AA[raa]:
+            if lc[1:] + rc[:2] == oh and not _has_forbidden_site(lc + rc):
+                return lc, rc
+    raise ValueError(f"no domesticated codon pair for overhang {oh} at col {p}")
 
 
 def _hr_arm_at(p, L, arm_codons):
@@ -276,12 +332,12 @@ def _hr_conflict(a, b, max_ident=0.8):
     return same / len(a) >= max_ident
 
 
-def boundary_tokens(p, L, chemistry, arm_codons):
+def boundary_tokens(p, L, chemistry, arm_codons, reserved=frozenset()):
     """Candidate junction 'tokens' at boundary p: overhang 4-mers (GG, possibly
     several synonymous options), a single homology-arm string (HR), or the trivial
     None token (agnostic). Empty list => Level-1 illegal here for this chemistry."""
     if chemistry == "gg":
-        return list(_gg_overhangs_at(p, L))
+        return list(_gg_overhangs_at(p, L, reserved))
     if chemistry == "hr":
         arm = _hr_arm_at(p, L, arm_codons)
         return [arm] if arm is not None else []
@@ -307,13 +363,13 @@ def tokens_conflict(a, b, chemistry):
 #    and the number of valid sites are small). Returns (cuts, tokens) or None.
 # --------------------------------------------------------------------------- #
 
-def place_cuts(L, K, min_block, chemistry, arm_codons):
+def place_cuts(L, K, min_block, chemistry, arm_codons, reserved=frozenset()):
     if K == 1:
         return [], []                          # one fragment: no junctions at all
     if chemistry == "agnostic":
         cuts = _place_cuts_dp(L, K, min_block)
         return (cuts, [None] * (K - 1)) if cuts is not None else None
-    return _place_cuts_orthogonal(L, K, min_block, chemistry, arm_codons)
+    return _place_cuts_orthogonal(L, K, min_block, chemistry, arm_codons, reserved)
 
 
 def _place_cuts_dp(L, K, min_block):
@@ -345,14 +401,15 @@ def _place_cuts_dp(L, K, min_block):
     return cuts
 
 
-def _place_cuts_orthogonal(L, K, min_block, chemistry, arm_codons, node_budget=3_000_000):
+def _place_cuts_orthogonal(L, K, min_block, chemistry, arm_codons, reserved=frozenset(),
+                           node_budget=3_000_000):
     """Exact DFS for gg/hr: place K-1 cuts left-to-right, assigning each a junction
     token (overhang / arm) that is orthogonal to all tokens already chosen, and
     minimize sum(log distinct). Enforcing Level-2 during the search guarantees the
     returned set cannot mis-assemble. Bounded by node_budget as a safety valve."""
     cand = []                                  # Level-1-legal sites and their tokens
     for p in range(min_block, L - min_block + 1):
-        toks = boundary_tokens(p, L, chemistry, arm_codons)
+        toks = boundary_tokens(p, L, chemistry, arm_codons, reserved)
         if toks:
             cand.append((p, toks))
     best = {"cost": math.inf, "cuts": None, "tokens": None}
@@ -548,7 +605,9 @@ def encode_fragment(present_pieces, degenerate):
             continue
         res = design_oligo([(r, 1) for r in rows], max_degenerate=3 * width)
         # accept degenerate only if it adds no junk vs. keeping these rows discrete
-        if res["library_size"] <= len(rows) and res["n_cores_covered"] == len(rows):
+        # AND no expansion of it can contain a forbidden Type IIS site
+        if (res["library_size"] <= len(rows) and res["n_cores_covered"] == len(rows)
+                and not _degenerate_has_forbidden(res["oligo"])):
             n_oligos += 1
             nt += len(res["oligo"])
             deg_bases += res["degenerate_bases"]
@@ -562,12 +621,183 @@ def encode_fragment(present_pieces, degenerate):
 
 
 # --------------------------------------------------------------------------- #
+# 6b. Back-translation / domestication.
+#
+# Turn the recommended AA design into concrete DNA and GUARANTEE that no forbidden
+# Type IIS site (FORBIDDEN_SITES) occurs in ANY producible full-length sequence.
+#
+# For gg/hr the junction residues are constant (gg: the two overhang flanks; hr:
+# the homology arm), so their codons are PINNED once and shared by every piece in
+# the adjacent layers. Each remaining residue of each kept piece is back-translated
+# by a DP that picks synonymous codons avoiding the site, padded on both sides by
+# the neighbouring pinned codons. Because those boundary codons are identical for
+# all pieces in a layer, EVERY cartesian-product assembly of domesticated pieces is
+# itself site-free -- so we verify the whole (possibly huge) library by checking
+# each piece and each pairwise junction context once. Agnostic makes no assembly
+# promise, so we merely prove each kept full-length core is site-free as one ORF.
+# --------------------------------------------------------------------------- #
+
+def back_translate(aa, lead=(), tail=(), left_ctx="", right_ctx=""):
+    """Concrete codon string for residues `aa`, with the first len(lead) and last
+    len(tail) codons PINNED to the supplied codons, choosing synonymous codons for
+    the rest so that left_ctx + <codons> + right_ctx has no forbidden site.
+    Returns the DNA, or None if no site-free assignment exists.
+
+    DP over codon choices; state = trailing 5 nt (enough to catch a 6-nt site that
+    straddles the next codon). One predecessor kept per state for reconstruction."""
+    n = len(aa)
+    lead, tail = list(lead), list(tail)
+    layers = [{left_ctx[-5:]: (None, None)}]     # layer 0 = fixed left-context suffix
+    for idx, res in enumerate(aa):
+        if idx < len(lead):
+            cands = [lead[idx]]
+        elif idx >= n - len(tail):
+            cands = [tail[idx - (n - len(tail))]]
+        else:
+            cands = _CODON_BY_AA.get(res, [])
+        cur = {}
+        for suf in layers[-1]:
+            for cod in cands:
+                s = suf + cod
+                if _has_forbidden_site(s):
+                    continue
+                ns = s[-5:]
+                if ns not in cur:
+                    cur[ns] = (suf, cod)
+        if not cur:
+            return None
+        layers.append(cur)
+    end = next((suf for suf in layers[-1] if not _has_forbidden_site(suf + right_ctx)), None)
+    if end is None:
+        return None
+    codons, suf = [], end
+    for layer in range(len(layers) - 1, 0, -1):
+        prev, cod = layers[layer][suf]
+        codons.append(cod)
+        suf = prev
+    codons.reverse()
+    return "".join(codons)
+
+
+def _pins_for_design(chemistry, cuts, tokens, arm_codons):
+    """Per internal junction, the concrete codons each adjacent fragment owns:
+    (left_codons, right_codons) = the last codons of the left fragment and the
+    first codons of the right fragment, shared by all pieces at that junction."""
+    pins = []
+    for cut, tok in zip(cuts, tokens):
+        if chemistry == "gg":
+            lc, rc = _gg_pin_codons(cut, tok)
+            pins.append(((lc,), (rc,)))
+        elif chemistry == "hr":
+            half = arm_codons // 2
+            arm_aa = "".join(_const_aa(j) for j in range(cut - half, cut + half))
+            arm_dna = back_translate(arm_aa)          # domesticate the arm once
+            if arm_dna is None:
+                raise ValueError(f"cannot domesticate homology arm at col {cut}")
+            cods = [arm_dna[i:i + 3] for i in range(0, len(arm_dna), 3)]
+            pins.append((tuple(cods[:half]), tuple(cods[half:])))
+        else:
+            pins.append(((), ()))
+    return pins
+
+
+def domesticate(rec, L, chemistry, arm_codons):
+    """Attach concrete DNA to the recommended design and verify site-freedom.
+    Sets rec['backtranslation_ok'] and (on success) rec['frag_dna'] (gg/hr) plus
+    rec['bt_*'] verification counters and example full-length DNA. Returns bool."""
+    if chemistry not in ("gg", "hr"):
+        return _domesticate_agnostic(rec, L)
+
+    cuts, tokens, kept = rec["cuts"], rec["tokens"], rec["kept_pieces"]
+    K = len(kept)
+    pins = _pins_for_design(chemistry, cuts, tokens, arm_codons)
+
+    frag_dna = []
+    for f in range(K):
+        lead = pins[f - 1][1] if f > 0 else ()             # first codons = right side of prev junction
+        tail = pins[f][0] if f < K - 1 else ()             # last codons  = left side of next junction
+        left_ctx = "".join(pins[f - 1][0]) if f > 0 else ""     # prev fragment's owned codons
+        right_ctx = "".join(pins[f][1]) if f < K - 1 else ""    # next fragment's owned codons
+        dnas = {}
+        for aa in kept[f]:
+            dna = back_translate(aa, lead=lead, tail=tail,
+                                 left_ctx=left_ctx, right_ctx=right_ctx)
+            if dna is None or _has_forbidden_site(dna):
+                rec["backtranslation_ok"] = False
+                rec["backtranslation_fail"] = f"fragment {f + 1} piece could not be domesticated"
+                return False
+            dnas[aa] = dna
+        frag_dna.append(dnas)
+
+    # Verify every cross-junction pair (redundant with pinning, but an explicit proof).
+    pairs = 0
+    for f in range(K - 1):
+        for ldna in frag_dna[f].values():
+            for rdna in frag_dna[f + 1].values():
+                pairs += 1
+                if _has_forbidden_site(ldna[-5:] + rdna[:5]):
+                    rec["backtranslation_ok"] = False
+                    rec["backtranslation_fail"] = f"site across junction {f + 1}/{f + 2}"
+                    return False
+
+    rec["frag_dna"] = frag_dna
+    rec["backtranslation_ok"] = True
+    rec["bt_n_pieces"] = sum(len(d) for d in frag_dna)
+    rec["bt_junction_pairs"] = pairs
+    rec["bt_examples"] = _assemble_examples(rec, L, frag_dna)
+    return True
+
+
+def _assemble_examples(rec, L, frag_dna, k=3):
+    """A few encoded cores rendered as assembled full-length DNA (for the report)."""
+    bounds = [0] + rec["cuts"] + [L]
+    K = len(frag_dna)
+    out, seen = [], set()
+    for s in _ALIGNED:
+        parts = [piece(s, bounds[i], bounds[i + 1]) for i in range(K)]
+        if all(parts[i] in frag_dna[i] for i in range(K)):
+            dna = "".join(frag_dna[i][parts[i]] for i in range(K))
+            if dna not in seen:
+                seen.add(dna)
+                out.append(dna)
+        if len(out) >= k:
+            break
+    return out
+
+
+def _domesticate_agnostic(rec, L):
+    """Agnostic makes no assembly promise; just prove each kept full-length core is
+    site-free as one continuous ORF (single-sequence back-translation)."""
+    cuts, kept = rec["cuts"], rec["kept_pieces"]
+    K = len(kept)
+    bounds = [0] + cuts + [L]
+    cores = set()
+    for s in _ALIGNED:
+        parts = tuple(piece(s, bounds[i], bounds[i + 1]) for i in range(K))
+        if all(parts[i] in kept[i] for i in range(K)):
+            cores.add("".join(parts))
+    examples, ok = [], True
+    for aa in sorted(cores):
+        dna = back_translate(aa)
+        if dna is None:
+            ok = False
+            break
+        if len(examples) < 3:
+            examples.append(dna)
+    rec["backtranslation_ok"] = ok
+    rec["bt_examples"] = examples
+    rec["bt_n_pieces"] = sum(len(k_) for k_ in kept)
+    rec["bt_junction_pairs"] = 0
+    return ok
+
+
+# --------------------------------------------------------------------------- #
 # 7. Evaluate one K end-to-end.
 # --------------------------------------------------------------------------- #
 
 def evaluate_K(seqs, K, min_block, chemistry, arm_codons, L, max_junk_frac,
-               max_junk, degenerate):
-    placed = place_cuts(L, K, min_block, chemistry, arm_codons)
+               max_junk, degenerate, reserved=frozenset()):
+    placed = place_cuts(L, K, min_block, chemistry, arm_codons, reserved)
     if placed is None:
         return None                            # no chemistry-valid segmentation for this K
     cuts, tokens = placed
@@ -589,6 +819,7 @@ def evaluate_K(seqs, K, min_block, chemistry, arm_codons, L, max_junk_frac,
         "K": K,
         "cuts": cuts,
         "tokens": tokens,               # per-junction overhangs (gg) / arms (hr) / None
+        "kept_pieces": [sorted(present[f]) for f in range(K)],  # actual selected pieces
         "frags": frags,
         "library_size": library,
         "junk": library - U,
@@ -662,6 +893,13 @@ def build_report(args, results, rec, L, n_cores, total_w):
                          "Level-1 high-fidelity + Level-2 mutually orthogonal:")
             for cut, oh in zip(rec["cuts"], rec["tokens"]):
                 lines.append(f"  col {cut:>4}:  overhang 5'-{oh}-3'  (rc {_revcomp(oh)})")
+            bb = "  |  ".join(sorted(BACKBONE_OVERHANGS))
+            if args.shared_backbone_overhangs:
+                lines.append(f"  [backbone overhangs {bb} SHARED with these junctions "
+                             f"(first/last fragment mates the backbone and is excluded)]")
+            else:
+                lines.append(f"  [backbone overhangs {bb} reserved -- excluded from all "
+                             f"internal junctions above]")
         else:  # hr
             lines.append("JUNCTIONS (Gibson/HR) -- validated homology arms, "
                          "Level-1 constant window + Level-2 mutually distinct:")
@@ -693,6 +931,29 @@ def build_report(args, results, rec, L, n_cores, total_w):
                          f"{s['covered_weight']:>8}  {s['library']:>10,}  "
                          f"{s['junk_pct']:>5.1f}%")
             last = s["covered_weight"]
+    lines.append("")
+    # Domestication / back-translation: concrete DNA + Type IIS site guarantee.
+    sites = "  ".join(sorted(FORBIDDEN_SITES))
+    lines.append(f"DOMESTICATION ({args.gg_enzyme.upper()} site {sites} forbidden in "
+                 f"every full-length sequence):")
+    if rec.get("backtranslation_ok"):
+        if args.chemistry in ("gg", "hr"):
+            lines.append(f"  PASS -- back-translated {rec['bt_n_pieces']} kept pieces to "
+                         f"concrete codons with pinned junction codons; verified "
+                         f"{rec['bt_n_pieces']} pieces and {rec['bt_junction_pairs']} "
+                         f"junction contexts site-free => ALL {rec['library_size']:,} "
+                         f"producible sequences are site-free by construction.")
+        else:
+            lines.append(f"  PASS -- every kept full-length core back-translates to a "
+                         f"site-free ORF ({rec['bt_n_pieces']} pieces). NOTE: agnostic "
+                         f"gives no per-fragment reuse guarantee across junctions.")
+        for i, dna in enumerate(rec.get("bt_examples", []), 1):
+            shown = f"{dna[:60]}...{dna[-30:]}" if len(dna) > 90 else dna
+            lines.append(f"    example full-length DNA {i} ({len(dna)} nt): {shown}")
+    else:
+        reason = rec.get("backtranslation_fail", "no site-free codon assignment")
+        lines.append(f"  FAILED -- {reason}. Try --min-block-cols / different cuts "
+                     f"or chemistry.")
     lines.append("")
     if args.chemistry == "agnostic":
         lines.append("note: chemistry is 'agnostic' -- cuts are NOT validated for any "
@@ -734,19 +995,34 @@ def save_run(out_root, stem, args, results, rec, L, seqs):
             "K", "cuts", "tokens", "frags", "n_cores_encoded", "encoded_weight",
             "total_weight", "junk", "junk_pct", "library_size", "total_oligos",
             "total_nt", "coverage_pct")},
+        "domestication": {
+            "forbidden_sites": sorted(FORBIDDEN_SITES),
+            "backbone_overhangs_reserved": (not args.shared_backbone_overhangs
+                                            and args.chemistry == "gg"),
+            "backtranslation_ok": rec.get("backtranslation_ok"),
+            "verified_pieces": rec.get("bt_n_pieces"),
+            "verified_junction_pairs": rec.get("bt_junction_pairs"),
+            "example_full_length_dna": rec.get("bt_examples", []),
+        },
     }
     with open(os.path.join(run_dir, "summary.json"), "w") as fh:
         json.dump(summary, fh, indent=2)
-    # one FASTA per fragment of the recommended design (what you'd order)
-    bounds = [0] + rec["cuts"] + [L]
-    aligned = [s for s, _ in seqs]
-    for i in range(len(bounds) - 1):
-        a, b = bounds[i], bounds[i + 1]
-        # recover this fragment's kept pieces from the encoded cores
-        kept = sorted({piece(s, a, b) for s in aligned})  # all distinct; report set
+    # one FASTA per fragment: ONLY the pieces the design actually keeps, as concrete
+    # domesticated DNA when available (gg/hr), else as amino acids.
+    frag_dna = rec.get("frag_dna")
+    for i, kept in enumerate(rec["kept_pieces"]):
         with open(os.path.join(run_dir, f"fragment{i+1}.fasta"), "w") as fh:
-            for k, frag in enumerate(kept, 1):
-                fh.write(f">frag{i+1}_p{k}_len{len(frag)}\n{frag}\n")
+            for k, aa in enumerate(sorted(kept), 1):
+                if frag_dna is not None:
+                    dna = frag_dna[i][aa]
+                    fh.write(f">frag{i+1}_p{k}_len{len(aa)}aa_{len(dna)}nt\n{dna}\n")
+                else:
+                    fh.write(f">frag{i+1}_p{k}_len{len(aa)}aa\n{aa}\n")
+    # assembled example full-length sequences as DNA (domestication-verified)
+    if rec.get("bt_examples"):
+        with open(os.path.join(run_dir, "examples_full_length_dna.fasta"), "w") as fh:
+            for k, dna in enumerate(rec["bt_examples"], 1):
+                fh.write(f">example{k}_len{len(dna)}nt\n{dna}\n")
     return run_dir, report
 
 
@@ -778,9 +1054,25 @@ def main():
     ap.add_argument("--degenerate", action="store_true",
                     help="enable junk-gated degenerate-codon oligo compression "
                          "(only applied when it adds no junk)")
+    ap.add_argument("--gg-enzyme", choices=["bsmbi", "esp3i", "bsai"], default="bsmbi",
+                    help="Type IIS enzyme whose recognition site is domesticated out "
+                         "of every full-length sequence (default bsmbi/esp3i = CGTCTC; "
+                         "bsai = GGTCTC). Its reverse complement is forbidden too.")
+    ap.add_argument("--shared-backbone-overhangs", action="store_true",
+                    help="GG only: permit the reserved backbone overhangs (CGGA/GGTG) "
+                         "at internal junctions (shared-overhang / minimal-plasmid "
+                         "designs, first/last fragment excluded). Default forbids them.")
     ap.add_argument("--out-dir", default="algoruns",
                     help="parent folder for per-run output subfolders")
     args = ap.parse_args()
+
+    # Set the forbidden Type IIS recognition site (+ reverse complement) from the
+    # chosen enzyme, and the reserved backbone overhangs for Golden Gate.
+    global FORBIDDEN_SITES
+    site = {"bsmbi": "CGTCTC", "esp3i": "CGTCTC", "bsai": "GGTCTC"}[args.gg_enzyme]
+    FORBIDDEN_SITES = frozenset({site, _revcomp(site)})
+    reserved = (BACKBONE_OVERHANGS if args.chemistry == "gg"
+                and not args.shared_backbone_overhangs else frozenset())
 
     seqs = read_aligned_cores(args.aln_fasta)
     prepare(seqs)
@@ -792,7 +1084,7 @@ def main():
         if K > 1 and K * args.min_block_cols > L:
             break                       # can't fit this many fragments
         r = evaluate_K(seqs, K, args.min_block_cols, args.chemistry, args.arm_codons,
-                       L, max_junk_frac, args.max_junk, args.degenerate)
+                       L, max_junk_frac, args.max_junk, args.degenerate, reserved)
         if r is not None:
             results.append(r)
     if not results:
@@ -800,6 +1092,9 @@ def main():
                  "--min-block-cols, a different --chemistry, or --arm-codons).")
 
     rec = recommend(results)
+    # Back-translate the recommended design to concrete DNA and prove no forbidden
+    # Type IIS site occurs in any producible full-length sequence.
+    domesticate(rec, L, args.chemistry, args.arm_codons)
     stem = os.path.splitext(os.path.basename(args.aln_fasta))[0]
     run_dir, report = save_run(args.out_dir, stem, args, results, rec, L, seqs)
     print(report)
