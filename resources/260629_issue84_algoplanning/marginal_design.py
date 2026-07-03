@@ -47,11 +47,13 @@ discussion. Cut placement keeps co-varying columns inside one fragment (so real
 haplotypes are preserved and phantom recombinants are minimized); marginal
 selection then decides WHICH cores are worth their junk.
 
-Degenerate codons are the finer, intra-fragment lever. They are included here but
-JUNK-GATED: a fragment's equal-length pieces are degenerate-compressed only when
-the degenerate codon does not enlarge that fragment's library (pure oligo saving,
-no extra junk), consistent with the philosophy. Default is pure discrete so the
-junk accounting stays exact.
+Degenerate codons are the finer, intra-fragment lever (`--degenerate`). They are
+JUNK-BUDGETED: starting from the discrete design, column-homologous piece groups
+are compressed into degenerate oligos -- biggest oligo saving first -- while the
+whole design's library stays under the SAME --max-junk-pct cutoff, spending only
+the junk head-room the cutoff leaves. This shrinks the oligo order by trading a
+little phantom junk for fewer oligos (it does not buy new coverage). Default is
+pure discrete so the junk accounting stays exact.
 
 Run:
   # cores must be ALIGNED first (gaps '-'); e.g. in WSL:
@@ -75,7 +77,7 @@ from functools import lru_cache
 # Reuse the single-oligo prototype for the optional (junk-gated) degenerate pass.
 try:
     from greedy_oligo import (
-        design_oligo, expand_degenerate_codon, AA_BY_CODON, IUPAC,
+        design_oligo, expand_degenerate_codon, AA_BY_CODON, IUPAC, best_codon_for,
     )
     _HAVE_GREEDY = True
 except Exception:  # pragma: no cover
@@ -575,49 +577,156 @@ def _snapshot(present, U, W, pieces):
 
 
 # --------------------------------------------------------------------------- #
-# 6. Fragment encoding: discrete (default, exact junk) + junk-gated degenerate.
+# 6. Fragment encoding: discrete pieces + JUNK-BUDGETED degenerate compression.
+#
+# Degeneracy is a second lever alongside fragmentation. A degenerate codon at a
+# variable column lets ONE oligo stand in for several natural pieces, but it emits
+# the full cartesian product of its degenerate positions, so it can add phantom
+# (junk) variants. We treat it as a budgeted trade: starting from the discrete
+# design, greedily accept degenerate group-compressions -- biggest oligo saving
+# first -- while the WHOLE design's library stays under the SAME --max-junk-pct
+# cutoff (spending only the junk head-room the cutoff leaves). This does not buy
+# new coverage (a later step); it shrinks the oligo order by spending head-room.
+# Off unless --degenerate.
+#
+# Correctness: a degenerate oligo may only merge pieces that are column-homologous,
+# i.e. share the SAME gap pattern within the fragment (identical length + identical
+# alignment columns). Pieces with different indel patterns stay discrete.
 # --------------------------------------------------------------------------- #
 
-def encode_fragment(present_pieces, degenerate):
-    """Turn one fragment's kept distinct pieces into orderable oligos.
+def _lib_cap(U, max_junk_frac, max_junk):
+    """Largest library whose junk fraction (library - U)/library stays <= cutoff."""
+    if max_junk_frac >= 1.0:
+        return max_junk
+    return min(max_junk, int(U / (1.0 - max_junk_frac)))
 
-    Discrete: one oligo per distinct piece. Junk-gated degenerate: for each group
-    of equal-length pieces, try a degenerate codon oligo (greedy_oligo) and accept
-    it ONLY if it does not enlarge the fragment's library (library_size <= number
-    of pieces in the group) -- pure oligo saving, zero extra junk. Otherwise keep
-    the pieces discrete. This honors 'degenerate codons must not blow up junk'."""
-    pieces = sorted(present_pieces)
-    lengths = sorted({len(p) for p in pieces})
-    if not degenerate or not _HAVE_GREEDY:
-        return {"n_oligos": len(pieces), "nt": sum(len(p) * 3 for p in pieces),
-                "deg_bases": 0, "lengths": lengths, "n_pieces": len(pieces),
-                "lib": len(pieces)}
 
-    by_len = defaultdict(list)
-    for p in pieces:
-        by_len[len(p)].append(p)
-    n_oligos, nt, deg_bases, lib = 0, 0, 0, 0
-    for width, rows in sorted(by_len.items()):
-        if len(rows) == 1:
-            n_oligos += 1
-            nt += width * 3
-            lib += 1
+def _fragment_groups(a, b, kept_set):
+    """Kept pieces of fragment [a,b) grouped by gap pattern, so each group is
+    column-homologous and equal-length (safely degenerable as one oligo). Each
+    distinct kept piece is assigned to exactly one group."""
+    groups = defaultdict(list)
+    seen = set()
+    for s in _ALIGNED:
+        sl = s[a:b]
+        pc = sl.replace("-", "")
+        if pc in kept_set and pc not in seen:
+            seen.add(pc)
+            pattern = tuple(i for i, ch in enumerate(sl) if ch != "-")
+            groups[pattern].append(pc)
+    return list(groups.values())
+
+
+def _frag_pins(pins, f, K):
+    """(lead, tail, left_ctx, right_ctx) codons for fragment f: its own pinned
+    first/last junction codons, plus the neighbouring fragments' pinned codons as
+    fixed context (so cross-junction windows are covered)."""
+    lead = pins[f - 1][1] if f > 0 else ()
+    tail = pins[f][0] if f < K - 1 else ()
+    left_ctx = "".join(pins[f - 1][0]) if f > 0 else ""
+    right_ctx = "".join(pins[f][1]) if f < K - 1 else ""
+    return lead, tail, left_ctx, right_ctx
+
+
+def _degenerate_group(rows, lead=(), tail=(), left_ctx="", right_ctx=""):
+    """One degenerate IUPAC oligo covering all `rows` (equal-length, column-
+    homologous). The first len(lead) / last len(tail) codons are PINNED to the
+    junction codons; the rest use the cheapest codon covering that column's
+    residues. Returns (oligo, n_aa_variants, deg_bases, nt) or None if a column is
+    un-coverable or some expansion (with junction context) could contain a
+    forbidden Type IIS site. n_aa_variants = distinct AA pieces the oligo yields
+    (>= len(rows); the excess is phantom junk)."""
+    width = len(rows[0])
+    if width < len(lead) + len(tail):
+        return None
+    codons, variants, deg = [], 1, 0
+    for j in range(width):
+        if j < len(lead):
+            codons.append(lead[j])
             continue
-        res = design_oligo([(r, 1) for r in rows], max_degenerate=3 * width)
-        # accept degenerate only if it adds no junk vs. keeping these rows discrete
-        # AND no expansion of it can contain a forbidden Type IIS site
-        if (res["library_size"] <= len(rows) and res["n_cores_covered"] == len(rows)
-                and not _degenerate_has_forbidden(res["oligo"])):
-            n_oligos += 1
-            nt += len(res["oligo"])
-            deg_bases += res["degenerate_bases"]
-            lib += res["library_size"]
-        else:
-            n_oligos += len(rows)
-            nt += sum(len(r) * 3 for r in rows)
-            lib += len(rows)
-    return {"n_oligos": n_oligos, "nt": nt, "deg_bases": deg_bases,
-            "lengths": lengths, "n_pieces": len(pieces), "lib": lib}
+        if j >= width - len(tail):
+            codons.append(tail[j - (width - len(tail))])
+            continue
+        req = frozenset(r[j] for r in rows)
+        bc = best_codon_for(req)
+        if bc is None:
+            return None
+        deg_codon, aas, ndeg, _ = bc
+        codons.append(deg_codon)
+        variants *= len(aas)
+        deg += ndeg
+    oligo = "".join(codons)
+    if _degenerate_has_forbidden(left_ctx + oligo + right_ctx):
+        return None
+    return oligo, variants, deg, len(oligo)
+
+
+def encode_design(present, U, cuts, tokens, L, chemistry, arm_codons,
+                  max_junk_frac, max_junk, degenerate):
+    """Turn the selected pieces into orderable oligos. Discrete = one oligo per
+    kept piece. With `degenerate`, greedily compress column-homologous groups into
+    degenerate oligos while the whole design's library stays under the junk cutoff.
+
+    Returns (frags, frag_units, library):
+      frags[f]      = summary dict (a,b,n_oligos,natural_pieces,variants,deg_bases,nt,lengths)
+      frag_units[f] = list of ('discrete', aa) | ('degenerate', rows, oligo, deg, nt)
+      library       = product over fragments of the presented variant count."""
+    K = len(present)
+    bounds = [0] + cuts + [L]
+    pins = (_pins_for_design(chemistry, cuts, tokens, arm_codons)
+            if chemistry in ("gg", "hr") and cuts else [((), ())] * len(cuts))
+
+    frag_units = [[("discrete", p) for p in sorted(present[f])] for f in range(K)]
+    variants = [len(present[f]) for f in range(K)]
+
+    if degenerate and _HAVE_GREEDY:
+        cap = _lib_cap(U, max_junk_frac, max_junk)
+        library = 1
+        for v in variants:
+            library *= v
+        cands = []
+        for f in range(K):
+            lead, tail, lctx, rctx = _frag_pins(pins, f, K)
+            for rows in _fragment_groups(bounds[f], bounds[f + 1], set(present[f])):
+                if len(rows) < 2:
+                    continue
+                opt = _degenerate_group(rows, lead, tail, lctx, rctx)
+                if opt is None:
+                    continue
+                oligo, var, deg, nt = opt
+                cands.append({"f": f, "rows": rows, "oligo": oligo, "deg": deg,
+                              "nt": nt, "saved": len(rows) - 1,
+                              "added": max(0, var - len(rows))})
+        # spend head-room on the biggest oligo savings first (least junk breaks ties)
+        cands.sort(key=lambda c: (-c["saved"], c["added"]))
+        for c in cands:
+            f = c["f"]
+            new_lib = library // variants[f] * (variants[f] + c["added"])
+            if new_lib > cap:
+                continue
+            rowset = set(c["rows"])
+            frag_units[f] = [u for u in frag_units[f]
+                             if not (u[0] == "discrete" and u[1] in rowset)]
+            frag_units[f].append(("degenerate", tuple(c["rows"]), c["oligo"],
+                                  c["deg"], c["nt"]))
+            variants[f] += c["added"]
+            library = new_lib
+
+    frags, library = [], 1
+    for f in range(K):
+        library *= variants[f]
+        nt = sum((len(u[1]) * 3 if u[0] == "discrete" else u[4]) for u in frag_units[f])
+        frags.append({
+            "a": bounds[f], "b": bounds[f + 1],
+            "n_oligos": len(frag_units[f]),
+            "natural_pieces": len(present[f]),
+            "variants": variants[f],
+            "n_pieces": len(present[f]),
+            "deg_bases": sum(u[3] for u in frag_units[f] if u[0] == "degenerate"),
+            "nt": nt,
+            "lengths": sorted({len(p) for p in present[f]}),
+        })
+    return frags, frag_units, library
 
 
 # --------------------------------------------------------------------------- #
@@ -702,64 +811,87 @@ def _pins_for_design(chemistry, cuts, tokens, arm_codons):
 
 
 def domesticate(rec, L, chemistry, arm_codons):
-    """Attach concrete DNA to the recommended design and verify site-freedom.
-    Sets rec['backtranslation_ok'] and (on success) rec['frag_dna'] (gg/hr) plus
-    rec['bt_*'] verification counters and example full-length DNA. Returns bool."""
+    """Attach concrete DNA/oligos to the recommended design and verify site-freedom.
+    Discrete units are back-translated to concrete DNA; degenerate units keep their
+    IUPAC oligo but are screened so NO expansion contains the site. Sets
+    rec['backtranslation_ok'], rec['frag_oligos'] (gg/hr), and rec['bt_*']. Returns
+    bool. Guarantee holds over the whole library because pinned junction codons make
+    each piece + each pairwise junction context sufficient to check."""
     if chemistry not in ("gg", "hr"):
         return _domesticate_agnostic(rec, L)
 
-    cuts, tokens, kept = rec["cuts"], rec["tokens"], rec["kept_pieces"]
-    K = len(kept)
-    pins = _pins_for_design(chemistry, cuts, tokens, arm_codons)
+    cuts, tokens = rec["cuts"], rec["tokens"]
+    units = rec["frag_units"]
+    K = len(units)
+    pins = _pins_for_design(chemistry, cuts, tokens, arm_codons) if cuts else []
 
-    frag_dna = []
+    frag_oligos = []
     for f in range(K):
-        lead = pins[f - 1][1] if f > 0 else ()             # first codons = right side of prev junction
-        tail = pins[f][0] if f < K - 1 else ()             # last codons  = left side of next junction
-        left_ctx = "".join(pins[f - 1][0]) if f > 0 else ""     # prev fragment's owned codons
-        right_ctx = "".join(pins[f][1]) if f < K - 1 else ""    # next fragment's owned codons
-        dnas = {}
-        for aa in kept[f]:
-            dna = back_translate(aa, lead=lead, tail=tail,
-                                 left_ctx=left_ctx, right_ctx=right_ctx)
-            if dna is None or _has_forbidden_site(dna):
-                rec["backtranslation_ok"] = False
-                rec["backtranslation_fail"] = f"fragment {f + 1} piece could not be domesticated"
-                return False
-            dnas[aa] = dna
-        frag_dna.append(dnas)
+        lead, tail, lctx, rctx = _frag_pins(pins, f, K)
+        outs = []
+        for u in units[f]:
+            if u[0] == "discrete":
+                dna = back_translate(u[1], lead=lead, tail=tail,
+                                     left_ctx=lctx, right_ctx=rctx)
+                if dna is None or _has_forbidden_site(dna):
+                    rec["backtranslation_ok"] = False
+                    rec["backtranslation_fail"] = f"fragment {f + 1} discrete piece"
+                    return False
+                outs.append({"type": "discrete", "aa": u[1], "seq": dna})
+            else:
+                rows, oligo = u[1], u[2]
+                if _degenerate_has_forbidden(lctx + oligo + rctx):
+                    rec["backtranslation_ok"] = False
+                    rec["backtranslation_fail"] = f"fragment {f + 1} degenerate oligo"
+                    return False
+                outs.append({"type": "degenerate", "rows": list(rows), "seq": oligo})
+        frag_oligos.append(outs)
 
-    # Verify every cross-junction pair (redundant with pinning, but an explicit proof).
+    # Verify every cross-junction pair (IUPAC-aware, so it covers discrete+degenerate
+    # mixes). Redundant with the pinning proof, but an explicit check.
     pairs = 0
     for f in range(K - 1):
-        for ldna in frag_dna[f].values():
-            for rdna in frag_dna[f + 1].values():
+        for lo in frag_oligos[f]:
+            for ro in frag_oligos[f + 1]:
                 pairs += 1
-                if _has_forbidden_site(ldna[-5:] + rdna[:5]):
+                if _degenerate_has_forbidden(lo["seq"][-5:] + ro["seq"][:5]):
                     rec["backtranslation_ok"] = False
                     rec["backtranslation_fail"] = f"site across junction {f + 1}/{f + 2}"
                     return False
 
-    rec["frag_dna"] = frag_dna
+    rec["frag_oligos"] = frag_oligos
     rec["backtranslation_ok"] = True
-    rec["bt_n_pieces"] = sum(len(d) for d in frag_dna)
+    rec["bt_n_oligos"] = sum(len(o) for o in frag_oligos)
     rec["bt_junction_pairs"] = pairs
-    rec["bt_examples"] = _assemble_examples(rec, L, frag_dna)
+    rec["bt_examples"] = _assemble_examples(rec, L, chemistry, arm_codons)
     return True
 
 
-def _assemble_examples(rec, L, frag_dna, k=3):
-    """A few encoded cores rendered as assembled full-length DNA (for the report)."""
-    bounds = [0] + rec["cuts"] + [L]
-    K = len(frag_dna)
+def _assemble_examples(rec, L, chemistry, arm_codons, k=3):
+    """A few encoded cores rendered as assembled full-length DNA (for the report),
+    by back-translating each core's ACTUAL pieces with the junction pins -- concrete
+    and site-free even where the design uses a degenerate oligo for that layer."""
+    cuts, tokens, kept = rec["cuts"], rec["tokens"], rec["kept_pieces"]
+    K = len(kept)
+    bounds = [0] + cuts + [L]
+    pins = _pins_for_design(chemistry, cuts, tokens, arm_codons) if cuts else []
+    kept_sets = [set(k_) for k_ in kept]
     out, seen = [], set()
     for s in _ALIGNED:
         parts = [piece(s, bounds[i], bounds[i + 1]) for i in range(K)]
-        if all(parts[i] in frag_dna[i] for i in range(K)):
-            dna = "".join(frag_dna[i][parts[i]] for i in range(K))
-            if dna not in seen:
-                seen.add(dna)
-                out.append(dna)
+        if not all(parts[i] in kept_sets[i] for i in range(K)):
+            continue
+        dnas, ok = [], True
+        for f in range(K):
+            lead, tail, lctx, rctx = _frag_pins(pins, f, K) if pins else ((), (), "", "")
+            d = back_translate(parts[f], lead=lead, tail=tail, left_ctx=lctx, right_ctx=rctx)
+            if d is None:
+                ok = False
+                break
+            dnas.append(d)
+        if ok and "".join(dnas) not in seen:
+            seen.add("".join(dnas))
+            out.append("".join(dnas))
         if len(out) >= k:
             break
     return out
@@ -786,7 +918,7 @@ def _domesticate_agnostic(rec, L):
             examples.append(dna)
     rec["backtranslation_ok"] = ok
     rec["bt_examples"] = examples
-    rec["bt_n_pieces"] = sum(len(k_) for k_ in kept)
+    rec["bt_n_oligos"] = sum(len(k_) for k_ in kept)
     rec["bt_junction_pairs"] = 0
     return ok
 
@@ -805,14 +937,10 @@ def evaluate_K(seqs, K, min_block, chemistry, arm_codons, L, max_junk_frac,
     weights = _WEIGHTS
     present, U, W, traj = marginal_select(pieces, weights, max_junk_frac, max_junk)
 
-    frags = []
-    for f in range(K):
-        enc = encode_fragment(present[f], degenerate)
-        bounds = [0] + cuts + [L]
-        enc["a"], enc["b"] = bounds[f], bounds[f + 1]
-        frags.append(enc)
+    frags, frag_units, library = encode_design(
+        present, U, cuts, tokens, L, chemistry, arm_codons,
+        max_junk_frac, max_junk, degenerate)
 
-    library = _libsize(present)
     n_cores = len(seqs)
     total_w = sum(weights)
     return {
@@ -820,6 +948,7 @@ def evaluate_K(seqs, K, min_block, chemistry, arm_codons, L, max_junk_frac,
         "cuts": cuts,
         "tokens": tokens,               # per-junction overhangs (gg) / arms (hr) / None
         "kept_pieces": [sorted(present[f]) for f in range(K)],  # actual selected pieces
+        "frag_units": frag_units,       # per-fragment discrete/degenerate oligo plan
         "frags": frags,
         "library_size": library,
         "junk": library - U,
@@ -882,9 +1011,21 @@ def build_report(args, results, rec, L, n_cores, total_w):
     for i, f in enumerate(rec["frags"], 1):
         lvar = (f"{f['lengths'][0]}-{f['lengths'][-1]} aa  <-- length variation (indel)"
                 if len(f["lengths"]) > 1 else f"{f['lengths'][0]} aa")
-        lines.append(f"  fragment {i}: cols [{f['a']},{f['b']})  "
-                     f"{f['n_pieces']} distinct pieces, length {lvar}")
+        pcs = (f"{f['natural_pieces']} natural pieces -> {f['variants']} library variants"
+               if f["variants"] != f["natural_pieces"] else f"{f['natural_pieces']} distinct pieces")
+        lines.append(f"  fragment {i}: cols [{f['a']},{f['b']})  {pcs}, length {lvar}")
         lines.append(f"      -> {f['n_oligos']} oligos, {f['deg_bases']} degenerate nt, ~{f['nt']} nt")
+    if args.degenerate:
+        disc_oligos = sum(f["natural_pieces"] for f in rec["frags"])
+        disc_lib = 1
+        for f in rec["frags"]:
+            disc_lib *= f["natural_pieces"]
+        deg_bases = sum(f["deg_bases"] for f in rec["frags"])
+        lines.append("")
+        lines.append(f"  DEGENERACY (junk-budgeted): {disc_oligos} discrete oligos -> "
+                     f"{rec['total_oligos']} oligos ({disc_oligos - rec['total_oligos']} saved, "
+                     f"{deg_bases} degenerate nt); library {disc_lib:,} -> {rec['library_size']:,} "
+                     f"(spent junk head-room under the {args.max_junk_pct:.0f}% cutoff)")
     lines.append("")
     # Chemistry-validated junctions (empty for K=1 / agnostic).
     if args.chemistry != "agnostic" and rec["cuts"]:
@@ -938,14 +1079,15 @@ def build_report(args, results, rec, L, n_cores, total_w):
                  f"every full-length sequence):")
     if rec.get("backtranslation_ok"):
         if args.chemistry in ("gg", "hr"):
-            lines.append(f"  PASS -- back-translated {rec['bt_n_pieces']} kept pieces to "
-                         f"concrete codons with pinned junction codons; verified "
-                         f"{rec['bt_n_pieces']} pieces and {rec['bt_junction_pairs']} "
-                         f"junction contexts site-free => ALL {rec['library_size']:,} "
-                         f"producible sequences are site-free by construction.")
+            lines.append(f"  PASS -- rendered {rec['bt_n_oligos']} oligos (discrete pieces "
+                         f"back-translated, degenerate oligos screened over all expansions) "
+                         f"with pinned junction codons; verified {rec['bt_n_oligos']} oligos and "
+                         f"{rec['bt_junction_pairs']} junction contexts site-free => ALL "
+                         f"{rec['library_size']:,} producible sequences are site-free by "
+                         f"construction.")
         else:
             lines.append(f"  PASS -- every kept full-length core back-translates to a "
-                         f"site-free ORF ({rec['bt_n_pieces']} pieces). NOTE: agnostic "
+                         f"site-free ORF ({rec['bt_n_oligos']} pieces). NOTE: agnostic "
                          f"gives no per-fragment reuse guarantee across junctions.")
         for i, dna in enumerate(rec.get("bt_examples", []), 1):
             shown = f"{dna[:60]}...{dna[-30:]}" if len(dna) > 90 else dna
@@ -1000,23 +1142,32 @@ def save_run(out_root, stem, args, results, rec, L, seqs):
             "backbone_overhangs_reserved": (not args.shared_backbone_overhangs
                                             and args.chemistry == "gg"),
             "backtranslation_ok": rec.get("backtranslation_ok"),
-            "verified_pieces": rec.get("bt_n_pieces"),
+            "verified_oligos": rec.get("bt_n_oligos"),
             "verified_junction_pairs": rec.get("bt_junction_pairs"),
             "example_full_length_dna": rec.get("bt_examples", []),
         },
     }
     with open(os.path.join(run_dir, "summary.json"), "w") as fh:
         json.dump(summary, fh, indent=2)
-    # one FASTA per fragment: ONLY the pieces the design actually keeps, as concrete
-    # domesticated DNA when available (gg/hr), else as amino acids.
-    frag_dna = rec.get("frag_dna")
-    for i, kept in enumerate(rec["kept_pieces"]):
-        with open(os.path.join(run_dir, f"fragment{i+1}.fasta"), "w") as fh:
-            for k, aa in enumerate(sorted(kept), 1):
-                if frag_dna is not None:
-                    dna = frag_dna[i][aa]
-                    fh.write(f">frag{i+1}_p{k}_len{len(aa)}aa_{len(dna)}nt\n{dna}\n")
-                else:
+    # one FASTA per fragment: ONLY the oligos the design actually orders. Discrete
+    # oligos are concrete domesticated DNA; degenerate oligos are IUPAC (a mix that
+    # expands to several pieces). When domestication ran (gg/hr) we use frag_oligos;
+    # otherwise fall back to the kept amino-acid pieces.
+    frag_oligos = rec.get("frag_oligos")
+    if frag_oligos is not None:
+        for i, outs in enumerate(frag_oligos):
+            with open(os.path.join(run_dir, f"fragment{i+1}.fasta"), "w") as fh:
+                for k, o in enumerate(outs, 1):
+                    if o["type"] == "discrete":
+                        fh.write(f">frag{i+1}_p{k}_len{len(o['aa'])}aa_{len(o['seq'])}nt\n"
+                                 f"{o['seq']}\n")
+                    else:
+                        fh.write(f">frag{i+1}_deg{k}_covers{len(o['rows'])}pieces_"
+                                 f"{len(o['seq'])}nt_IUPAC\n{o['seq']}\n")
+    else:
+        for i, kept in enumerate(rec["kept_pieces"]):
+            with open(os.path.join(run_dir, f"fragment{i+1}.fasta"), "w") as fh:
+                for k, aa in enumerate(sorted(kept), 1):
                     fh.write(f">frag{i+1}_p{k}_len{len(aa)}aa\n{aa}\n")
     # assembled example full-length sequences as DNA (domestication-verified)
     if rec.get("bt_examples"):
@@ -1052,8 +1203,9 @@ def main():
     ap.add_argument("--max-junk", type=int, default=1_000_000,
                     help="hard safety cap on producible library size (default 1e6)")
     ap.add_argument("--degenerate", action="store_true",
-                    help="enable junk-gated degenerate-codon oligo compression "
-                         "(only applied when it adds no junk)")
+                    help="enable junk-BUDGETED degenerate-codon oligo compression "
+                         "(spends leftover junk head-room under --max-junk-pct to "
+                         "cut the oligo count; does not add coverage)")
     ap.add_argument("--gg-enzyme", choices=["bsmbi", "esp3i", "bsai"], default="bsmbi",
                     help="Type IIS enzyme whose recognition site is domesticated out "
                          "of every full-length sequence (default bsmbi/esp3i = CGTCTC; "
