@@ -1,4 +1,4 @@
--- Query for BioSample prefix: SAMN36
+-- Query for BioSample prefix: SAMN4
 SELECT 
     meta.biosample AS biosample,
     meta.acc AS run_id,
@@ -13,4 +13,4 @@ JOIN
 JOIN
     default.petadex_biosamples pb ON meta.biosample = pb.biosample
 WHERE 
-    meta.biosample LIKE 'SAMN36%';
+    meta.biosample LIKE 'SAMN4%';
