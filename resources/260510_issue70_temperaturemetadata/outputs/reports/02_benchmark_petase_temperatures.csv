@@ -1,0 +1,13 @@
+name,year,topt_c,tm_c,kcat_37c,kcat_topt,variant_type,reference
+IsPETase,2016,30,48.1,0.022,0.077,Natural,"Yoshida et al. 2016, Science"
+FAST-PETase,2022,50,58.8,0.058,0.139,Engineered,"Lu et al. 2022, Nature"
+ThermoPETase,2021,60,64.8,0.007,0.104,Engineered,"Cui et al. 2021, Nat Commun"
+LCC,2012,65,84.7,0.002,0.093,Natural,"Sulaiman et al. 2012, Appl Env Micro"
+ICCG-LCC,2020,72,94.6,0.001,1.622,Engineered,"Tournier et al. 2020, Nature"
+TfCut2,2014,62,65.0,0.003,0.081,Natural,"Roth et al. 2014, AMB Express"
+PHL7,2022,65,70.5,0.009,0.212,Natural,"Sonnendecker et al. 2022, ChemSusChem"
+HotPETase,2022,62,72.4,0.004,0.096,Engineered,"Bell et al. 2022, ACS Catal"
+BhrPETase,2023,55,60.1,0.012,0.089,Natural,"Shi et al. 2023, Nat Commun"
+CsPETase,2023,55,62.3,0.01,0.083,Natural,"Cheng et al. 2023, Nat Commun"
+DuraPETase,2019,37,53.1,0.039,0.039,Engineered,"Cui et al. 2019, ACS Catal"
+PET2,2020,40,55.0,0.031,0.061,Natural,"Danso et al. 2018, Appl Env Micro"
