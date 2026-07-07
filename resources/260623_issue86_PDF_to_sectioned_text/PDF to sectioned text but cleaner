@@ -1,0 +1,254 @@
+import os
+import json
+import shutil
+import re
+import fitz
+from tqdm import tqdm
+
+fitz.TOOLS.mupdf_display_errors(False)
+
+WORKSPACE_DIR = r"C:\Users\somna\source\repos\why do i have so many directories"
+PDFS_DIR = os.path.join(WORKSPACE_DIR, "CONSOLIDATED_METADATA_PAPERS")
+SCANS_DIR = os.path.join(WORKSPACE_DIR, "no encoded text pdfs")
+OUTPUT_DIR = os.path.join(WORKSPACE_DIR, "json_extracted_data")
+
+os.makedirs(SCANS_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+STANDARD_MAP = {
+    "abstract": "Abstract",
+    "summary": "Abstract",
+    "introduction": "Introduction",
+    "background": "Introduction",
+    "methods": "Methods",
+    "methodology": "Methods",
+    "experimental": "Methods",
+    "procedure": "Methods",
+    "materials and methods": "Methods",
+    "instructions": "Methods",
+    "results": "Results",
+    "findings": "Results",
+    "discussion": "Discussion",
+    "conclusion": "Discussion",
+    "conclusions": "Discussion",
+    "references": "Bibliography",
+    "bibliography": "Bibliography",
+    "literature cited": "Bibliography",
+    "citations": "Bibliography"
+}
+
+SPECIAL_SECTION_MAP = {
+    "genome sequencing and analysis": "Methods",
+    "rna extraction": "Methods",
+    "microarray experiments and data analysis": "Methods"
+}
+
+def normalize_text(text):
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+def is_page_artifact(text):
+    text = text.strip()
+    if re.fullmatch(r"\d+", text):
+        return True
+    if re.fullmatch(r"page\s+\d+", text.lower()):
+        return True
+    return False
+
+def is_bibliography_chunk(text):
+    doi_matches = len(re.findall(r"10\.\d{4,9}/[-._;()/:\w]+", text))
+    citation_lines = re.findall(r"(?m)^(\[\d+\]|\d+\.|\w+ et al\., \d{4})", text)
+
+    if len(citation_lines) >= 3:
+        return True
+    if doi_matches >= 3:
+        return True
+    return False
+
+def emergency_fallback_parse(raw_text, schema):
+    split_pattern = (
+        r"\b(Abstract|Introduction|Methods|Methodology|Results|"
+        r"Discussion|Conclusion|References|Bibliography)\b"
+    )
+
+    parts = re.split(split_pattern, raw_text, flags=re.IGNORECASE)
+
+    if len(parts) < 3:
+        return schema
+
+    for i in range(1, len(parts), 2):
+        header = parts[i].strip()
+        content = parts[i + 1].strip() if i + 1 < len(parts) else ""
+        norm = header.lower()
+
+        if norm in STANDARD_MAP:
+            category = STANDARD_MAP[norm]
+            if schema[category]:
+                schema[category] += "\n\n" + content
+            else:
+                schema[category] = content
+
+    return schema
+
+def recursive_xy_cut(blocks, x_dead_zone=20, y_dead_zone=15):
+    if not blocks:
+        return []
+
+    blocks = list(blocks)
+    blocks.sort(key=lambda b: (b[1], b[0]))
+
+    y_cut_index = -1
+    max_y1 = blocks[0][3]
+
+    for i in range(1, len(blocks)):
+        if blocks[i][1] - max_y1 > y_dead_zone:
+            y_cut_index = i
+            break
+        max_y1 = max(max_y1, blocks[i][3])
+
+    if y_cut_index != -1:
+        return recursive_xy_cut(blocks[:y_cut_index]) + recursive_xy_cut(blocks[y_cut_index:])
+
+    blocks.sort(key=lambda b: (b[0], b[1]))
+
+    x_cut_index = -1
+    max_x1 = blocks[0][2]
+
+    for i in range(1, len(blocks)):
+        if blocks[i][0] - max_x1 > x_dead_zone:
+            x_cut_index = i
+            break
+        max_x1 = max(max_x1, blocks[i][2])
+
+    if x_cut_index != -1:
+        return recursive_xy_cut(blocks[:x_cut_index]) + recursive_xy_cut(blocks[x_cut_index:])
+
+    blocks.sort(key=lambda b: (b[1], b[0]))
+    return blocks
+
+def extract_text_from_pdf(pdf_path):
+    doc = fitz.open(pdf_path)
+    text_blocks = []
+    seen_blocks = set()
+
+    try:
+        for page in doc:
+            blocks = page.get_text("blocks")
+            valid_blocks = [b for b in blocks if len(b) > 6 and b[6] == 0]
+            sorted_blocks = recursive_xy_cut(valid_blocks)
+
+            for block in sorted_blocks:
+                text = block[4].strip()
+                if not text:
+                    continue
+                if is_page_artifact(text):
+                    continue
+
+                normalized = normalize_text(text)
+                if normalized in seen_blocks:
+                    continue
+
+                seen_blocks.add(normalized)
+                text_blocks.append(text)
+    finally:
+        doc.close()
+
+    return "\n\n".join(text_blocks)
+
+def parse_text_to_schema(raw_text):
+    schema = {
+        "Abstract": "",
+        "Introduction": "",
+        "Methods": "",
+        "Results": "",
+        "Discussion": "",
+        "Bibliography": "",
+        "Other": []
+    }
+
+    current_category = "Other"
+
+    for block in raw_text.split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+
+        lines = block.split("\n")
+        first_line = lines[0].strip()
+
+        is_header = False
+        raw_title = ""
+
+        if 0 < len(first_line) < 80:
+            unformatted = first_line.replace("*", "").replace("_", "").strip()
+            lower_title = unformatted.lower()
+
+            if lower_title in STANDARD_MAP or lower_title in SPECIAL_SECTION_MAP:
+                is_header = True
+                raw_title = lower_title
+
+        if is_header:
+            if raw_title in SPECIAL_SECTION_MAP:
+                current_category = SPECIAL_SECTION_MAP[raw_title]
+            else:
+                current_category = STANDARD_MAP[raw_title]
+            block_content = "\n".join(lines[1:]).strip()
+        else:
+            block_content = block
+
+        if not block_content:
+            continue
+
+        target_category = current_category
+
+        if current_category != "Methods" and is_bibliography_chunk(block_content):
+            target_category = "Bibliography"
+
+        if target_category in schema and target_category != "Other":
+            if schema[target_category]:
+                schema[target_category] += "\n\n" + block_content
+            else:
+                schema[target_category] = block_content
+        else:
+            schema["Other"].append({
+                "section_name": current_category,
+                "content": block_content
+            })
+
+    if not schema["Introduction"] and not schema["Methods"] and not schema["Results"]:
+        schema = emergency_fallback_parse(raw_text, schema)
+
+    return schema
+
+def process_papers():
+    if not os.path.exists(PDFS_DIR):
+        return
+
+    pdf_files = [f for f in os.listdir(PDFS_DIR) if f.lower().endswith(".pdf")]
+
+    for filename in tqdm(pdf_files, desc="Processing"):
+        pdf_path = os.path.join(PDFS_DIR, filename)
+        json_path = os.path.join(OUTPUT_DIR, f"{os.path.splitext(filename)[0]}.json")
+
+        if os.path.exists(json_path):
+            continue
+
+        try:
+            doc = fitz.open(pdf_path)
+            sample_text = "".join(page.get_text() for page in doc[:3])
+            doc.close()
+
+            if len(sample_text.strip()) < 200:
+                shutil.move(pdf_path, os.path.join(SCANS_DIR, filename))
+                continue
+
+            raw_text = extract_text_from_pdf(pdf_path)
+            document_data = parse_text_to_schema(raw_text)
+
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(document_data, f, indent=4, ensure_ascii=False)
+
+        except Exception as e:
+            print(f"\\nError on {filename}: {e}")
+
+if __name__ == "__main__":
+    process_papers()

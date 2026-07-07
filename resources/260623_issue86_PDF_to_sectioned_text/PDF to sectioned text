@@ -1,0 +1,172 @@
+import os
+import json
+import shutil
+import fitz
+from tqdm import tqdm
+import re
+
+fitz.TOOLS.mupdf_display_errors(False)
+
+WORKSPACE_DIR = r"C:\Users\somna\source\repos\why do i have so many directories" 
+PDFS_DIR = os.path.join(WORKSPACE_DIR, "CONSOLIDATED_METADATA_PAPERS") 
+SCANS_DIR = os.path.join(WORKSPACE_DIR, "no encoded text pdfs") 
+OUTPUT_DIR = os.path.join(WORKSPACE_DIR, "json_extracted_data") 
+
+os.makedirs(SCANS_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+STANDARD_MAP = {
+    "abstract": "Abstract", "summary": "Abstract",
+    "introduction": "Introduction", "background": "Introduction",
+    "methods": "Methods", "methodology": "Methods", "experimental": "Methods", 
+    "procedure": "Methods", "materials and methods": "Methods", "instructions": "Methods",
+    "results": "Results", "findings": "Results",
+    "discussion": "Discussion", "conclusion": "Discussion", "conclusions": "Discussion",
+    "references": "Bibliography", "bibliography": "Bibliography", 
+    "literature cited": "Bibliography", "citations": "Bibliography"
+}
+
+def is_bibliography_chunk(text):
+    doi_matches = len(re.findall(r"10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+", text))
+    citation_lines = re.findall(r"(?m)^(\[\d+\]|\d+\.|\w+ et al\., \d{4})", text)
+    
+    if len(citation_lines) >= 2:
+        return True
+    if doi_matches >= 1 and len(text.split('\n')) > 3:
+        return True
+    return False
+
+def emergency_fallback_parse(raw_text, schema):
+    split_pattern = r'\b(Abstract|Introduction|Methods|Methodology|Results|Discussion|Conclusion|References|Bibliography)\b'
+    parts = re.split(split_pattern, raw_text, flags=re.IGNORECASE)
+    
+    if len(parts) < 3: 
+        return schema 
+
+    current_category = "Abstract"
+    schema["Other"] = [] 
+    
+    for i in range(0, len(parts)):
+        chunk = parts[i].strip()
+        if not chunk: continue
+        
+        norm_chunk = chunk.lower()
+        if norm_chunk in STANDARD_MAP:
+            current_category = STANDARD_MAP[norm_chunk]
+        else:
+            if schema[current_category]:
+                schema[current_category] += "\n\n" + chunk
+            else:
+                schema[current_category] = chunk
+                
+    return schema
+
+def parse_text_to_schema(raw_text):
+    schema = {
+        "Abstract": "", "Introduction": "", "Methods": "",
+        "Results": "", "Discussion": "", "Bibliography": "", "Other": []
+    }
+    
+    current_category = "Abstract"
+    last_standard_category = "Start of Document"
+    current_other_title = None
+
+    special_section_map = {
+        "genome sequencing and analysis": "Methods",
+        "rna extraction": "Methods",
+        "microarray experiments and data analysis": "Methods"
+    }
+
+    for block in raw_text.split("\n\n"):
+        block = block.strip()
+        if not block: continue
+
+        lines = block.split("\n")
+        first_line = lines[0].strip()
+        is_header = False
+        raw_title = ""
+
+        if 0 < len(first_line) < 80: 
+            unformatted = first_line.replace("*", "").replace("_", "").strip()
+            num_match = re.match(r'^([\d\.]+|[IVX]+[\.\)]|[A-Z]\.)?\s*([A-Za-z\s\-\:]+)$', unformatted, re.IGNORECASE)
+            if num_match or unformatted.isupper():
+                lower_title = unformatted.lower()
+                if lower_title in STANDARD_MAP or lower_title in special_section_map:
+                    is_header = True
+                    raw_title = unformatted
+
+        if is_header:
+            norm_title = raw_title.lower()
+            if norm_title in special_section_map:
+                current_category = special_section_map[norm_title]
+            else:
+                current_category = STANDARD_MAP[norm_title]
+            block_content = "\n".join(lines[1:]).strip()
+        else:
+            block_content = block
+
+        if current_category != "Methods" and is_bibliography_chunk(block_content):
+            current_category = "Bibliography"
+
+        if not block_content: continue
+
+        if current_category in schema and current_category != "Other":
+            if schema[current_category]:
+                schema[current_category] += "\n\n" + block_content
+            else:
+                schema[current_category] = block_content
+        elif current_category == "Other":
+            schema["Other"].append({"section_name": current_category, "content": block_content})
+
+    if not schema["Introduction"] and not schema["Methods"] and not schema["Results"]:
+        schema = emergency_fallback_parse(raw_text, schema)
+        
+    return schema
+
+def extract_text_from_pdf(pdf_path):
+    doc = fitz.open(pdf_path)
+    full_text_stream = []
+    
+    for page in doc:
+        text = page.get_text("text", sort=True)
+        if text.strip():
+            clean_text = text.replace("-\n", "")
+            full_text_stream.append(clean_text.strip())
+            
+    doc.close()
+    return "\n\n".join(full_text_stream)
+
+def process_papers():
+    if not os.path.exists(PDFS_DIR): 
+        print(f"Error: Could not locate directory {PDFS_DIR}")
+        return
+
+    all_files = os.listdir(PDFS_DIR)
+    pdf_files = [f for f in all_files if f.lower().endswith(".pdf")]
+    
+    for filename in tqdm(pdf_files, desc="Processing Database"):
+        pdf_path = os.path.join(PDFS_DIR, filename)
+        json_filepath = os.path.join(OUTPUT_DIR, f"{os.path.splitext(filename)[0]}.json")
+        
+        if os.path.exists(json_filepath): continue
+
+        try:
+            doc = fitz.open(pdf_path)
+            sample_text = "".join([page.get_text() for page in doc[:3]])
+            doc.close()
+
+            if len(sample_text.strip()) < 200:
+                shutil.move(pdf_path, os.path.join(SCANS_DIR, filename))
+                continue
+
+            raw_text = extract_text_from_pdf(pdf_path)
+            document_data = parse_text_to_schema(raw_text)
+
+            with open(json_filepath, 'w', encoding='utf-8') as f:
+                json.dump(document_data, f, indent=4, ensure_ascii=False)
+                
+        except Exception as e:
+            print(f"\nError processing {filename}: {e}")
+
+if __name__ == "__main__":
+    process_papers()

@@ -1,0 +1,239 @@
+import os
+import json
+import difflib
+import subprocess
+import requests
+import re
+from bs4 import BeautifulSoup
+from tqdm import tqdm
+
+WORKSPACE_DIR = r"C:\Users\somna\source\repos\why do i have so many directories" 
+PDFS_DIR = os.path.join(WORKSPACE_DIR, "CONSOLIDATED_METADATA_PAPERS") 
+FINAL_JSON_DIR = os.path.join(WORKSPACE_DIR, "final_unified_dataset") 
+
+MUTOOL_PATH = r"C:\Users\somna\Downloads\mupdf-1.27.0-windows\mutool.exe"
+GROBID_URL = "http://localhost:8070/api/processFulltextDocument"
+
+os.makedirs(FINAL_JSON_DIR, exist_ok=True)
+
+def run_mutool(pdf_path):
+    try:
+        command = [MUTOOL_PATH, "draw", "-F", "txt", "-o", "-", pdf_path]
+        result = subprocess.run(command, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        print(f"\nMutool failed on {os.path.basename(pdf_path)}: {e.stderr}")
+        return ""
+    except Exception as e:
+        print(f"\nUnexpected error on {os.path.basename(pdf_path)}: {e}")
+        return ""
+
+def run_grobid(pdf_path):
+    try:
+        with open(pdf_path, 'rb') as f:
+            files = {'input': f}
+            response = requests.post(GROBID_URL, files=files, timeout=60)
+        if response.status_code == 200:
+            return response.text
+        return None
+    except Exception:
+        return None
+
+def build_grobid_tag_map(xml_text):
+    if not xml_text:
+        return []
+        
+    soup = BeautifulSoup(xml_text, 'xml')
+    grobid_blocks = []
+    
+    for abs_tag in soup.find_all('abstract'):
+        for p in abs_tag.find_all('p'):
+            if p.text.strip():
+                grobid_blocks.append({"section": "Abstract", "text": p.text.strip()})
+                
+    body = soup.find('text')
+    if body:
+        current_section = "Body"
+        for tag in body.find_all(['head', 'p']):
+            text = tag.text.strip()
+            if not text: continue
+            
+            if tag.name == 'head':
+                current_section = text
+                grobid_blocks.append({"section": "Header", "text": text})
+            else:
+                grobid_blocks.append({"section": current_section, "text": text})
+                
+    return grobid_blocks
+
+def classify_orphaned_text(text, block_index):
+    text_lower = text.lower().strip()
+    length = len(text)
+    
+    if block_index < 5 and length < 200:
+        if any(w in text_lower for w in ["volume", "journal", "received", "available at"]):
+            return "Journal_Metadata"
+        return "Title_or_Authors"
+
+    num_prefix = r'^\s*(?:(?:\d+(?:\.\d+)*|[ivx]+)\.?\s*)?'
+
+    if length < 150:
+        if re.search(num_prefix + r'(abstract|summary|a b s t r a c t)\b', text_lower):
+            return "Abstract"
+        elif re.search(num_prefix + r'(introduction|background)\b', text_lower):
+            return "Introduction"
+        elif re.search(num_prefix + r'(materials|methods|methodology|experimental)\b', text_lower):
+            return "Methods"
+        elif re.search(num_prefix + r'(results|findings|discussion|conclusion)\b', text_lower):
+            return "Results"
+        elif re.search(num_prefix + r'(acknowledgements|funding|appendix)\b', text_lower):
+            return "Acknowledgements"
+        elif re.search(num_prefix + r'(references|bibliography|literature cited)\b', text_lower):
+            return "References"
+
+    if length < 120:
+        if re.search(r'^\s*(?:\d+(?:\.\d+)*|[ivx]+)\.\s+[A-Z]', text):
+            return "Section_Header"
+            
+        if re.search(r'^([a-z]\s){4,}', text_lower):
+            return "Journal_Metadata"
+
+    if length < 60:
+        if re.fullmatch(r'\s*\d+\s*', text):
+            return "Page_Number"
+        if "elsevier" in text_lower or "copyright" in text_lower or "publishing" in text_lower:
+            return "Journal_Metadata"
+            
+        return "Footer_or_Artifact"
+            
+    return "Body_Text"
+
+def smooth_and_merge_json(final_document):
+    smoothed_doc = []
+    
+    for block in final_document:
+        if block["section"] == "Front_Matter" and len(block["text"]) > 150:
+            text_lower = block["text"].lower()
+            search_window = text_lower[:50]
+            
+            if "abstract" in search_window or "summary" in search_window:
+                block["section"] = "Abstract"
+            elif "introduction" in search_window or "background" in search_window:
+                block["section"] = "Introduction"
+            elif "methods" in search_window or "materials" in search_window:
+                block["section"] = "Methods"
+            elif "results" in search_window or "findings" in search_window:
+                block["section"] = "Results"
+            elif "discussion" in search_window or "conclusion" in search_window:
+                block["section"] = "Discussion"
+            else:
+                block["section"] = "Body_Text"
+                
+        if not smoothed_doc:
+            smoothed_doc.append(block)
+            continue
+            
+        last_block = smoothed_doc[-1]
+        
+        if block["section"] == last_block["section"]:
+            last_block["text"] += " " + block["text"]
+        else:
+            smoothed_doc.append(block)
+            
+    return smoothed_doc
+
+def reconcile_to_json(mutool_text, grobid_blocks):
+    mutool_blocks = [b.strip() for b in mutool_text.split('\n\n') if b.strip()]
+    final_document = []
+    
+    major_section = "Front_Matter"
+    active_section = "Front_Matter"
+    
+    major_headers = [
+        "Abstract", "Introduction", "Methods", "Results", 
+        "Acknowledgements", "References"
+    ]
+    
+    floating_artifacts = [
+        "Footer_or_Artifact", "Page_Number", 
+        "Journal_Metadata", "Title_or_Authors"
+    ]
+    
+    for j, m_block in enumerate(mutool_blocks):
+        clean_m_block = m_block.replace('\n', ' ').replace(' V ', ' f ')
+        
+        best_match_section = None
+        highest_ratio = 0.0
+        matched_index = -1
+        
+        for i, g_block in enumerate(grobid_blocks):
+            ratio = difflib.SequenceMatcher(None, clean_m_block, g_block['text']).quick_ratio()
+            if ratio > highest_ratio:
+                highest_ratio = ratio
+                best_match_section = g_block['section']
+                matched_index = i
+                
+        raw_label = None
+        if highest_ratio > 0.6:
+            raw_label = best_match_section
+            if matched_index != -1:
+                grobid_blocks.pop(matched_index)
+        else:
+            raw_label = classify_orphaned_text(clean_m_block, j)
+            
+        if raw_label in major_headers:
+            major_section = raw_label
+            active_section = raw_label
+            
+        elif raw_label == "Section_Header" or (raw_label == "Header" and highest_ratio > 0.6):
+            sub_header_text = clean_m_block[:80]
+            active_section = f"{major_section} - {sub_header_text}"
+            
+        elif highest_ratio > 0.6 and raw_label not in floating_artifacts and raw_label != "Body":
+            major_section = raw_label
+            active_section = raw_label
+            
+        if raw_label in floating_artifacts:
+            applied_section = raw_label
+        else:
+            applied_section = active_section
+            
+        final_document.append({
+            "section": applied_section,
+            "text": clean_m_block
+        })
+    return smooth_and_merge_json(final_document)            
+    
+
+def process_corpus():
+    pdf_files = [f for f in os.listdir(PDFS_DIR) if f.lower().endswith(".pdf")]
+    print(f"Processing {len(pdf_files)} PDFs...")
+
+    for filename in tqdm(pdf_files):
+        base_name = os.path.splitext(filename)[0]
+        final_json_path = os.path.join(FINAL_JSON_DIR, f"{base_name}.json")
+        
+        if os.path.exists(final_json_path):
+            continue
+            
+        pdf_path = os.path.join(PDFS_DIR, filename)
+        
+        raw_mutool_text = run_mutool(pdf_path)
+        raw_grobid_xml = run_grobid(pdf_path)
+        
+        if not raw_mutool_text:
+            continue
+            
+        grobid_map = build_grobid_tag_map(raw_grobid_xml)
+        structured_content = reconcile_to_json(raw_mutool_text, grobid_map)
+        
+        output_data = {
+            "document_id": base_name,
+            "content": structured_content
+        }
+        
+        with open(final_json_path, 'w', encoding='utf-8') as f:
+            json.dump(output_data, f, indent=4)
+
+if __name__ == "__main__":
+    process_corpus()

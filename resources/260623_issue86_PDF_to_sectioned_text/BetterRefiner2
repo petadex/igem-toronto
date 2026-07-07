@@ -1,0 +1,135 @@
+import os
+import json
+import re
+from collections import defaultdict
+
+INPUT_DIR = r"C:\Users\somna\Downloads\Metadata_Unified_Schema_Refined"
+OUTPUT_DIR = r"C:\Users\somna\Downloads\Metadata_Unified_Schema_Refined4"
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+TARGET_HEADERS = {
+    "materialsandmethods": "Methods",
+    "experimentaldetails": "Methods",
+    "introduction": "Introduction",
+    "background": "Introduction",
+    "materials": "Methods",
+    "methods": "Methods",
+    "abstract": "Abstract",
+    "summary": "Abstract",
+    "results": "Results",
+    "findings": "Results",
+    "discussion": "Discussion",
+    "conclusions": "Conclusion",
+    "conclusion": "Conclusion",
+    "acknowledgements": "Acknowledgements",
+    "references": "References"
+}
+
+TARGET_HEADERS_LIST = sorted(TARGET_HEADERS.keys(), key=len, reverse=True)
+
+GENERIC_TAGS = {"Body_Text", "Front_Matter", "Other_Missing_From_Grobid", "Section_Header"}
+FLOATING_TAGS = {"Footer_or_Artifact", "Page_Number", "Journal_Metadata", "Title_or_Authors"}
+
+def process_corpus():
+    if not os.path.exists(INPUT_DIR):
+        print(f"Error: Input directory not found: {INPUT_DIR}")
+        return
+        
+    json_files = [f for f in os.listdir(INPUT_DIR) if f.lower().endswith('.json')]
+    print(f"Processing {len(json_files)} files...\n")
+    print("-" * 100)
+    print("LIVE DETECTION LOG:")
+    print("-" * 100)
+    
+    printed_logs = set()
+    change_log = defaultdict(int)
+    
+    for filename in json_files:
+        in_path = os.path.join(INPUT_DIR, filename)
+        out_path = os.path.join(OUTPUT_DIR, filename)
+        
+        with open(in_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            
+        content = data.get("content", [])
+        
+        major_section = None
+        active_section = None
+        cascade_tag = None
+        
+        for block in content:
+            original_section = block.get("section", "")
+            text = block.get("text", "").strip()
+            
+            if original_section not in GENERIC_TAGS and original_section not in FLOATING_TAGS:
+                if "-" in original_section:
+                    major_section = original_section.split("-")[0].strip()
+                else:
+                    major_section = original_section
+                active_section = original_section
+                
+            text_clean = re.sub(r'[^a-zA-Z]', '', text).lower()
+            text_clean = re.sub(r'^(section|chapter)', '', text_clean)
+            
+            trigger_found = False
+            
+            if len(text) < 250:
+                for th in TARGET_HEADERS_LIST:
+                    if text_clean.startswith(th):
+                        major_section = TARGET_HEADERS[th]
+                        active_section = major_section
+                        trigger_found = True
+                        break
+                        
+            sub_match = re.search(r'(?:^|\b)(?:\d+\.\d+(?:\.\d+)?)\s*[\|\.]\s*([A-Za-z][A-Za-z0-9\s\-\'\.,]+)', text)
+            if sub_match and major_section:
+                raw_sub = sub_match.group(1)
+                sub_title = re.split(r'(\u00ad|\b\d{4}\b|\b\d+\.\d+\b)', raw_sub)[0].strip()
+                sub_title = re.sub(r'\s+', ' ', sub_title)
+                
+                if len(sub_title) > 3:
+                    active_section = f"{major_section} - {sub_title}"
+                    trigger_found = True
+
+            if original_section == "Front_Matter" and len(text) > 400:
+                if not active_section:
+                    major_section = "Body_Text"
+                    active_section = "Body_Text"
+                trigger_found = True
+
+            if trigger_found:
+                new_tag = active_section 
+                block["section"] = new_tag
+                cascade_tag = new_tag 
+                
+                disp_text = text if len(text) < 45 else text[:42] + "..."
+                log_key = (original_section, disp_text, new_tag)
+                change_log[log_key] += 1
+                
+                if log_key not in printed_logs:
+                    print(f"[{original_section}] with the text: '{disp_text}' was identified as [{new_tag}] section.")
+                    printed_logs.add(log_key)
+            else:
+                if cascade_tag and original_section in GENERIC_TAGS:
+                    block["section"] = cascade_tag 
+                elif original_section in FLOATING_TAGS:
+                    pass
+
+        with open(out_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+            
+    print("\n" + "=" * 100)
+    print("FINAL SUMMARY OF SECTION CHANGES (TOTAL COUNTS)")
+    print("=" * 100)
+    
+    if not change_log:
+        print("No changes were necessary.")
+        return
+        
+    sorted_log = sorted(change_log.items(), key=lambda item: item[1], reverse=True)
+    for (old_tag, txt, new_tag), count in sorted_log:
+        print(f"Count: {count:<4} | [{old_tag}] containing '{txt}' -> [{new_tag}]")
+
+if __name__ == "__main__":
+    process_corpus()

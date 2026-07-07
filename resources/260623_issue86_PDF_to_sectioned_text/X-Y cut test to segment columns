@@ -1,0 +1,86 @@
+import os
+import fitz
+from tqdm import tqdm
+
+fitz.TOOLS.mupdf_display_errors(False)
+
+WORKSPACE_DIR = r"C:\Users\somna\source\repos\why do i have so many directories" 
+PDFS_DIR = os.path.join(WORKSPACE_DIR, "CONSOLIDATED_METADATA_PAPERS") 
+OUTPUT_DIR = os.path.join(WORKSPACE_DIR, "raw_xy_text") 
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+def extract_text_from_pdf_xy(pdf_path):
+    doc = fitz.open(pdf_path)
+    full_text_stream = []
+    
+    def recursive_xy_cut(blocks, x_dead_zone=20, y_dead_zone=15):
+        if not blocks: return []
+
+        blocks.sort(key=lambda b: b[1])
+        y_cut_index = -1
+        max_y1 = blocks[0][3] 
+
+        for i in range(1, len(blocks)):
+            if blocks[i][1] - max_y1 > y_dead_zone:
+                y_cut_index = i
+                break
+            max_y1 = max(max_y1, blocks[i][3])
+
+        if y_cut_index != -1:
+            return recursive_xy_cut(blocks[:y_cut_index]) + recursive_xy_cut(blocks[y_cut_index:])
+
+        blocks.sort(key=lambda b: b[0])
+        x_cut_index = -1
+        max_x1 = blocks[0][2] 
+
+        for i in range(1, len(blocks)):
+            if blocks[i][0] - max_x1 > x_dead_zone:
+                x_cut_index = i
+                break
+            max_x1 = max(max_x1, blocks[i][2])
+
+        if x_cut_index != -1:
+            return recursive_xy_cut(blocks[:x_cut_index]) + recursive_xy_cut(blocks[x_cut_index:])
+
+        blocks.sort(key=lambda b: b[1])
+        return blocks
+
+    for page in doc:
+        blocks = page.get_text("blocks")
+        valid_blocks = [b for b in blocks if b[6] == 0]
+        
+        sorted_blocks = recursive_xy_cut(valid_blocks)
+        for b in sorted_blocks:
+            clean_text = b[4].replace("-\n", "").strip()
+            full_text_stream.append(clean_text)
+            
+    doc.close()
+    return "\n\n".join(full_text_stream)
+
+def dump_xy_text():
+    if not os.path.exists(PDFS_DIR): 
+        print(f"Error: Could not locate directory {PDFS_DIR}")
+        return
+
+    all_files = os.listdir(PDFS_DIR)
+    pdf_files = [f for f in all_files if f.lower().endswith(".pdf")]
+    
+    print(f"Found {len(pdf_files)} PDFs. Dumping text...")
+
+    for filename in tqdm(pdf_files, desc="Extracting"):
+        pdf_path = os.path.join(PDFS_DIR, filename)
+        txt_filepath = os.path.join(OUTPUT_DIR, f"{os.path.splitext(filename)[0]}.txt")
+        
+        if os.path.exists(txt_filepath): 
+            continue
+
+        try:
+            raw_text = extract_text_from_pdf_xy(pdf_path)
+            with open(txt_filepath, 'w', encoding='utf-8') as f:
+                f.write(raw_text)
+        except Exception as e:
+            print(f"\nError processing {filename}: {e}")
+
+if __name__ == "__main__":
+    dump_xy_text()
