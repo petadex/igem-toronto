@@ -1,0 +1,933 @@
+organism,genus,n_plastics,plastics_degraded,breadth_score,rarity_score,recency_score,evidence_gap_score,novelty_potential,last_year,has_sequence,has_enzyme
+Phanerochaete chrysosporium,Phanerochaete,11,"['LDPE', 'LDPE Blend', 'Nylon', 'PE', 'PHBV', 'PLA', 'PP', 'PS', 'PVA', 'PVC', 'PVC Blend']",50.0,91.32,90.0,50,68.33,2023.0,False,True
+Bacillus sp.,Bacillus,20,"['HDPE', 'Impranil', 'LDPE', 'P34HB', 'PBAT', 'PBS', 'PCL', 'PE', 'PES', 'PET', 'PHB', 'PHBH', 'PHBV', 'PLA', 'PP', 'PS', 'PS Blend', 'PU', 'PVA', 'PVC']",90.91,29.39,90.0,50,65.12,2023.0,False,True
+Serratia marcescens,Serratia,7,"['HDPE', 'LDPE', 'PCL', 'PE', 'PLA', 'PP', 'PS']",31.82,92.9,90.0,50,63.27,2023.0,False,True
+Stenotrophomonas sp.,Stenotrophomonas,7,"['HDPE', 'LDPE', 'Nylon', 'PE', 'PHB', 'PU', 'PVA']",31.82,91.32,90.0,50,62.88,2023.0,False,True
+Enterobacter sp.,Enterobacter,7,"['LDPE', 'PC', 'PHB', 'PHBV', 'PP', 'PS', 'PU']",31.82,90.93,90.0,50,62.78,2023.0,False,True
+Arthrobacter sp.,Arthrobacter,7,"['HDPE', 'Nylon', 'PC', 'PCL', 'PHB', 'PHBV', 'PU']",31.82,96.06,60.0,50,58.06,2017.0,False,True
+Penicillium sp.,Penicillium,7,"['LDPE', 'PC', 'PCL', 'PHA', 'PHB', 'PLA', 'PU']",31.82,73.96,85.0,50,57.54,2022.0,False,True
+Streptomyces sp.,Streptomyces,16,"['LDPE', 'LDPE Blend', 'NR', 'PBS', 'PCL', 'PEA', 'PEC', 'PEG', 'PES', 'PET', 'PHB', 'PHBH', 'PHBV', 'PLA', 'PPL', 'PU']",72.73,56.61,100.0,0,55.97,2025.0,True,True
+Aspergillus niger,Aspergillus,12,"['HDPE', 'LDPE', 'PBS', 'PCL', 'PE', 'PET', 'PETG', 'PHB', 'PLA', 'PU', 'PVA', 'PVC']",54.55,30.18,90.0,50,54.41,2023.0,False,True
+Fusarium sp.,Fusarium,7,"['LDPE', 'Nylon', 'PC', 'PCL', 'PE', 'PHB', 'PU']",31.82,62.92,80.0,50,53.78,2021.0,False,True
+Bacillus cereus,Bacillus,11,"['HDPE', 'LDPE', 'LLDPE', 'Nylon', 'PBAT', 'PC', 'PE', 'PES', 'PET', 'PHA', 'PS']",50.0,29.39,90.0,50,52.85,2023.0,False,True
+Pseudomonas sp.,Pseudomonas,22,"['HDPE', 'LDPE', 'Nylon', 'O-PVA', 'PBS', 'PBSA', 'PCL', 'PE', 'PEG', 'PES', 'PET', 'PHA Blend', 'PHB', 'PHN', 'PHO', 'PLA', 'PP', 'PS', 'PS Blend', 'PU', 'PVA', 'PVC']",100.0,19.13,90.0,0,52.78,2023.0,True,True
+Alcanivorax borkumensis,Alcanivorax,8,"['LDPE', 'PBAT', 'PBSA', 'PCL', 'PES', 'PHA', 'PHBV', 'PLA']",36.36,92.5,90.0,0,52.04,2023.0,True,True
+Actinomadura sp.,Actinomadura,6,"['PBS', 'PBSA', 'PCL', 'PET', 'PHBV', 'PLA']",27.27,95.27,100.0,0,52.0,2025.0,True,True
+Moraxella sp.,Moraxella,8,"['PBS', 'PCL', 'PE', 'PET', 'PHA', 'PHB', 'PLA', 'PU']",36.36,95.66,85.0,0,51.82,2022.0,True,True
+Alcaligenes faecalis,Alcaligenes,7,"['HDPE', 'LDPE', 'LLDPE', 'PCL', 'PES', 'PHA', 'PHB']",31.82,95.66,90.0,0,51.46,2023.0,True,True
+Rhizopus oryzae,Rhizopus,6,"['LDPE', 'PBAT', 'PBS', 'PBSA', 'PLA', 'PU']",27.27,95.66,90.0,0,50.1,2023.0,True,True
+Marinobacter sp.,Marinobacter,7,"['Ecovio-FT', 'LDPE', 'PBAT', 'PBSeT', 'PET', 'PHA', 'PHB']",31.82,94.08,85.0,0,50.07,2022.0,True,True
+Lihuaxuella thermophila,Lihuaxuella,6,"['PCL', 'PHA', 'PHB', 'PHBH', 'PHBVH', 'PLA']",27.27,97.63,85.0,0,49.59,2022.0,True,True
+Pleurotus ostreatus,Pleurotus,5,"['LDPE', 'LDPE Blend', 'O-PE', 'PE Blend', 'PET']",22.73,97.63,90.0,0,49.23,2023.0,False,True
+Purpureocillium lilacinum,Purpureocillium,5,"['PBAT', 'PBSA', 'PCL', 'PHB', 'PHBV']",22.73,97.24,90.0,0,49.13,2023.0,False,True
+Amycolatopsis sp.,Amycolatopsis,7,"['PBAT', 'PBS', 'PCL', 'PET', 'PHB', 'PLA', 'PU']",31.82,78.3,100.0,0,49.12,2025.0,True,True
+Enterobacter hormaechei,Enterobacter,6,"['HDPE', 'LLDPE', 'PBAT', 'PP', 'PS', 'PVC']",27.27,90.93,90.0,0,48.91,2023.0,False,True
+Rhodococcus sp.,Rhodococcus,7,"['LDPE', 'PCL', 'PE', 'PET', 'PHB', 'PLA', 'PP']",31.82,85.4,90.0,0,48.9,2023.0,True,True
+Achromobacter xylosoxidans,Achromobacter,5,"['HDPE', 'LDPE', 'Nylon', 'PE', 'PVC']",22.73,96.06,90.0,0,48.83,2023.0,False,True
+Brevibacillus sp.,Brevibacillus,6,"['HDPE', 'LDPE', 'PCL', 'PE', 'PP', 'PU']",27.27,90.53,90.0,0,48.81,2023.0,False,True
+Brevibacillus brevis,Brevibacillus,6,"['HDPE', 'LDPE', 'PCL', 'PE', 'PLA', 'PP']",27.27,90.53,90.0,0,48.81,2023.0,False,True
+Uncultured bacterium,Uncultured,9,"['PBAT', 'PBS', 'PBSA', 'PCL', 'PES', 'PET', 'PHA', 'PHB', 'PLA']",40.91,77.91,85.0,0,48.75,2022.0,True,True
+Priestia megaterium,Priestia,5,"['PC', 'PE', 'PHA', 'PHB', 'PLA']",22.73,95.27,90.0,0,48.63,2023.0,True,True
+Exiguobacterium sp.,Exiguobacterium,5,"['HDPE', 'LDPE', 'PET', 'PP', 'PS']",22.73,94.08,90.0,0,48.34,2023.0,False,True
+Clonostachys rosea,Clonostachys,3,"['PCL', 'PET', 'PU']",13.64,96.84,100.0,0,48.3,2025.0,True,True
+Terribacillus sp.,Terribacillus,5,"['P(3HB-co-3HV)', 'P(3HV-co-4HB)', 'PBAT', 'PBS', 'PCL']",22.73,97.63,85.0,0,48.23,2022.0,False,False
+Aureobasidium pullulans,Aureobasidium,5,"['PCL', 'PHB', 'PLA', 'PU', 'PVC Blend']",22.73,96.84,85.0,0,48.03,2022.0,False,True
+Trichoderma sp.,Trichoderma,5,"['LDPE', 'PCL', 'PHA', 'PLA', 'PU']",22.73,92.5,90.0,0,47.94,2023.0,False,True
+Stutzerimonas stutzeri,Stutzerimonas,8,"['P3HP', 'P4HB', 'PE', 'PEA', 'PEG', 'PES', 'PHB', 'PP']",36.36,95.66,65.0,0,47.82,2018.0,True,True
+Aspergillus flavus,Aspergillus,7,"['HDPE', 'LDPE', 'PE', 'PET', 'PHB', 'PP', 'PU']",31.82,30.18,90.0,50,47.59,2023.0,False,True
+Aspergillus sp.,Aspergillus,7,"['LDPE', 'PBS', 'PBSA', 'PE', 'PET', 'PHB', 'PU']",31.82,30.18,90.0,50,47.59,2023.0,False,True
+Jonesia denitrificans,Jonesia,2,"['HDPE', 'PET']",9.09,99.21,100.0,0,47.53,2025.0,True,True
+Fusarium solani,Fusarium,10,"['LDPE', 'PBAT', 'PBS', 'PCL', 'PE', 'PET', 'PHB', 'PLA', 'PMCL', 'PU']",45.45,62.92,90.0,0,47.37,2023.0,True,True
+Fusarium oxysporum,Fusarium,10,"['LDPE', 'PBSA', 'PCL', 'PE', 'PET', 'PHB', 'PHBV', 'PLA', 'PP', 'PU']",45.45,62.92,90.0,0,47.37,2023.0,True,True
+Aspergillus fumigatus,Aspergillus,16,"['LDPE', 'PBAT', 'PBAT-Blend', 'PBS', 'PBSA', 'PCL', 'PE', 'PES', 'PETG', 'PHA', 'PHB', 'PHBV', 'PLA', 'PP', 'PU', 'PVC']",72.73,30.18,90.0,0,47.36,2023.0,True,True
+Halomonas aquamarina,Halomonas,4,"['HDPE', 'LDPE', 'PET', 'PP']",18.18,94.87,90.0,0,47.17,2023.0,False,False
+Halomonas sp.,Halomonas,4,"['HDPE', 'LDPE', 'PET', 'PP']",18.18,94.87,90.0,0,47.17,2023.0,False,True
+Pseudogymnoascus pannorum,Pseudogymnoascus,4,"['PBAT', 'PCL', 'PU', 'PVC']",18.18,94.48,90.0,0,47.07,2023.0,False,True
+Microbulbifer sp.,Microbulbifer,4,"['P(3HB-co-4HB)', 'P(3HB-co-HV)', 'PCL', 'PHB']",18.18,98.42,85.0,0,47.06,2022.0,False,False
+Exiguobacterium profundum,Exiguobacterium,4,"['HDPE', 'LDPE', 'PET', 'PP']",18.18,94.08,90.0,0,46.98,2023.0,False,False
+Alternaria alternata,Alternaria,4,"['PCL', 'PE', 'PHB', 'PU']",18.18,93.69,90.0,0,46.88,2023.0,False,True
+Neodevriesia sp.,Neodevriesia,3,"['PBAT', 'PCL', 'PLA']",13.64,98.42,90.0,0,46.7,2023.0,False,False
+Xanthomonas sp.,Xanthomonas,3,"['PET', 'PHPV', 'PU']",13.64,98.42,90.0,0,46.7,2023.0,False,True
+Chaetomium globosum,Chaetomium,4,"['LDPE', 'PCL', 'PE', 'PVC']",18.18,96.84,85.0,0,46.67,2022.0,False,True
+Lachnellula sp.,Lachnellula,3,"['PBAT', 'PLA', 'PU']",13.64,98.03,90.0,0,46.6,2023.0,False,False
+Trichoderma harzianum,Trichoderma,4,"['PCL', 'PE', 'PHB', 'PLA']",18.18,92.5,90.0,0,46.58,2023.0,False,True
+Streptococcus sp.,Streptococcus,4,"['HDPE', 'LLDPE', 'PE', 'PVC']",18.18,96.45,85.0,0,46.57,2022.0,False,True
+Staphylococcus sp.,Staphylococcus,4,"['LDPE', 'PCL', 'PE', 'PVC']",18.18,96.45,85.0,0,46.57,2022.0,False,True
+Meyerozyma guilliermondii,Meyerozyma,3,"['LDPE', 'PE', 'PHB']",13.64,97.63,90.0,0,46.5,2023.0,False,True
+Roseateles depolymerans,Roseateles,6,"['PBSA', 'PBSTIL', 'PCL', 'PHC', 'PTC', 'PTS']",27.27,96.84,70.0,0,46.39,2019.0,False,True
+Amycolatopsis tolypomycina,Amycolatopsis,5,"['PBS', 'PCL', 'PET', 'PHB', 'PLA']",22.73,78.3,100.0,0,46.39,2025.0,True,True
+Papiliotrema laurentii,Papiliotrema,5,"['PBSA', 'PCL', 'PEA', 'PES', 'PU']",22.73,98.03,75.0,0,46.33,2020.0,False,True
+Ralstonia pickettii,Ralstonia,8,"['P3HP', 'P4HB', 'PCL', 'PEA', 'PES', 'PHA', 'PHB', 'PHC']",36.36,93.69,60.0,0,46.33,2017.0,True,True
+Stenotrophomonas maltophilia,Stenotrophomonas,4,"['LDPE', 'PET', 'PHO', 'PLA']",18.18,91.32,90.0,0,46.28,2023.0,False,True
+Thermoleophilaceae bacterium,Thermoleophilaceae,1,['PET'],4.55,99.61,100.0,0,46.27,2025.0,True,True
+Cellulomonas iranensis,Cellulomonas,1,['PET'],4.55,99.61,100.0,0,46.27,2025.0,True,True
+Sphaerisporangium fuscum,Sphaerisporangium,1,['PET'],4.55,99.61,100.0,0,46.27,2025.0,True,True
+Promicromonospora panici,Promicromonospora,1,['PET'],4.55,99.61,100.0,0,46.27,2025.0,True,True
+Asanoa hainanensis,Asanoa,1,['PET'],4.55,99.61,100.0,0,46.27,2025.0,True,True
+Piscinibacter gummiphilus,Piscinibacter,1,['PET'],4.55,99.61,100.0,0,46.27,2025.0,True,True
+Herbihabitans rhizosphaerae,Herbihabitans,1,['PET'],4.55,99.61,100.0,0,46.27,2025.0,True,True
+Cladosporium sp.,Cladosporium,5,"['PBSA', 'PCL', 'PHB', 'PU', 'PVA']",22.73,85.8,90.0,0,46.27,2023.0,False,True
+Kutzneria sp.,Kutzneria,1,['PET'],4.55,99.61,100.0,0,46.27,2025.0,True,True
+Microbispora,,1,['PET'],4.55,99.61,100.0,0,46.27,2025.0,True,True
+Solwaraspora sp.,Solwaraspora,1,['PET'],4.55,99.61,100.0,0,46.27,2025.0,True,True
+Rhizocola hellebori,Rhizocola,1,['PET'],4.55,99.61,100.0,0,46.27,2025.0,True,True
+Cladosporium cladosporioides,Cladosporium,5,"['LDPE', 'O-PE', 'PE', 'PET', 'PU']",22.73,85.8,90.0,0,46.27,2023.0,False,True
+Hamadaea flava,Hamadaea,1,['PET'],4.55,99.21,100.0,0,46.17,2025.0,True,True
+Actinoallomurus spadix,Actinoallomurus,1,['PET'],4.55,99.21,100.0,0,46.17,2025.0,True,True
+Plantactinospora endophytica,Plantactinospora,1,['PET'],4.55,99.21,100.0,0,46.17,2025.0,True,True
+Micromonosporaceae bacterium,Micromonosporaceae,1,['PET'],4.55,99.21,100.0,0,46.17,2025.0,True,True
+Crossiella sp.,Crossiella,1,['PET'],4.55,99.21,100.0,0,46.17,2025.0,True,True
+Saccharopolyspora hirsuta,Saccharopolyspora,1,['PET'],4.55,99.21,100.0,0,46.17,2025.0,True,True
+Catellatospora bangladeshensis,Catellatospora,1,['PET'],4.55,99.21,100.0,0,46.17,2025.0,True,True
+Verrucosispora sioxanthis,Verrucosispora,1,['PET'],4.55,99.21,100.0,0,46.17,2025.0,True,True
+Verrucosispora sp.,Verrucosispora,1,['PET'],4.55,99.21,100.0,0,46.17,2025.0,True,True
+Catellatospora methionotrophica,Catellatospora,1,['PET'],4.55,99.21,100.0,0,46.17,2025.0,True,True
+Hamadaea sp.,Hamadaea,1,['PET'],4.55,99.21,100.0,0,46.17,2025.0,True,True
+Plantactinospora alkalitolerans,Plantactinospora,1,['PET'],4.55,99.21,100.0,0,46.17,2025.0,True,True
+Actinomycetes bacterium,Actinomycetes,1,['PET'],4.55,99.21,100.0,0,46.17,2025.0,True,True
+Acidimicrobiales bacterium,Acidimicrobiales,1,['PET'],4.55,98.82,100.0,0,46.07,2025.0,True,True
+Phytohabitans houttuyneae,Phytohabitans,1,['PET'],4.55,98.82,100.0,0,46.07,2025.0,True,True
+Halopseudomonas yangmingensis,Halopseudomonas,1,['PET'],4.55,98.82,100.0,0,46.07,2025.0,True,True
+Actinoplanes sp. DH11,Actinoplanes,1,['PET'],4.55,98.82,100.0,0,46.07,2025.0,True,True
+Actinoplanes ianthinogenes,Actinoplanes,1,['PET'],4.55,98.82,100.0,0,46.07,2025.0,True,True
+Micromonosporales bacterium,Micromonosporales,1,['PET'],4.55,98.82,100.0,0,46.07,2025.0,True,True
+Phytohabitans rumicis,Phytohabitans,1,['PET'],4.55,98.82,100.0,0,46.07,2025.0,True,True
+Phytohabitans aurantiacus,Phytohabitans,1,['PET'],4.55,98.82,100.0,0,46.07,2025.0,True,True
+Kibdelosporangium banguiense,Kibdelosporangium,1,['PET'],4.55,98.82,100.0,0,46.07,2025.0,True,True
+Bjerkandera adusta,Bjerkandera,4,"['Nylon', 'PHB', 'PLA', 'PU']",18.18,98.42,80.0,0,46.06,2021.0,False,True
+Acinetobacter calcoaceticus,Acinetobacter,4,"['LDPE', 'PCL', 'PHA', 'PHC']",18.18,90.14,90.0,0,45.99,2023.0,False,True
+Actinokineospora xionganensis,Actinokineospora,1,['PET'],4.55,98.42,100.0,0,45.97,2025.0,True,True
+Actinokineospora alba,Actinokineospora,1,['PET'],4.55,98.42,100.0,0,45.97,2025.0,True,True
+Actinokineospora spheciospongiae,Actinokineospora,1,['PET'],4.55,98.42,100.0,0,45.97,2025.0,True,True
+Burkholderia cepacia,Burkholderia,3,"['LDPE', 'PBSA', 'PLA Blend']",13.64,95.27,90.0,0,45.91,2023.0,True,True
+Paractinoplanes polyasparticus,Paractinoplanes,1,['PET'],4.55,98.03,100.0,0,45.87,2025.0,True,True
+Paractinoplanes durhamensis,Paractinoplanes,1,['PET'],4.55,98.03,100.0,0,45.87,2025.0,True,True
+Paractinoplanes rishiriensis,Paractinoplanes,1,['PET'],4.55,98.03,100.0,0,45.87,2025.0,True,True
+Paractinoplanes tereljensis,Paractinoplanes,1,['PET'],4.55,98.03,100.0,0,45.87,2025.0,True,True
+Paractinoplanes deccanensis,Paractinoplanes,1,['PET'],4.55,98.03,100.0,0,45.87,2025.0,True,True
+Rhizobacter sp.,Rhizobacter,1,['PET'],4.55,98.03,100.0,0,45.87,2025.0,True,True
+Plectosphaerella cucumerina,Plectosphaerella,3,"['PBSA', 'PCL', 'PVA']",13.64,98.82,85.0,0,45.8,2022.0,False,True
+Cellulosimicrobium sp.,Cellulosimicrobium,3,"['PE', 'PHB', 'PHBV']",13.64,98.82,85.0,0,45.8,2022.0,False,True
+Kaistella jeonii,Kaistella,3,"['PCL', 'PET', 'PU']",13.64,98.82,85.0,0,45.8,2022.0,True,True
+Actinomucor elegans,Actinomucor,3,"['PHB', 'PHB-Blend', 'PLA']",13.64,98.82,85.0,0,45.8,2022.0,False,True
+Dactylosporangium matsuzakiense,Dactylosporangium,1,['PET'],4.55,97.63,100.0,0,45.77,2025.0,True,True
+Dactylosporangium siamense,Dactylosporangium,1,['PET'],4.55,97.63,100.0,0,45.77,2025.0,True,True
+Dactylosporangium sp.,Dactylosporangium,1,['PET'],4.55,97.63,100.0,0,45.77,2025.0,True,True
+Dactylosporangium vinaceum,Dactylosporangium,1,['PET'],4.55,97.63,100.0,0,45.77,2025.0,True,True
+Dactylosporangium sucinum,Dactylosporangium,1,['PET'],4.55,97.63,100.0,0,45.77,2025.0,True,True
+Dactylosporangium aurantiacum,Dactylosporangium,1,['PET'],4.55,97.63,100.0,0,45.77,2025.0,True,True
+Pseudogymnoascus verrucosus,Pseudogymnoascus,3,"['PBAT', 'PLA', 'PU']",13.64,94.48,90.0,0,45.71,2023.0,False,False
+Nocardiopsis prasina,Nocardiopsis,3,"['LDPE', 'PLA', 'PS']",13.64,98.42,85.0,0,45.7,2022.0,False,False
+Microbispora catharanthi,Microbispora,1,['PET'],4.55,97.24,100.0,0,45.67,2025.0,True,True
+Microbispora oryzae,Microbispora,1,['PET'],4.55,97.24,100.0,0,45.67,2025.0,True,True
+Microbispora sp.,Microbispora,1,['PET'],4.55,97.24,100.0,0,45.67,2025.0,True,True
+Microbispora rosea subsp. Aerata,Microbispora,1,['PET'],4.55,97.24,100.0,0,45.67,2025.0,True,True
+Microbispora triticiradicis,Microbispora,1,['PET'],4.55,97.24,100.0,0,45.67,2025.0,True,True
+Thermobifida cellulosilytica,Thermobifida,3,"['PEF', 'PET', 'PLA']",13.64,86.19,100.0,0,45.64,2025.0,True,True
+Flavobacterium sp.,Flavobacterium,2,"['LDPE', 'PU']",9.09,99.21,90.0,0,45.53,2023.0,False,True
+Agrobacterium tumefaciens,Agrobacterium,2,"['PHA', 'PS']",9.09,99.21,90.0,0,45.53,2023.0,False,True
+Thelebolus globosus,Thelebolus,2,"['PBAT', 'PU']",9.09,99.21,90.0,0,45.53,2023.0,False,False
+Pantoea sp.,Pantoea,2,"['LDPE', 'PU']",9.09,99.21,90.0,0,45.53,2023.0,False,True
+Perenniporia sp.,Perenniporia,2,"['LDPE', 'PU']",9.09,98.82,90.0,0,45.43,2023.0,False,True
+Aequorivita sp.,Aequorivita,3,"['PCL', 'PET', 'PU']",13.64,97.24,85.0,0,45.4,2022.0,True,True
+Comamonas sp.,Comamonas,4,"['PE', 'PHB', 'PHBV', 'PHO']",18.18,91.72,85.0,0,45.38,2022.0,False,True
+Humicola insolens,Humicola,2,"['PEF', 'PET']",9.09,98.42,90.0,0,45.33,2023.0,True,True
+Klebsiella pneumoniae,Klebsiella,2,"['HDPE', 'PE']",9.09,98.42,90.0,0,45.33,2023.0,False,True
+Brevundimonas sp.,Brevundimonas,2,"['PCL', 'PS']",9.09,98.42,90.0,0,45.33,2023.0,False,True
+Hypoxylon sp.,Hypoxylon,2,"['LDPE', 'PU']",9.09,98.03,90.0,0,45.23,2023.0,False,True
+Ideonella sakaiensis,Ideonella,2,"['PEF', 'PET']",9.09,98.03,90.0,0,45.23,2023.0,True,True
+Pseudozyma antarctica,Pseudozyma,5,"['PBS', 'PBS-Blend', 'PBSA', 'PBSA-Blend', 'PCL']",22.73,97.63,70.0,0,45.23,2019.0,True,True
+Shewanella sp.,Shewanella,2,"['PCL', 'PHB']",9.09,98.03,90.0,0,45.23,2023.0,False,True
+Citrobacter koseri,Citrobacter,2,"['HDPE', 'PVC']",9.09,98.03,90.0,0,45.23,2023.0,False,False
+Proteus sp.,Proteus,2,"['PU', 'PVC']",9.09,98.03,90.0,0,45.23,2023.0,False,False
+Micrococcus sp.,Micrococcus,3,"['PE', 'PU', 'PVC']",13.64,96.45,85.0,0,45.2,2022.0,False,True
+Actinomadura physcomitrii,Actinomadura,1,['PET'],4.55,95.27,100.0,0,45.18,2025.0,True,True
+Actinomadura rayongensis,Actinomadura,1,['PET'],4.55,95.27,100.0,0,45.18,2025.0,True,True
+Actinomadura atramentaria,Actinomadura,1,['PET'],4.55,95.27,100.0,0,45.18,2025.0,True,True
+Rhodotorula mucilaginosa,Rhodotorula,2,"['PE', 'PLA']",9.09,97.63,90.0,0,45.14,2023.0,False,True
+Paraphoma radicina,Paraphoma,3,"['PBS', 'PBSA', 'PCL']",13.64,96.06,85.0,0,45.1,2022.0,False,True
+Saccharothrix deserti,Saccharothrix,1,['PET'],4.55,94.87,100.0,0,45.08,2025.0,True,True
+Saccharothrix sp.,Saccharothrix,1,['PET'],4.55,94.87,100.0,0,45.08,2025.0,True,True
+Verticillium leptobactrum,Verticillium,2,"['PBAT', 'PU']",9.09,97.24,90.0,0,45.04,2023.0,False,False
+Thermobifida fusca,Thermobifida,4,"['PBAT', 'PBAT-Blend', 'PCL', 'PET']",18.18,86.19,90.0,0,45.0,2023.0,True,True
+Lysinibacillus sp.,Lysinibacillus,2,"['PCL', 'PU']",9.09,96.84,90.0,0,44.94,2023.0,False,True
+Lysinibacillus fusiformis,Lysinibacillus,2,"['LDPE', 'PE']",9.09,96.84,90.0,0,44.94,2023.0,False,True
+Moniliophthora roreri,Moniliophthora,3,"['PCL', 'PES', 'PET']",13.64,98.82,80.0,0,44.8,2021.0,True,True
+Brevibacillus parabrevis,Brevibacillus,3,"['HDPE', 'LDPE', 'PET']",13.64,90.53,90.0,0,44.72,2023.0,False,True
+Burkholderia sp.,Burkholderia,2,"['PHA', 'PU']",9.09,95.27,90.0,0,44.54,2023.0,False,True
+Stachybotrys chartarum,Stachybotrys,2,"['LDPE', 'PE']",9.09,99.21,85.0,0,44.53,2022.0,False,False
+Memnoniella echinata,Memnoniella,2,"['LDPE', 'PE']",9.09,99.21,85.0,0,44.53,2022.0,False,False
+Pseudoalteromonas sp.,Pseudoalteromonas,2,"['Nylon', 'PCL']",9.09,94.87,90.0,0,44.45,2023.0,False,False
+Paenibacillus sp.,Paenibacillus,5,"['HDPE', 'LDPE', 'PHB', 'PLA', 'PVA']",22.73,94.48,70.0,0,44.44,2019.0,True,True
+Oleispira antarctica,Oleispira,2,"['PCL', 'PET']",9.09,98.82,85.0,0,44.43,2022.0,True,True
+Colletotrichum fructicola,Colletotrichum,2,"['LDPE', 'PU']",9.09,98.82,85.0,0,44.43,2022.0,False,True
+Botrytis cinerea,Botrytis,2,"['PCL', 'PU']",9.09,98.82,85.0,0,44.43,2022.0,False,True
+Sarocladium strictum,Sarocladium,2,"['PBSA', 'PCL']",9.09,98.82,85.0,0,44.43,2022.0,False,True
+Psychrobacter sp.,Psychrobacter,2,"['PCL', 'PE']",9.09,98.82,85.0,0,44.43,2022.0,True,True
+Micromonospora qiuiae,Micromonospora,1,['PET'],4.55,92.11,100.0,0,44.39,2025.0,True,True
+Micromonospora lutea,Micromonospora,1,['PET'],4.55,92.11,100.0,0,44.39,2025.0,True,True
+Micromonospora acroterricola,Micromonospora,1,['PET'],4.55,92.11,100.0,0,44.39,2025.0,True,True
+Micromonospora carbonacea,Micromonospora,1,['PET'],4.55,92.11,100.0,0,44.39,2025.0,True,True
+Micromonospora craterilacus,Micromonospora,1,['PET'],4.55,92.11,100.0,0,44.39,2025.0,True,True
+Micromonospora rifamycinica,Micromonospora,1,['PET'],4.55,92.11,100.0,0,44.39,2025.0,True,True
+Micromonospora sp.,Micromonospora,1,['PET'],4.55,92.11,100.0,0,44.39,2025.0,True,True
+Micromonospora saelicesensis,Micromonospora,1,['PET'],4.55,92.11,100.0,0,44.39,2025.0,True,True
+Micromonospora taraxaci,Micromonospora,1,['PET'],4.55,92.11,100.0,0,44.39,2025.0,True,True
+Alteromonas sp.,Alteromonas,2,"['PHBH', 'PU']",9.09,98.42,85.0,0,44.33,2022.0,False,True
+Thermobacillus composti,Thermobacillus,1,['PBAT'],4.55,99.61,90.0,0,44.27,2023.0,True,True
+Geotrichum candidum,Geotrichum,1,['LDPE'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Thalassospira xiamenensis,Thalassospira,1,['PET'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Amphora sp.,Amphora,1,['LDPE'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Rhizomucor miehei,Rhizomucor,1,['PET'],4.55,99.61,90.0,0,44.27,2023.0,False,True
+Picochlorum maculatum,Picochlorum,1,['LDPE'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Paraglaciecola sp.,Paraglaciecola,1,['PCL'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Abortiporus biennis,Abortiporus,1,['PS'],4.55,99.61,90.0,0,44.27,2023.0,False,True
+Aliishimia ponticola,Aliishimia,1,['LDPE'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Kribbella albertanoniae,Kribbella,1,['PU'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Photorhabdus luminescens,Photorhabdus,1,['PCL'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Samsoniella hepiali,Samsoniella,1,['PU'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Enterovibrio sp.,Enterovibrio,1,['PCL'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Pleurostoma richardsiae,Pleurostoma,1,['PP'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Dermacpccis sp.,Dermacpccis,1,['PS'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Malassezia sp.,Malassezia,1,['PVC'],4.55,99.61,90.0,0,44.27,2023.0,False,True
+Chrysebacterium nepalense,Chrysebacterium,1,['LDPE'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Chloroidium saccharophilum,Chloroidium,1,['LDPE'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Candidatus bathyarchaeota,Candidatus,1,['PET'],4.55,99.61,90.0,0,44.27,2023.0,True,True
+Chryseobacterium sp.,Chryseobacterium,1,['PE'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Photobacterium ganghwense,Photobacterium,1,['LDPE'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Linnemannia gamsii,Linnemannia,1,['PU'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Limnospira indica,Limnospira,1,['LDPE'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Yokenella regensburgei,Yokenella,1,['PS'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Hymenomonas globosa,Hymenomonas,1,['LDPE'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Thelypteris sp.,Thelypteris,1,['PU'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Sterigmatomyces halophilus,Sterigmatomyces,1,['LDPE'],4.55,99.61,90.0,0,44.27,2023.0,False,True
+Westerdykella dispersa,Westerdykella,1,['PBAT'],4.55,99.61,90.0,0,44.27,2023.0,False,False
+Saccharomonospora viridis,Saccharomonospora,8,"['PBAT', 'PBS', 'PBSA', 'PCL', 'PET', 'PHA', 'PHB', 'PLA']",36.36,93.29,50.0,0,44.23,2015.0,True,True
+Alcanivorax sp.,Alcanivorax,3,"['LDPE', 'PCL', 'PHB']",13.64,92.5,85.0,0,44.22,2022.0,False,True
+Candida antarctica,Candida,1,['PET'],4.55,99.21,90.0,0,44.17,2023.0,False,True
+Nocardioides marinus,Nocardioides,1,['PET'],4.55,99.21,90.0,0,44.17,2023.0,False,False
+Lactobacillus paracasei,Lactobacillus,1,['PCL'],4.55,99.21,90.0,0,44.17,2023.0,False,False
+Coniochaeta hoffmannii,Coniochaeta,1,['PP'],4.55,99.21,90.0,0,44.17,2023.0,False,False
+Rhodococcus fascians,Rhodococcus,5,"['PBAT', 'PBS', 'PBSA', 'PCL', 'PES']",22.73,85.4,80.0,0,44.17,2021.0,True,True
+Brucella cytisi,Brucella,1,['LDPE'],4.55,99.21,90.0,0,44.17,2023.0,False,False
+Methylobacterium fujisawaense,Methylobacterium,1,['LDPE'],4.55,99.21,90.0,0,44.17,2023.0,False,False
+Methylobacterium radiotolerans,Methylobacterium,1,['LDPE'],4.55,99.21,90.0,0,44.17,2023.0,False,False
+Engyodontium album,Engyodontium,1,['PP'],4.55,99.21,90.0,0,44.17,2023.0,False,False
+Exophilia sp.,Exophilia,1,['PU'],4.55,99.21,90.0,0,44.17,2023.0,False,False
+Collimonas pratensis,Collimonas,1,['PU'],4.55,99.21,90.0,0,44.17,2023.0,False,False
+Collimonas arenae,Collimonas,1,['PU'],4.55,99.21,90.0,0,44.17,2023.0,False,False
+Lecanicillium araneicola,Lecanicillium,1,['PE'],4.55,99.21,90.0,0,44.17,2023.0,False,False
+Sarcina aurantiaca,Sarcina,1,['PET'],4.55,99.21,90.0,0,44.17,2023.0,False,True
+Aquabacterium parvum,Aquabacterium,1,['PET'],4.55,99.21,90.0,0,44.17,2023.0,False,True
+Aquabacterium sp.,Aquabacterium,1,['PCL'],4.55,99.21,90.0,0,44.17,2023.0,False,True
+Brucella tritici,Brucella,1,['LDPE'],4.55,99.21,90.0,0,44.17,2023.0,False,False
+Micromonospora matsumotoense,Micromonospora,3,"['LDPE', 'PLA', 'PS']",13.64,92.11,85.0,0,44.12,2022.0,False,False
+Arcopilus aureus,Arcopilus,1,['LDPE'],4.55,98.82,90.0,0,44.07,2023.0,False,True
+Arthrinium sp.,Arthrinium,1,['PU'],4.55,98.82,90.0,0,44.07,2023.0,False,False
+Nigrospora oryzae,Nigrospora,1,['LDPE'],4.55,98.82,90.0,0,44.07,2023.0,False,True
+Halopseudomonas formosensis,Halopseudomonas,1,['PU'],4.55,98.82,90.0,0,44.07,2023.0,True,True
+Flavodon ambrosius,Flavodon,1,['LDPE'],4.55,98.82,90.0,0,44.07,2023.0,False,True
+Arthrinium sacchari,Arthrinium,1,['LDPE'],4.55,98.82,90.0,0,44.07,2023.0,False,False
+Psychrobacter cryohalolentis,Psychrobacter,1,['PU'],4.55,98.82,90.0,0,44.07,2023.0,False,False
+Pestalotiopsis sp.,Pestalotiopsis,2,"['PCL', 'PU']",9.09,97.24,85.0,0,44.04,2022.0,False,True
+Aequorivita viscosa,Aequorivita,2,"['PCL', 'PU']",9.09,97.24,85.0,0,44.04,2022.0,True,True
+Aequorivita vladivostokensis,Aequorivita,2,"['PCL', 'PU']",9.09,97.24,85.0,0,44.04,2022.0,True,True
+Klebsiella pneumonia,Klebsiella,1,['PET'],4.55,98.42,90.0,0,43.97,2023.0,False,False
+Klebsiella grimontii,Klebsiella,1,['PS'],4.55,98.42,90.0,0,43.97,2023.0,False,False
+Alteromonas oceani,Alteromonas,1,['LDPE'],4.55,98.42,90.0,0,43.97,2023.0,False,False
+Serratia sp.,Serratia,2,"['LDPE', 'PU']",9.09,92.9,90.0,0,43.95,2023.0,False,True
+Chaetomium murorum,Chaetomium,2,"['LDPE', 'PE']",9.09,96.84,85.0,0,43.94,2022.0,False,False
+Citrobacter freundii,Citrobacter,1,['LDPE'],4.55,98.03,90.0,0,43.87,2023.0,False,False
+Coprinellus aureogranulatus,Coprinellus,1,['LDPE'],4.55,98.03,90.0,0,43.87,2023.0,False,True
+Proteus mirabilis,Proteus,1,['LDPE'],4.55,98.03,90.0,0,43.87,2023.0,False,False
+Curvularia lunata,Curvularia,1,['LDPE'],4.55,98.03,90.0,0,43.87,2023.0,False,True
+Trametes polyzona,Trametes,1,['LDPE'],4.55,98.03,90.0,0,43.87,2023.0,False,False
+Coprinellus bipellis,Coprinellus,1,['LDPE'],4.55,98.03,90.0,0,43.87,2023.0,False,True
+VIbrio sp.,VIbrio,1,['PCL'],4.55,98.03,90.0,0,43.87,2023.0,False,False
+Micrococcus luteus,Micrococcus,2,"['HDPE', 'LDPE']",9.09,96.45,85.0,0,43.84,2022.0,False,True
+Neopestalotiopsis phangngaensis,Neopestalotiopsis,1,['LDPE'],4.55,97.63,90.0,0,43.77,2023.0,False,True
+Schizophyllum commune,Schizophyllum,1,['LDPE'],4.55,97.63,90.0,0,43.77,2023.0,False,True
+Pleurotus pulmonarius,Pleurotus,1,['PET'],4.55,97.63,90.0,0,43.77,2023.0,False,False
+Terribacillus saccharophilus,Terribacillus,1,['PCL'],4.55,97.63,90.0,0,43.77,2023.0,False,True
+Rhodotorula sp.,Rhodotorula,1,['PU'],4.55,97.63,90.0,0,43.77,2023.0,False,False
+Meyerozyma caribbica,Meyerozyma,1,['LDPE'],4.55,97.63,90.0,0,43.77,2023.0,False,True
+Delftia sp.,Delftia,2,"['PE', 'PET']",9.09,96.06,85.0,0,43.74,2022.0,False,True
+Purpureocillium sp.,Purpureocillium,1,['PU'],4.55,97.24,90.0,0,43.67,2023.0,False,False
+Penicillium chrysogenum,Penicillium,6,"['HDPE', 'LDPE', 'PCL', 'PE', 'PLA', 'PU']",27.27,73.96,85.0,0,43.67,2022.0,False,True
+Paracoccus aminophilus,Paracoccus,1,['LDPE'],4.55,97.24,90.0,0,43.67,2023.0,False,False
+Verticillium sp.,Verticillium,1,['PU'],4.55,97.24,90.0,0,43.67,2023.0,False,True
+Rhizopus nigricans,Rhizopus,2,"['LDPE', 'PE']",9.09,95.66,85.0,0,43.64,2022.0,False,False
+Clonostachys sp.,Clonostachys,1,['PU'],4.55,96.84,90.0,0,43.57,2023.0,False,False
+Phoma sp.,Phoma,2,"['PE', 'PU']",9.09,95.27,85.0,0,43.54,2022.0,False,True
+Cladosporium halotolerans,Cladosporium,3,"['HDPE', 'PCL', 'PU']",13.64,85.8,90.0,0,43.54,2023.0,False,True
+Ureibacillus massiliensis,Ureibacillus,2,"['LDPE', 'PS']",9.09,99.21,80.0,0,43.53,2021.0,False,True
+Phlebiopsis flavidoalba,Phlebiopsis,1,['LDPE'],4.55,96.45,90.0,0,43.48,2023.0,False,True
+Phlebiopsis sp.,Phlebiopsis,1,['LDPE'],4.55,96.45,90.0,0,43.48,2023.0,False,True
+Clostridium sp.,Clostridium,1,['PU'],4.55,96.45,90.0,0,43.48,2023.0,False,False
+Prerenniporia tephropora,Prerenniporia,1,['LDPE'],4.55,96.45,90.0,0,43.48,2023.0,False,True
+Thermomyces lanuginosus,Thermomyces,2,"['LDPE', 'PU']",9.09,98.82,80.0,0,43.43,2021.0,False,True
+Achromobacter denitrificans,Achromobacter,1,['PP'],4.55,96.06,90.0,0,43.38,2023.0,False,False
+Vibrio coralliilyticus,Vibrio,1,['PCL'],4.55,96.06,90.0,0,43.38,2023.0,False,False
+Nothophoma quercina,Nothophoma,1,['PCL'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Parathyridaria sp.,Parathyridaria,1,['PCL'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Parasarocladium sp.,Parasarocladium,1,['PCL'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Bifidobacterium infantis,Bifidobacterium,1,['PP'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Chitinophaga jiangningensis,Chitinophaga,1,['PLA'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Nocardioidaceae bacterium,Nocardioidaceae,1,['PET'],4.55,99.61,85.0,0,43.27,2022.0,True,True
+Roussoella scabrispora,Roussoella,1,['PU'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Morinia sp.,Morinia,1,['PCL'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Hypocreales sp.,Hypocreales,1,['PCL'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Pseudophaeosphaeria rubi,Pseudophaeosphaeria,1,['PU'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Staphylocuccus aureus,Staphylocuccus,1,['PVC'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Ophiosimulans tanaceti,Ophiosimulans,1,['PU'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Novosphingobium sp.,Novosphingobium,1,['PS'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Nodulosphaeria multiseptata,Nodulosphaeria,1,['PU'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Botryosphaeria dothidea,Botryosphaeria,1,['PCL'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Actinomycetota bacterium,Actinomycetota,1,['PET'],4.55,99.61,85.0,0,43.27,2022.0,True,True
+Phaeophleospora eucalypticola,Phaeophleospora,1,['PCL'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Halobyssothecium obiones,Halobyssothecium,1,['PU'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Paradendryphiella arenariae,Paradendryphiella,1,['PCL'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Thermoanaerobacter sp.,Thermoanaerobacter,1,['PET'],4.55,99.61,85.0,0,43.27,2022.0,True,True
+Septoriella sp.,Septoriella,1,['PCL'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Sclerostagonospora lathyri,Sclerostagonospora,1,['PU'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Sedecimiella taiwanensis,Sedecimiella,1,['PCL'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Sphaeropsis sapinea,Sphaeropsis,1,['PCL'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Escherichia coli,Escherichia,1,['PVC'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Eupenicillium rubidurum,Eupenicillium,1,['PE'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Brevibacterium sp.,Brevibacterium,1,['PS'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Vagicola chlamydospora,Vagicola,1,['PU'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Cytospora ceratosperma,Cytospora,1,['PCL'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Pseudomassariosphaeria bromicola,Pseudomassariosphaeria,1,['PU'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Eutypella sp.,Eutypella,1,['PCL'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Embarria clematidis,Embarria,1,['PU'],4.55,99.61,85.0,0,43.27,2022.0,False,True
+Murilentithecium clematidis,Murilentithecium,1,['PU'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Neisseria sp.,Neisseria,1,['PVC'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Neosartorya fischeri,Neosartorya,1,['PE'],4.55,99.61,85.0,0,43.27,2022.0,False,False
+Acinetobacter sp.,Acinetobacter,2,"['LDPE', 'PU']",9.09,90.14,90.0,0,43.26,2023.0,False,False
+Talaromyces verruculosus,Talaromyces,2,"['PBAT-Blend', 'PVA']",9.09,94.08,85.0,0,43.25,2022.0,False,True
+Rhizobacter gummiphilus,Rhizobacter,2,"['NR', 'PET']",9.09,98.03,80.0,0,43.23,2021.0,True,True
+Paecilomyces variotii,Paecilomyces,2,"['PHBV', 'PU']",9.09,98.03,80.0,0,43.23,2021.0,False,True
+Xylaria sp.,Xylaria,1,['LDPE'],4.55,95.27,90.0,0,43.18,2023.0,False,True
+Burkholderia ambifaria,Burkholderia,1,['LDPE'],4.55,95.27,90.0,0,43.18,2023.0,False,False
+Xylaria feejeensis,Xylaria,1,['LDPE'],4.55,95.27,90.0,0,43.18,2023.0,False,True
+Burkholderia aenigmatica,Burkholderia,1,['LDPE'],4.55,95.27,90.0,0,43.18,2023.0,False,False
+Phaeosphaeria spartinicola,Phaeosphaeria,1,['PCL'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Apiospora marii,Apiospora,1,['PCL'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Phaeosphaeria oryzae,Phaeosphaeria,1,['PCL'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Apiospora rasikravindrae,Apiospora,1,['PCL'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Neocamarosporium solicola,Neocamarosporium,1,['PCL'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Neocamarosporium sp.,Neocamarosporium,1,['PCL'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Neodidymelliopsis longicolla,Neodidymelliopsis,1,['PCL'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Lactobacillus sp.,Lactobacillus,1,['PVC'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Saccharopolyspora flava,Saccharopolyspora,1,['PET'],4.55,99.21,85.0,0,43.17,2022.0,True,True
+Marinactinospora thermotolerans,Marinactinospora,1,['PET'],4.55,99.21,85.0,0,43.17,2022.0,True,True
+Sinomonas sp.,Sinomonas,1,['PE'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Didymosphaeriaceae sp.,Didymosphaeriaceae,1,['PCL'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Remotididymella sp.,Remotididymella,1,['PCL'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Neodidymelliopsis sp.,Neodidymelliopsis,1,['PCL'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Plesporaceae sp.,Plesporaceae,1,['PCL'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Didymella pinodella,Didymella,1,['PVA'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Didymella sp.,Didymella,1,['PCL'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Lichtheimia ramosa,Lichtheimia,1,['PSS'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Nocardioides zeae,Nocardioides,1,['PLA'],4.55,99.21,85.0,0,43.17,2022.0,False,False
+Alternaria sp.,Alternaria,2,"['PCL', 'PU']",9.09,93.69,85.0,0,43.15,2022.0,False,True
+Halomonas maura,Halomonas,1,['LDPE'],4.55,94.87,90.0,0,43.08,2023.0,False,False
+Halomonas pacifica,Halomonas,1,['LDPE'],4.55,94.87,90.0,0,43.08,2023.0,False,False
+Halomonas cerina,Halomonas,1,['LDPE'],4.55,94.87,90.0,0,43.08,2023.0,False,False
+Halomonas gudaonensis,Halomonas,1,['LDPE'],4.55,94.87,90.0,0,43.08,2023.0,False,False
+Halomonas denitrificans,Halomonas,1,['LDPE'],4.55,94.87,90.0,0,43.08,2023.0,False,False
+Bacillus pumilus,Bacillus,13,"['HDPE', 'LDPE', 'P(3HB-co-4HB)', 'PBAT', 'PBS', 'PBS Blend', 'PBSA', 'PCL', 'PCL Blend', 'PES', 'PET', 'PLA', 'PU']",59.09,29.39,90.0,0,43.07,2023.0,True,True
+Stemphylium vesicarium,Stemphylium,1,['PCL'],4.55,98.82,85.0,0,43.07,2022.0,False,False
+Stemphylium lycopersici,Stemphylium,1,['PCL'],4.55,98.82,85.0,0,43.07,2022.0,False,False
+Caldimonas taiwanensis,Caldimonas,1,['PET'],4.55,98.82,85.0,0,43.07,2022.0,True,True
+Neosetophoma rosigena,Neosetophoma,1,['PCL'],4.55,98.82,85.0,0,43.07,2022.0,False,False
+Neosetophoma poaceicola,Neosetophoma,1,['PCL'],4.55,98.82,85.0,0,43.07,2022.0,False,False
+Pyrenochaetopsis paucisetosa,Pyrenochaetopsis,1,['PCL'],4.55,98.82,85.0,0,43.07,2022.0,False,False
+Neosetophoma sp.,Neosetophoma,1,['PCL'],4.55,98.82,85.0,0,43.07,2022.0,False,False
+Anoxybacillus sp.,Anoxybacillus,1,['PE'],4.55,98.82,85.0,0,43.07,2022.0,False,False
+Anoxybacillus flavithermus,Anoxybacillus,1,['PE'],4.55,98.82,85.0,0,43.07,2022.0,False,False
+Ketobacter sp.,Ketobacter,1,['PET'],4.55,98.82,85.0,0,43.07,2022.0,True,True
+Pleosporales sp.,Pleosporales,1,['PCL'],4.55,98.82,85.0,0,43.07,2022.0,False,False
+Geomyces sp.,Geomyces,1,['PBS'],4.55,98.82,85.0,0,43.07,2022.0,True,True
+Ketobacter alkanivorans,Ketobacter,1,['PET'],4.55,98.82,85.0,0,43.07,2022.0,True,True
+Pyrenochaetopsis microspora,Pyrenochaetopsis,1,['PCL'],4.55,98.82,85.0,0,43.07,2022.0,False,False
+Aneurinibacillus aneurinilyticus,Aneurinibacillus,4,"['HDPE', 'LDPE', 'PLA', 'PP']",18.18,98.42,65.0,0,43.06,2018.0,False,True
+Gordonia sp.,Gordonia,1,['PS'],4.55,98.42,85.0,0,42.97,2022.0,False,False
+Gordonia desulfuricans,Gordonia,1,['PLA'],4.55,98.42,85.0,0,42.97,2022.0,False,False
+Agrocybe aegerita,Agrocybe,1,['PE'],4.55,98.42,85.0,0,42.97,2022.0,False,False
+Exiguobacterium marinum,Exiguobacterium,1,['PP'],4.55,94.08,90.0,0,42.88,2023.0,False,False
+Marinobacter gudaonensis,Marinobacter,1,['PET'],4.55,94.08,90.0,0,42.88,2023.0,False,False
+Marinobacter sediminum,Marinobacter,1,['PET'],4.55,94.08,90.0,0,42.88,2023.0,False,False
+Shewanella putrefaciens,Shewanella,1,['PS'],4.55,98.03,85.0,0,42.87,2022.0,False,False
+Proteus vulgaris,Proteus,1,['HDPE'],4.55,98.03,85.0,0,42.87,2022.0,False,False
+Diaporthe sp.,Diaporthe,1,['PCL'],4.55,98.03,85.0,0,42.87,2022.0,False,False
+Alternaria burnsii,Alternaria,1,['LDPE'],4.55,93.69,90.0,0,42.79,2023.0,False,False
+Alternaria pseudoeichhorniae,Alternaria,1,['LDPE'],4.55,93.69,90.0,0,42.79,2023.0,False,False
+Microbacterium radiodurans,Microbacterium,1,['PVC'],4.55,97.63,85.0,0,42.77,2022.0,False,False
+Epicoccum dendrobii,Epicoccum,1,['PCL'],4.55,97.24,85.0,0,42.67,2022.0,False,False
+Epicoccum sorghinum,Epicoccum,1,['PCL'],4.55,97.24,85.0,0,42.67,2022.0,False,False
+Epicoccum sp.,Epicoccum,1,['PCL'],4.55,97.24,85.0,0,42.67,2022.0,False,False
+Epicoccum tritici,Epicoccum,1,['PCL'],4.55,97.24,85.0,0,42.67,2022.0,False,False
+Epicoccum duchesneae,Epicoccum,1,['PCL'],4.55,97.24,85.0,0,42.67,2022.0,False,False
+Paracoccus sp.,Paracoccus,1,['PET'],4.55,97.24,85.0,0,42.67,2022.0,False,False
+Pestalotiopsis thailandica,Pestalotiopsis,1,['PCL'],4.55,97.24,85.0,0,42.67,2022.0,False,False
+Acidovorax sp.,Acidovorax,5,"['P3HP', 'PES', 'PHA', 'PHB', 'PPL']",22.73,95.27,60.0,0,42.63,2017.0,True,True
+Lysinibacillus xylanilyticus,Lysinibacillus,1,['LDPE'],4.55,96.84,85.0,0,42.57,2022.0,False,True
+Aureobasidium namibiae,Aureobasidium,1,['PCL'],4.55,96.84,85.0,0,42.57,2022.0,False,False
+Aureobasidium melanogenum,Aureobasidium,1,['PCL'],4.55,96.84,85.0,0,42.57,2022.0,False,False
+Trichoderma lixii,Trichoderma,1,['PE'],4.55,92.5,90.0,0,42.49,2023.0,False,False
+Micrococcus mucilaginosus,Micrococcus,1,['PVC'],4.55,96.45,85.0,0,42.48,2022.0,False,False
+Streptococcus mitior,Streptococcus,1,['PVC'],4.55,96.45,85.0,0,42.48,2022.0,False,False
+Streptococcus equi,Streptococcus,1,['PVC'],4.55,96.45,85.0,0,42.48,2022.0,False,False
+Xerula longipes,Xerula,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Panaeolus sphinctrinus,Panaeolus,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Albosynnema elegans,Albosynnema,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Thelonectria veuillotiana,Thelonectria,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Lenzites warnieri,Lenzites,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Lophiostoma arundinis,Lophiostoma,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Ceriporiopsis gilvescens,Ceriporiopsis,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Calonectria pseudonaviculata,Calonectria,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Cobetia sp.,Cobetia,1,['LDPE'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Hydropisphaera saulensis,Hydropisphaera,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Chrysonectria finisterensis,Chrysonectria,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Pseudonectria foliicola,Pseudonectria,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Stereum sp.,Stereum,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Coprinopsis lagopus,Coprinopsis,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Marasmiellus ramealis,Marasmiellus,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Microporus sp.,Microporus,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Hericium erinaceus,Hericium,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Phlebia radiata,Phlebia,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Haploporus alabamae,Haploporus,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Lepista nuda,Lepista,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Sistotrema brinkmannii,Sistotrema,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Cosmospora sp.,Cosmospora,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Dichomitus squalens,Dichomitus,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Cyathus pallidus,Cyathus,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Podospora anserina,Podospora,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Eutypa sp.,Eutypa,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Dichostereum effuscatum,Dichostereum,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Porodaedalea pini,Porodaedalea,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Fomes meliae,Fomes,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Lasionectria martinicensis,Lasionectria,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Metacordyceps chlamydosporia,Metacordyceps,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Pleospora leptosphaerulinoides,Pleospora,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Massilia sp.,Massilia,1,['PS'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Sclerotinia sclerotiorum,Sclerotinia,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Fuscoporia sp.,Fuscoporia,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Leiotrametes menziesii,Leiotrametes,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Peethambara spirostriata,Peethambara,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Chaetopsina pnagiana,Chaetopsina,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Piptoporus betulinus,Piptoporus,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Grammothele fuligo,Grammothele,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Geonectria subalpina,Geonectria,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Hypomyces luteovirens,Hypomyces,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Gymnopilus junonius,Gymnopilus,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Amylosporus sp.,Amylosporus,1,['PU'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Thyrostroma jaczewskii,Thyrostroma,1,['LDPE'],4.55,99.61,80.0,0,42.27,2021.0,False,True
+Acinetobacter baumannii,Acinetobacter,2,"['LDPE', 'PET']",9.09,90.14,85.0,0,42.26,2022.0,False,True
+Phanerochaete pseudomagnolia,Phanerochaete,1,['LDPE'],4.55,91.32,90.0,0,42.19,2023.0,False,True
+Priestia aryabhattai,Priestia,1,['PET'],4.55,95.27,85.0,0,42.18,2022.0,False,False
+Trichothecium sp.,Trichothecium,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Tropicoporus linteus,Tropicoporus,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Laetisaria arvalis,Laetisaria,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Inonotus hispidus,Inonotus,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Alkalihalobacillus algicola,Alkalihalobacillus,1,['PHB'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Trichothecium roseum,Trichothecium,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Alkalihalobacillus hwajinpoensis,Alkalihalobacillus,1,['PHB'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Amauroderma calcigenum,Amauroderma,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Neonectria sp.,Neonectria,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Mycena sanguinolenta,Mycena,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Mycosphaerella lateris,Mycosphaerella,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Stagonosporopsis citrulli,Stagonosporopsis,1,['LDPE'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Septoria sp.,Septoria,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Septoria eucalyptorum,Septoria,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Mycena galericulata,Mycena,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Polyporus arcularius,Polyporus,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Amauroderma sp.,Amauroderma,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Nigrofomes melanoporus,Nigrofomes,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Coniochaeta sp.,Coniochaeta,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Polyporus tuberaster,Polyporus,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Fulvifomes sp.,Fulvifomes,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Stagonosporopsis dorenboschii,Stagonosporopsis,1,['PU'],4.55,99.21,80.0,0,42.17,2021.0,False,True
+Enterobacter ludwigii,Enterobacter,1,['PE'],4.55,90.93,90.0,0,42.1,2023.0,False,False
+Enterobacter hormaechei subsp. Xiangfangensis,Enterobacter,1,['PP'],4.55,90.93,90.0,0,42.1,2023.0,False,False
+Stemphylium lucomagnoense,Stemphylium,1,['PU'],4.55,98.82,80.0,0,42.07,2021.0,False,True
+Metarhizium robertsii,Metarhizium,1,['PU'],4.55,98.82,80.0,0,42.07,2021.0,False,True
+Botrytis sp.,Botrytis,1,['PU'],4.55,98.82,80.0,0,42.07,2021.0,False,True
+Gibberella sp.,Gibberella,1,['PU'],4.55,98.82,80.0,0,42.07,2021.0,False,True
+Pycnoporus cinnabarinus,Pycnoporus,1,['PU'],4.55,98.82,80.0,0,42.07,2021.0,False,True
+Perenniporia martia,Perenniporia,1,['PU'],4.55,98.82,80.0,0,42.07,2021.0,False,True
+Colletotrichum theobromicola,Colletotrichum,1,['PU'],4.55,98.82,80.0,0,42.07,2021.0,False,True
+Trichaptum biforme,Trichaptum,1,['PU'],4.55,98.42,80.0,0,41.97,2021.0,False,True
+Agrocybe sp.,Agrocybe,1,['PU'],4.55,98.42,80.0,0,41.97,2021.0,False,True
+Agrocybe praecox,Agrocybe,1,['PU'],4.55,98.42,80.0,0,41.97,2021.0,False,True
+Trichaptum abietinum,Trichaptum,1,['PU'],4.55,98.42,80.0,0,41.97,2021.0,False,True
+Agrocybe dura,Agrocybe,1,['PU'],4.55,98.42,80.0,0,41.97,2021.0,False,True
+Trichaptum byssogenum,Trichaptum,1,['PU'],4.55,98.42,80.0,0,41.97,2021.0,False,True
+Penicillium citrinum,Penicillium,4,"['LDPE', 'PBAT', 'PHB', 'PU']",18.18,73.96,90.0,0,41.95,2023.0,False,True
+Acinetobacter septicus,Acinetobacter,1,['PS'],4.55,90.14,90.0,0,41.9,2023.0,False,False
+Acinetobacter guillouiae,Acinetobacter,1,['PE'],4.55,90.14,90.0,0,41.9,2023.0,False,False
+Talaromyces rugulosus,Talaromyces,1,['PCL'],4.55,94.08,85.0,0,41.88,2022.0,False,False
+Talaromyces islandicus,Talaromyces,1,['PE'],4.55,94.08,85.0,0,41.88,2022.0,False,False
+Diaporthe italiana,Diaporthe,1,['LDPE'],4.55,98.03,80.0,0,41.87,2021.0,False,True
+Fomitopsis palustris,Fomitopsis,1,['PU'],4.55,98.03,80.0,0,41.87,2021.0,False,True
+Fomitiporia neotropica,Fomitiporia,1,['PU'],4.55,98.03,80.0,0,41.87,2021.0,False,True
+Fomitopsis sp.,Fomitopsis,1,['PU'],4.55,98.03,80.0,0,41.87,2021.0,False,True
+Hypoxylon fendleri,Hypoxylon,1,['PU'],4.55,98.03,80.0,0,41.87,2021.0,False,True
+Phellinus amazonicus,Phellinus,1,['PU'],4.55,98.03,80.0,0,41.87,2021.0,False,True
+Phellinus apiahynus,Phellinus,1,['PU'],4.55,98.03,80.0,0,41.87,2021.0,False,True
+Trametes sp.,Trametes,1,['PU'],4.55,98.03,80.0,0,41.87,2021.0,False,True
+Heterobasidion sp.,Heterobasidion,1,['PU'],4.55,98.03,80.0,0,41.87,2021.0,False,True
+Heterobasidion annosum,Heterobasidion,1,['PU'],4.55,98.03,80.0,0,41.87,2021.0,False,True
+Fomitiporia sp.,Fomitiporia,1,['PU'],4.55,98.03,80.0,0,41.87,2021.0,False,True
+Phellinus robustus,Phellinus,1,['PU'],4.55,98.03,80.0,0,41.87,2021.0,False,True
+Alternaria tenuissima,Alternaria,1,['PVA'],4.55,93.69,85.0,0,41.79,2022.0,False,False
+Alternaria chlamydospora,Alternaria,1,['PCL'],4.55,93.69,85.0,0,41.79,2022.0,False,False
+Microbacterium oleivorans,Microbacterium,1,['PET'],4.55,97.63,80.0,0,41.77,2021.0,False,True
+Verticillium dahliae,Verticillium,1,['PU'],4.55,97.24,80.0,0,41.67,2021.0,False,True
+Comamonas testosteroni,Comamonas,2,"['PHA', 'PHB']",9.09,91.72,80.0,0,41.66,2021.0,True,True
+Laceyella sp.,Laceyella,3,"['PBS', 'PBSA', 'PCL']",13.64,98.03,65.0,0,41.6,2018.0,False,True
+Clonostachys buxi,Clonostachys,1,['PU'],4.55,96.84,80.0,0,41.57,2021.0,False,True
+Clonostachys pnagiana,Clonostachys,1,['PU'],4.55,96.84,80.0,0,41.57,2021.0,False,True
+Trichoderma fomiticola,Trichoderma,1,['PCL'],4.55,92.5,85.0,0,41.49,2022.0,False,False
+Delftia acidovorans,Delftia,4,"['PHA', 'PHB', 'PLA', 'PU']",18.18,96.06,60.0,0,41.47,2017.0,True,True
+Gloeophyllum odoratum,Gloeophyllum,1,['PU'],4.55,96.06,80.0,0,41.38,2021.0,False,True
+Gloeophyllum abietinum,Gloeophyllum,1,['PU'],4.55,96.06,80.0,0,41.38,2021.0,False,True
+Gloeophyllum sepiarium,Gloeophyllum,1,['PU'],4.55,96.06,80.0,0,41.38,2021.0,False,True
+Vibrio proteolyticus,Vibrio,1,['PHA'],4.55,96.06,80.0,0,41.38,2021.0,False,True
+Penicillium simplicissimum,Penicillium,5,"['PE', 'PET', 'PETG', 'PHB', 'PHBV']",22.73,73.96,80.0,0,41.31,2021.0,False,True
+Thermobifida alba,Thermobifida,2,"['PCL', 'PET']",9.09,86.19,85.0,0,41.28,2022.0,True,True
+Monocillium mucidum,Monocillium,1,['PBSA'],4.55,99.61,75.0,0,41.27,2020.0,False,True
+Gibellulopsis nigrescens,Gibellulopsis,1,['PBSA'],4.55,99.61,75.0,0,41.27,2020.0,False,True
+Stenotrophomonas pavanii,Stenotrophomonas,1,['PLA'],4.55,91.32,85.0,0,41.19,2022.0,False,True
+Xylaria telfairii,Xylaria,1,['PU'],4.55,95.27,80.0,0,41.18,2021.0,False,True
+Phoma aliena,Phoma,1,['PU'],4.55,95.27,80.0,0,41.18,2021.0,False,True
+Cladosporium pseudocladosporioides,Cladosporium,2,"['PCL', 'PU']",9.09,85.8,85.0,0,41.18,2022.0,False,True
+Cladosporium tenuissimum,Cladosporium,2,"['PCL', 'PU']",9.09,85.8,85.0,0,41.18,2022.0,False,True
+Xylaria adscendens,Xylaria,1,['PU'],4.55,95.27,80.0,0,41.18,2021.0,False,True
+Xylaria comosoides,Xylaria,1,['PU'],4.55,95.27,80.0,0,41.18,2021.0,False,True
+Pyrenochaetopsis sp.,Pyrenochaetopsis,1,['PBSA'],4.55,98.82,75.0,0,41.07,2020.0,False,True
+Acidovorax delafieldii,Acidovorax,3,"['PBS', 'PBSA', 'PHBH']",13.64,95.27,65.0,0,40.91,2018.0,True,True
+Acinetobacter seifertii,Acinetobacter,1,['PCL'],4.55,90.14,85.0,0,40.9,2022.0,False,True
+Cladosporium basi-inflatum,Cladosporium,1,['LDPE'],4.55,85.8,90.0,0,40.81,2023.0,False,False
+Alternaria brassicae,Alternaria,1,['PU'],4.55,93.69,80.0,0,40.79,2021.0,False,True
+Rhodococcus opacus,Rhodococcus,1,['PE'],4.55,85.4,90.0,0,40.71,2023.0,True,True
+Rhodococcus sovatensis,Rhodococcus,1,['PU'],4.55,85.4,90.0,0,40.71,2023.0,False,False
+Cephalosporium sp.,Cephalosporium,2,"['HDPE', 'PHB']",9.09,99.21,65.0,0,40.53,2018.0,False,True
+Absidia sp.,Absidia,2,"['PHB', 'PLA']",9.09,99.21,65.0,0,40.53,2018.0,False,True
+Azotobacter vinelandii,Azotobacter,2,"['PHA', 'PHB']",9.09,99.21,65.0,0,40.53,2018.0,True,True
+Polyangium brachysporum,Polyangium,2,"['PCL', 'PET']",9.09,98.82,65.0,0,40.43,2018.0,True,True
+Thermomonospora curvata,Thermomonospora,2,"['PCL', 'PET']",9.09,98.82,65.0,0,40.43,2018.0,True,True
+Vibrio sp.,Vibrio,1,['PET'],4.55,96.06,75.0,0,40.38,2020.0,False,True
+Parengyodontium album,Parengyodontium,2,"['PLA', 'PP']",9.09,98.42,65.0,0,40.33,2018.0,True,True
+Mortierella sp.,Mortierella,2,"['PHB', 'PLA']",9.09,98.42,65.0,0,40.33,2018.0,False,True
+Psychrobacillus sp.,Psychrobacillus,1,['PHBH'],4.55,99.61,70.0,0,40.27,2019.0,False,True
+Rheinheimera sp.,Rheinheimera,1,['PHBH'],4.55,99.61,70.0,0,40.27,2019.0,False,True
+Leucobacter sp.,Leucobacter,1,['HDPE'],4.55,99.61,70.0,0,40.27,2019.0,False,True
+Agaricus subrufescens,Agaricus,1,['PU'],4.55,90.93,80.0,0,40.1,2021.0,False,True
+Agaricus xanthodermus,Agaricus,1,['PU'],4.55,90.93,80.0,0,40.1,2021.0,False,True
+Agaricus bisporus,Agaricus,1,['PU'],4.55,90.93,80.0,0,40.1,2021.0,False,True
+Thermobifida halotolerans,Thermobifida,1,['PET'],4.55,86.19,85.0,0,39.91,2022.0,True,True
+Acinetobacter johnsonii,Acinetobacter,1,['PS'],4.55,90.14,80.0,0,39.9,2021.0,True,True
+Cupriavidus necator,Cupriavidus,3,"['LDPE', 'PHA', 'PHB']",13.64,90.93,65.0,0,39.82,2018.0,True,True
+Cladosporium xanthochromaticum,Cladosporium,1,['PCL'],4.55,85.8,85.0,0,39.81,2022.0,False,False
+Cladosporium xylophilum,Cladosporium,1,['PCL'],4.55,85.8,85.0,0,39.81,2022.0,False,False
+Cladosporium allicinum,Cladosporium,1,['PCL'],4.55,85.8,85.0,0,39.81,2022.0,False,False
+Cladosporium antropophilum,Cladosporium,1,['PCL'],4.55,85.8,85.0,0,39.81,2022.0,False,False
+Cladosporium funiculosum,Cladosporium,1,['PCL'],4.55,85.8,85.0,0,39.81,2022.0,False,False
+Cladosporium perangustum,Cladosporium,1,['PCL'],4.55,85.8,85.0,0,39.81,2022.0,False,False
+Cladosporium ramotenellum,Cladosporium,1,['PCL'],4.55,85.8,85.0,0,39.81,2022.0,False,False
+Cladosporium rectoides,Cladosporium,1,['PCL'],4.55,85.8,85.0,0,39.81,2022.0,False,False
+Rhodopseudomonas palustris,Rhodopseudomonas,3,"['PBSA', 'PCL', 'PLA']",13.64,98.82,55.0,0,39.8,2016.0,True,True
+Arthrobacter oryzae,Arthrobacter,2,"['PHB', 'PLA']",9.09,96.06,65.0,0,39.74,2018.0,False,True
+Vibrio gazogenes,Vibrio,2,"['PCL', 'PET']",9.09,96.06,65.0,0,39.74,2018.0,True,True
+Brevibacillus agri,Brevibacillus,3,"['HDPE', 'LDPE', 'PP']",13.64,90.53,65.0,0,39.72,2018.0,False,True
+Trichoderma hamatum,Trichoderma,1,['PBSA'],4.55,92.5,75.0,0,39.49,2020.0,False,True
+Paucimonas lemoignei,Paucimonas,2,"['PHA', 'PHB']",9.09,94.87,65.0,0,39.45,2018.0,True,True
+Aliiglaciecola lipolytica,Aliiglaciecola,1,['PHBH'],4.55,99.61,65.0,0,39.27,2018.0,False,True
+Phormidium lucidum,Phormidium,1,['LDPE'],4.55,99.61,65.0,0,39.27,2018.0,False,True
+Undibacterium pigrum,Undibacterium,1,['PHBH'],4.55,99.61,65.0,0,39.27,2018.0,False,True
+Oscillatoria subbrevis,Oscillatoria,1,['LDPE'],4.55,99.61,65.0,0,39.27,2018.0,False,True
+Marasmius oreades,Marasmius,1,['PU'],4.55,99.61,65.0,0,39.27,2018.0,False,True
+Aestuariibacter halophilus,Aestuariibacter,1,['PHBH'],4.55,99.61,65.0,0,39.27,2018.0,False,True
+Sphingobacterium multivorum,Sphingobacterium,1,['LDPE'],4.55,99.61,65.0,0,39.27,2018.0,False,True
+Chitinimonas sp.,Chitinimonas,1,['PHBH'],4.55,99.61,65.0,0,39.27,2018.0,False,True
+Leptosphaeria sp.,Leptosphaeria,1,['PU'],4.55,99.61,65.0,0,39.27,2018.0,False,True
+Hypocrea sp.,Hypocrea,1,['LDPE'],4.55,99.61,65.0,0,39.27,2018.0,False,True
+Myrothecium gramineum,Myrothecium,1,['PU'],4.55,99.61,65.0,0,39.27,2018.0,False,True
+Nesiotobacter exalbescens,Nesiotobacter,1,['LDPE'],4.55,99.61,65.0,0,39.27,2018.0,False,True
+Clostridium botulinum,Clostridium,3,"['PBAT', 'PCL', 'PHBV']",13.64,96.45,55.0,0,39.2,2016.0,True,True
+Ochrobactrum oryzae,Ochrobactrum,1,['LDPE'],4.55,99.21,65.0,0,39.17,2018.0,False,True
+Ochrobactrum intermedium,Ochrobactrum,1,['LDPE'],4.55,99.21,65.0,0,39.17,2018.0,False,True
+Ralstonia sp.,Ralstonia,2,"['LDPE', 'PHB']",9.09,93.69,65.0,0,39.15,2018.0,False,True
+Bacillus subtilis,Bacillus,10,"['HDPE', 'LDPE', 'PCL', 'PE', 'PES', 'PET', 'PHB', 'PLA', 'PP', 'PU']",45.45,29.39,90.0,0,38.98,2023.0,True,True
+Mortierella lignicola,Mortierella,1,['PHB'],4.55,98.42,65.0,0,38.97,2018.0,False,True
+Geobacillus thermoleovorans,Geobacillus,1,['PLA'],4.55,98.42,65.0,0,38.97,2018.0,False,True
+Citrobacter amalonaticus,Citrobacter,1,['LDPE'],4.55,98.03,65.0,0,38.87,2018.0,False,True
+Trichoderma viride,Trichoderma,2,"['LDPE', 'PLA']",9.09,92.5,65.0,0,38.85,2018.0,False,True
+Paracoccus denitrificans,Paracoccus,4,"['P3HV', 'PHA', 'PHB', 'PHBV']",18.18,97.24,45.0,0,38.76,2014.0,True,True
+Vibrio parahaemolyticus,Vibrio,2,"['LLDPE Blend', 'PVA Blend']",9.09,96.06,60.0,0,38.74,2017.0,False,True
+Alcaligenes sp.,Alcaligenes,2,"['PHB', 'PS']",9.09,95.66,60.0,0,38.64,2017.0,False,True
+Cupriavidus sp.,Cupriavidus,2,"['PHA', 'PHB']",9.09,90.93,65.0,0,38.46,2018.0,False,True
+Delftia tsuruhatensis,Delftia,1,['LDPE'],4.55,96.06,65.0,0,38.38,2018.0,False,True
+Brevibacillus borstelensis,Brevibacillus,2,"['HDPE', 'LDPE']",9.09,90.53,65.0,0,38.36,2018.0,False,True
+Salmonella sp.,Salmonella,1,['PS'],4.55,99.61,60.0,0,38.27,2017.0,False,True
+Lulwoana uniseptata,Lulwoana,1,['PE'],4.55,99.61,60.0,0,38.27,2017.0,False,True
+Monascus sp.,Monascus,1,['PU'],4.55,99.61,60.0,0,38.27,2017.0,False,True
+Pseudoxanthomonas sp.,Pseudoxanthomonas,1,['PCL'],4.55,99.61,60.0,0,38.27,2017.0,False,True
+Kitasatospora phosalacinea,Kitasatospora,1,['PHB'],4.55,99.61,60.0,0,38.27,2017.0,False,True
+Kineococcus sp.,Kineococcus,1,['PCL'],4.55,99.61,60.0,0,38.27,2017.0,False,True
+Penicillium roqueforti,Penicillium,2,"['PCL', 'PLA']",9.09,73.96,85.0,0,38.22,2022.0,False,True
+Acidovorax facilis,Acidovorax,1,['PHBH'],4.55,95.27,65.0,0,38.18,2018.0,False,True
+Acidovorax soli,Acidovorax,1,['PHBH'],4.55,95.27,65.0,0,38.18,2018.0,False,True
+Mycosphaerella arachidis,Mycosphaerella,1,['PHB'],4.55,99.21,60.0,0,38.17,2017.0,False,True
+Pseudoalteromonas lipolytica,Pseudoalteromonas,1,['PHBH'],4.55,94.87,65.0,0,38.08,2018.0,False,True
+Metarhizium anisopliae,Metarhizium,1,['PHB'],4.55,98.82,60.0,0,38.07,2017.0,False,True
+Halopseudomonas pelagia,Halopseudomonas,1,['PET'],4.55,98.82,60.0,0,38.07,2017.0,True,True
+Exiguobacterium undae,Exiguobacterium,1,['PS'],4.55,94.08,65.0,0,37.88,2018.0,False,True
+Marinobacter algicola,Marinobacter,1,['PHB'],4.55,94.08,65.0,0,37.88,2018.0,False,True
+Exiguobacterium sibiricum,Exiguobacterium,1,['PS'],4.55,94.08,65.0,0,37.88,2018.0,False,True
+Penicillium stoloniferum,Penicillium,1,['PU'],4.55,73.96,90.0,0,37.85,2023.0,False,False
+Penicillium granulatum,Penicillium,1,['PP'],4.55,73.96,90.0,0,37.85,2023.0,False,False
+Pseudomonas aeruginosa,Pseudomonas,11,"['HDPE', 'LDPE', 'PBSA', 'PE', 'PES', 'PET', 'PHB', 'PS', 'PU', 'PU Blend', 'PVC Blend']",50.0,19.13,90.0,0,37.78,2023.0,True,True
+Microbacterium sp.,Microbacterium,1,['PCL'],4.55,97.63,60.0,0,37.77,2017.0,False,True
+Microbacterium flavum,Microbacterium,1,['PHB'],4.55,97.63,60.0,0,37.77,2017.0,False,True
+Paraphoma sp.,Paraphoma,2,"['PBS', 'PBSA']",9.09,96.06,55.0,0,37.74,2016.0,False,True
+Paraphoma chrysanthemicola,Paraphoma,2,"['PBS', 'PBSA']",9.09,96.06,55.0,0,37.74,2016.0,False,True
+Microbispora rosea,Microbispora,1,['PHB'],4.55,97.24,60.0,0,37.67,2017.0,False,True
+Gloeophyllum trabeum,Gloeophyllum,1,['PSS'],4.55,96.06,60.0,0,37.38,2017.0,False,True
+Cochliobolus sp.,Cochliobolus,1,['PVC'],4.55,99.61,55.0,0,37.27,2016.0,False,True
+Pelosinus fermentans,Pelosinus,1,['PBAT'],4.55,99.61,55.0,0,37.27,2016.0,True,True
+Stenotrophomonas rhizophila,Stenotrophomonas,1,['PVA'],4.55,91.32,65.0,0,37.19,2018.0,True,True
+Stenotrophomonas humi,Stenotrophomonas,1,['LDPE'],4.55,91.32,65.0,0,37.19,2018.0,False,True
+Stenotrophomonas geniculata,Stenotrophomonas,1,['PLA'],4.55,91.32,65.0,0,37.19,2018.0,False,True
+Cladosporium subcinereum,Cladosporium,2,"['PHB', 'PLA']",9.09,85.8,65.0,0,37.18,2018.0,False,True
+Brevundimonas diminuta,Brevundimonas,1,['PS'],4.55,98.42,55.0,0,36.97,2016.0,False,True
+Acinetobacter pittii,Acinetobacter,1,['LDPE'],4.55,90.14,65.0,0,36.9,2018.0,False,True
+Acinetobacter ursingii,Acinetobacter,1,['PLA'],4.55,90.14,65.0,0,36.9,2018.0,False,True
+Talaromyces variabilis,Talaromyces,1,['PS'],4.55,94.08,60.0,0,36.88,2017.0,False,True
+Citrobacter sedlakii,Citrobacter,1,['PS'],4.55,98.03,55.0,0,36.87,2016.0,False,True
+Penicillium brevicompactum,Penicillium,1,['PVA'],4.55,73.96,85.0,0,36.85,2022.0,False,True
+Penicillium polonicum,Penicillium,1,['PVA'],4.55,73.96,85.0,0,36.85,2022.0,False,False
+Penicillium echinulatum,Penicillium,1,['PCL'],4.55,73.96,85.0,0,36.85,2022.0,False,False
+Fusarium equiseti,Fusarium,3,"['PCL', 'PHB', 'PLA']",13.64,62.92,85.0,0,36.82,2022.0,False,True
+Vibrio alginolyticus,Vibrio,2,"['LLDPE Blend', 'PVA Blend']",9.09,96.06,50.0,0,36.74,2015.0,False,True
+Acremonium sp.,Acremonium,3,"['PHA', 'PHB', 'PHBV']",13.64,98.42,40.0,0,36.7,2013.0,False,True
+Stenotrophomonas panacihumi,Stenotrophomonas,2,"['PE', 'PP']",9.09,91.32,55.0,0,36.56,2016.0,False,True
+Emericella nidulans,Emericella,2,"['PCL', 'PU']",9.09,99.21,45.0,0,36.53,2014.0,False,True
+Clostridium hathewayi,Clostridium,1,['PBAT'],4.55,96.45,55.0,0,36.48,2016.0,True,True
+Mucor sp.,Mucor,2,"['LDPE', 'PHB']",9.09,98.42,45.0,0,36.33,2014.0,False,True
+Pseudonocardia sp.,Pseudonocardia,1,['PLA'],4.55,99.21,50.0,0,36.17,2015.0,False,True
+Acinetobacter oleivorans,Acinetobacter,1,['PES'],4.55,90.14,60.0,0,35.9,2017.0,False,True
+Penicillium variabile,Penicillium,1,['PU'],4.55,73.96,80.0,0,35.85,2021.0,False,True
+Penicillium crustosum,Penicillium,1,['PET'],4.55,73.96,80.0,0,35.85,2021.0,False,True
+Streptomyces swartbergensis,Streptomyces,1,['PET'],4.55,56.61,100.0,0,35.52,2025.0,True,True
+Gloeophyllum striatum,Gloeophyllum,1,['PSS'],4.55,96.06,50.0,0,35.38,2015.0,False,True
+Leptothrix sp.,Leptothrix,5,"['PBAT', 'PBSA', 'PBST55', 'PCL', 'PES']",22.73,98.03,20.0,0,35.33,2009.0,False,True
+Thermopolyspora flexuosa,Thermopolyspora,1,['PLA'],4.55,99.61,45.0,0,35.27,2014.0,False,True
+Lentinus tigrinus,Lentinus,1,['PVC'],4.55,99.61,45.0,0,35.27,2014.0,False,True
+Malbranchea cinnamomea,Malbranchea,1,['PU'],4.55,99.61,45.0,0,35.27,2014.0,False,True
+Arthrographis kalrae,Arthrographis,1,['PU'],4.55,99.61,45.0,0,35.27,2014.0,False,True
+Bacillus licheniformis,Bacillus,8,"['HDPE', 'LDPE', 'PE', 'PHB', 'PLA', 'PS', 'PU', 'PVC']",36.36,29.39,85.0,0,35.26,2022.0,True,True
+Streptomyces gougerotti,Streptomyces,3,"['LDPE', 'PLA', 'PS']",13.64,56.61,85.0,0,35.24,2022.0,False,False
+Paecilomyces sp.,Paecilomyces,2,"['PCL', 'PHA']",9.09,98.03,40.0,0,35.23,2013.0,False,True
+Candida rugosa,Candida,1,['PU'],4.55,99.21,45.0,0,35.17,2014.0,False,True
+Lichtheimia sp.,Lichtheimia,1,['PU'],4.55,99.21,45.0,0,35.17,2014.0,False,True
+Fusarium pseudensiforme,Fusarium,1,['LDPE'],4.55,62.92,90.0,0,35.09,2023.0,False,True
+Fusarium decemcellulare,Fusarium,1,['LDPE'],4.55,62.92,90.0,0,35.09,2023.0,False,True
+Acremonium flavum,Acremonium,1,['PU'],4.55,98.42,45.0,0,34.97,2014.0,False,True
+Laceyella sacchari,Laceyella,1,['PLA'],4.55,98.03,45.0,0,34.87,2014.0,False,True
+Pseudozyma sp.,Pseudozyma,1,['PCL'],4.55,97.63,45.0,0,34.77,2014.0,False,True
+Penicillium oxalicum,Penicillium,3,"['HDPE', 'LDPE', 'PCL']",13.64,73.96,60.0,0,34.58,2017.0,False,True
+Fusarium verticillioides,Fusarium,2,"['PCL', 'PU']",9.09,62.92,80.0,0,34.46,2021.0,True,True
+Fusarium culmorum,Fusarium,2,"['PCL', 'PU']",9.09,62.92,80.0,0,34.46,2021.0,False,True
+Gongronella sp.,Gongronella,1,['PHA'],4.55,99.61,40.0,0,34.27,2013.0,False,True
+Mycobacterium sp.,Mycobacterium,1,['PHA'],4.55,99.61,40.0,0,34.27,2013.0,False,True
+Ulocladium sp.,Ulocladium,1,['PC'],4.55,99.61,40.0,0,34.27,2013.0,False,True
+Chrysosporium sp.,Chrysosporium,1,['PC'],4.55,99.61,40.0,0,34.27,2013.0,False,True
+Burkholderia gladioli,Burkholderia,1,['PU'],4.55,95.27,45.0,0,34.18,2014.0,False,True
+Kocuria palustris,Kocuria,1,['LDPE'],4.55,99.21,40.0,0,34.17,2013.0,False,True
+Fusarium fujikuroi,Fusarium,1,['PCL'],4.55,62.92,85.0,0,34.09,2022.0,False,False
+Nocardiopsis sp.,Nocardiopsis,1,['PHA'],4.55,98.42,40.0,0,33.97,2013.0,False,True
+Fomitopsis pinicola,Fomitopsis,1,['PVA'],4.55,98.03,40.0,0,33.87,2013.0,False,True
+Cladosporium asperulatum,Cladosporium,1,['PU'],4.55,85.8,55.0,0,33.81,2016.0,False,True
+Cladosporium montecillanum,Cladosporium,1,['PU'],4.55,85.8,55.0,0,33.81,2016.0,False,True
+Cladosporium sphaerospermum,Cladosporium,1,['PLA'],4.55,85.8,55.0,0,33.81,2016.0,False,True
+Diaphorobacter sp.,Diaphorobacter,3,"['PHA', 'PHB', 'PHBV']",13.64,98.82,25.0,0,33.8,2010.0,True,True
+Aspergillus terreus,Aspergillus,6,"['HDPE', 'LDPE', 'PBSA', 'PE', 'PP', 'PU']",27.27,30.18,90.0,0,33.73,2023.0,False,True
+Pseudomonas chlororaphis,Pseudomonas,8,"['LDPE', 'PCL', 'PES', 'PHA', 'PHBV', 'PHO', 'PLA', 'PU']",36.36,19.13,90.0,0,33.69,2023.0,True,True
+Rhodospirillum rubrum,Rhodospirillum,2,"['PHA', 'PHB']",9.09,99.21,30.0,0,33.53,2011.0,True,True
+Streptomyces hypolithicus,Streptomyces,1,['PU'],4.55,56.61,90.0,0,33.52,2023.0,False,False
+Streptomyces avidinii,Streptomyces,1,['PBAT'],4.55,56.61,90.0,0,33.52,2023.0,False,False
+Rhodococcus ruber,Rhodococcus,3,"['LDPE', 'PE', 'PS']",13.64,85.4,40.0,0,33.44,2013.0,True,True
+Bdellovibrio bacteriovorus,Bdellovibrio,1,['PHA'],4.55,99.61,35.0,0,33.27,2012.0,True,True
+Pseudonocardia alni,Pseudonocardia,1,['PLA'],4.55,99.21,35.0,0,33.17,2012.0,False,True
+Lentzea waywayandensis,Lentzea,1,['PLA'],4.55,99.21,35.0,0,33.17,2012.0,False,True
+Enterobacter asburiae,Enterobacter,1,['LDPE'],4.55,90.93,45.0,0,33.1,2014.0,False,True
+Fusarium subglutinans,Fusarium,1,['PU'],4.55,62.92,80.0,0,33.09,2021.0,False,True
+Fusarium proliferatum,Fusarium,1,['PU'],4.55,62.92,80.0,0,33.09,2021.0,False,True
+Fusarium graminearum,Fusarium,1,['PU'],4.55,62.92,80.0,0,33.09,2021.0,False,True
+Fusarium avenaceum,Fusarium,1,['PU'],4.55,62.92,80.0,0,33.09,2021.0,False,True
+Fusarium tricinctum,Fusarium,1,['PU'],4.55,62.92,80.0,0,33.09,2021.0,False,True
+Agromyces sp.,Agromyces,1,['Nylon'],4.55,98.03,35.0,0,32.87,2012.0,True,True
+Penicillium aurantiogriseum,Penicillium,1,['PLA'],4.55,73.96,65.0,0,32.85,2018.0,False,True
+Penicillium griseofulvum,Penicillium,1,['PU'],4.55,73.96,65.0,0,32.85,2018.0,False,True
+Microbacterium paraoxydans,Microbacterium,1,['LDPE'],4.55,97.63,35.0,0,32.77,2012.0,False,True
+Aspergillus oryzae,Aspergillus,6,"['LDPE', 'PBS', 'PBSA', 'PCL', 'PLA', 'PU']",27.27,30.18,85.0,0,32.73,2022.0,True,True
+Chaetomium sp.,Chaetomium,1,['PE'],4.55,96.84,35.0,0,32.57,2012.0,False,True
+Gracilibacillus sp.,Gracilibacillus,2,"['PHB', 'PHBV']",9.09,99.21,25.0,0,32.53,2010.0,False,True
+Streptomyces werraensis,Streptomyces,1,['PE'],4.55,56.61,85.0,0,32.52,2022.0,False,False
+Streptomyces rochei,Streptomyces,1,['PE'],4.55,56.61,85.0,0,32.52,2022.0,False,False
+Comamonas acidovorans,Comamonas,7,"['P3HP', 'P4HB', 'PEA', 'PES', 'PHA', 'PHB', 'PU']",31.82,91.72,0.0,0,32.47,1999.0,True,True
+Achromobacter sp.,Achromobacter,1,['PVC Blend'],4.55,96.06,35.0,0,32.38,2012.0,False,True
+Pseudomonas mendocina,Pseudomonas,7,"['HDPE', 'LDPE', 'P34HB', 'PET', 'PHA', 'PHB', 'PP']",31.82,19.13,90.0,0,32.33,2023.0,True,True
+Pseudomonas fluorescens,Pseudomonas,7,"['HDPE', 'LDPE', 'PE', 'PHA', 'PHB', 'PHO', 'PU']",31.82,19.13,90.0,0,32.33,2023.0,True,True
+Moritella sp.,Moritella,1,['PCL'],4.55,99.61,30.0,0,32.27,2011.0,False,True
+Flammulina velutipes,Flammulina,1,['PVA'],4.55,99.61,30.0,0,32.27,2011.0,False,True
+Rahnella aquatilis,Rahnella,1,['LDPE'],4.55,99.61,30.0,0,32.27,2011.0,False,True
+Rhizobium viscosum,Rhizobium,1,['LDPE'],4.55,99.61,30.0,0,32.27,2011.0,False,True
+Bacillus amyloliquefaciens,Bacillus,5,"['HDPE', 'LDPE', 'PE', 'PLA', 'PS']",22.73,29.39,90.0,0,32.17,2023.0,False,True
+Bacillus thuringiensis,Bacillus,5,"['LDPE', 'PBAT', 'PE', 'PHA', 'PHB']",22.73,29.39,90.0,0,32.17,2023.0,True,True
+Mucor circinelloides,Mucor,1,['LDPE'],4.55,98.42,30.0,0,31.97,2011.0,False,True
+Staphylococcus epidermidis,Staphylococcus,2,"['LDPE', 'PU']",9.09,96.45,25.0,0,31.84,2010.0,False,True
+Pestalotiopsis microspora,Pestalotiopsis,1,['PU'],4.55,97.24,30.0,0,31.67,2011.0,False,True
+Asteromyces cruciatus,Asteromyces,2,"['PHA', 'PHB']",9.09,99.21,20.0,0,31.53,2009.0,False,True
+Staphylococcus cohnii,Staphylococcus,1,['LDPE'],4.55,96.45,30.0,0,31.48,2011.0,False,True
+Staphylococcus xylosus,Staphylococcus,1,['LDPE'],4.55,96.45,30.0,0,31.48,2011.0,False,True
+Micrococcus lylae,Micrococcus,1,['LDPE'],4.55,96.45,30.0,0,31.48,2011.0,False,True
+Debaryomyces hansenii,Debaryomyces,2,"['PHA', 'PHB']",9.09,98.82,20.0,0,31.43,2009.0,False,True
+Cryptococcus sp.,Cryptococcus,5,"['PBS', 'PCL', 'PHA', 'PHB', 'PLA']",22.73,98.03,0.0,0,31.33,2005.0,True,True
+Pseudomonas alcaligenes,Pseudomonas,7,"['PCL', 'PHA', 'PHB', 'PHBV', 'PHO', 'PHPV', 'PS']",31.82,19.13,85.0,0,31.33,2022.0,True,True
+Bordetella petrii,Bordetella,1,['PLA'],4.55,99.61,25.0,0,31.27,2010.0,False,True
+Variovorax paradoxus,Variovorax,5,"['PCL', 'PHA', 'PHB', 'PHBV', 'PHC']",22.73,97.63,0.0,0,31.23,2000.0,False,True
+Penicillium expansum,Penicillium,2,"['PHB', 'PHBV']",9.09,73.96,50.0,0,31.22,2015.0,False,True
+Paenibacillus macerans,Paenibacillus,1,['LDPE'],4.55,94.48,30.0,0,30.98,2011.0,False,True
+Acinetobacter gerneri,Acinetobacter,1,['PU'],4.55,90.14,35.0,0,30.9,2012.0,False,True
+Alternaria solani,Alternaria,1,['PU'],4.55,93.69,30.0,0,30.79,2011.0,False,True
+Paenibacillus amylolyticus,Paenibacillus,5,"['PBS', 'PBSA', 'PCL', 'PES', 'PLA']",22.73,94.48,0.0,0,30.44,2003.0,True,True
+Rhodococcus rhodochrous,Rhodococcus,3,"['LLDPE', 'O-PE', 'PE']",13.64,85.4,25.0,0,30.44,2010.0,False,True
+Nia vibrissa,Nia,1,['PHB'],4.55,99.61,20.0,0,30.27,2009.0,False,True
+Moesziomyces antarcticus,Moesziomyces,1,['PET'],4.55,99.61,20.0,0,30.27,2009.0,True,True
+Niallia circulans,Niallia,1,['LDPE'],4.55,99.61,20.0,0,30.27,2009.0,False,True
+Thermoactinomyces vulgaris,Thermoactinomyces,1,['PLA'],4.55,99.61,20.0,0,30.27,2009.0,False,True
+Nocardia farcinica,Nocardia,1,['Nylon'],4.55,99.21,20.0,0,30.17,2009.0,True,True
+Nonomuraea terrinata,Nonomuraea,1,['PLA'],4.55,99.21,20.0,0,30.17,2009.0,False,True
+Nonomuraea fastidiosa,Nonomuraea,1,['PLA'],4.55,99.21,20.0,0,30.17,2009.0,False,True
+Cordyceps fumosorosea,Cordyceps,2,"['PBS', 'PCL']",9.09,97.63,15.0,0,30.14,2008.0,False,True
+Duganella zoogloeoides,Duganella,4,"['PCL', 'PHA', 'PHC', 'PTS']",18.18,98.42,0.0,0,30.06,1998.0,False,True
+Paenibacillus urinalis,Paenibacillus,1,['PS'],4.55,94.48,25.0,0,29.98,2010.0,False,True
+Streptomyces ciscaucasicus,Streptomyces,2,"['PHB', 'PLA']",9.09,56.61,65.0,0,29.88,2018.0,False,True
+Streptomyces lateritius,Streptomyces,2,"['PHB', 'PLA']",9.09,56.61,65.0,0,29.88,2018.0,False,True
+Streptomyces cyaneogriseus,Streptomyces,2,"['PHB', 'PLA']",9.09,56.61,65.0,0,29.88,2018.0,False,True
+Rhodococcus equi,Rhodococcus,1,['PHO'],4.55,85.4,35.0,0,29.71,2012.0,False,True
+Talaromyces funiculosus,Talaromyces,3,"['PCL', 'PHA', 'PHB']",13.64,94.08,10.0,0,29.61,2007.0,True,True
+Pseudomonas putida,Pseudomonas,5,"['LDPE', 'PHA', 'PHB', 'PS', 'PU']",22.73,19.13,90.0,0,29.6,2023.0,True,True
+Streptomyces albogriseolus,Streptomyces,1,['PE'],4.55,56.61,70.0,0,29.52,2019.0,False,True
+Schlegelella thermodepolymerans,Schlegelella,4,"['P(3HB-co-3MP)', 'PHA', 'PHB', 'PHV']",18.18,96.06,0.0,0,29.47,2004.0,True,True
+Virgibacillus halodenitrificans,Virgibacillus,1,['LDPE'],4.55,99.61,15.0,0,29.27,2008.0,False,True
+Actinomadura keratinilytica,Actinomadura,1,['PLA'],4.55,95.27,20.0,0,29.18,2009.0,False,True
+Corynebacterium sp.,Corynebacterium,1,['PU'],4.55,98.82,15.0,0,29.07,2008.0,False,True
+Penicillium pinophilum,Penicillium,1,['PHB'],4.55,73.96,45.0,0,28.85,2014.0,False,True
+Thermoascus aurantiacus,Thermoascus,3,"['PBS', 'PCL', 'PHB']",13.64,98.82,0.0,0,28.8,2000.0,False,True
+Alternaria Solani,Alternaria,1,['PU'],4.55,93.69,20.0,0,28.79,2009.0,False,True
+Aspergillus tubingensis,Aspergillus,3,"['HDPE', 'PU', 'PVA']",13.64,30.18,85.0,0,28.64,2022.0,False,True
+Trametes versicolor,Trametes,3,"['Nylon', 'PE', 'PVC']",13.64,98.03,0.0,0,28.6,1999.0,False,True
+Lysinibacillus sphaericus,Lysinibacillus,1,['PE'],4.55,96.84,15.0,0,28.57,2008.0,False,True
+Streptomyces albovinaceus,Streptomyces,1,['PHB'],4.55,56.61,65.0,0,28.52,2018.0,False,True
+Cordyceps farinosa,Cordyceps,3,"['PETG', 'PHB', 'PHBV']",13.64,97.63,0.0,0,28.5,2002.0,False,True
+Bacillus sp. SC9,Bacillus,3,"['HDPE', 'LLDPE', 'PES']",13.64,29.39,85.0,0,28.44,2022.0,False,False
+Micromonospora viridifaciens,Micromonospora,1,['PLA'],4.55,92.11,20.0,0,28.39,2009.0,False,True
+Micromonospora echinospora,Micromonospora,1,['PLA'],4.55,92.11,20.0,0,28.39,2009.0,False,True
+Diutina rugosa,Diutina,1,['PU'],4.55,99.61,10.0,0,28.27,2007.0,False,True
+Alicycliphilus sp.,Alicycliphilus,1,['PU'],4.55,99.61,10.0,0,28.27,2007.0,False,True
+Janthinobacterium sp.,Janthinobacterium,1,['PVA'],4.55,99.61,10.0,0,28.27,2007.0,False,True
+Aspergillus fischeri,Aspergillus,2,"['LDPE', 'PCL']",9.09,30.18,90.0,0,28.27,2023.0,False,True
+Pseudomonas oryzihabitans,Pseudomonas,4,"['HDPE', 'LDPE', 'PET', 'PP']",18.18,19.13,90.0,0,28.24,2023.0,False,False
+Pseudomonas aestusnigri,Pseudomonas,4,"['PCL', 'PET', 'PP', 'PU']",18.18,19.13,90.0,0,28.24,2023.0,True,True
+Kocuria sp.,Kocuria,1,['Nylon'],4.55,99.21,10.0,0,28.17,2007.0,True,True
+Geomyces pannorum,Geomyces,1,['PU'],4.55,98.82,10.0,0,28.07,2007.0,False,True
+Bacillus vietnamensis,Bacillus,2,"['LDPE', 'PHA']",9.09,29.39,90.0,0,28.07,2023.0,False,True
+Bacillus velezensis,Bacillus,2,"['PBAT', 'PU']",9.09,29.39,90.0,0,28.07,2023.0,True,True
+Bacillus megaterium,Bacillus,2,"['LDPE', 'PHB']",9.09,29.39,90.0,0,28.07,2023.0,False,False
+Amycolatopsis orientalis,Amycolatopsis,4,"['PBS', 'PCL', 'PHB', 'PLA']",18.18,78.3,15.0,0,28.03,2008.0,True,True
+Streptomyces roseolus,Streptomyces,5,"['P3HP', 'PCL', 'PHB', 'PHBV', 'PHO']",22.73,56.61,35.0,0,27.97,2012.0,False,True
+Brevundimonas vesicularis,Brevundimonas,1,['Nylon'],4.55,98.42,10.0,0,27.97,2007.0,False,True
+Streptomyces omiyaensis,Streptomyces,5,"['P3HP', 'PCL', 'PHB', 'PHBV', 'PHO']",22.73,56.61,35.0,0,27.97,2012.0,False,True
+Streptomyces anulatus,Streptomyces,5,"['P3HP', 'PCL', 'PHB', 'PHBV', 'PHO']",22.73,56.61,35.0,0,27.97,2012.0,False,True
+Aspergillus sydowii,Aspergillus,3,"['PE', 'PU', 'PVC']",13.64,30.18,80.0,0,27.64,2021.0,False,True
+Aspergillus awamori,Aspergillus,3,"['PE', 'PLA', 'PU']",13.64,30.18,80.0,0,27.64,2021.0,False,True
+Azospirillum brasilense,Azospirillum,2,"['PHA', 'PHB']",9.09,99.21,0.0,0,27.53,2003.0,True,True
+Matsuebacter chitosanotabidus,Matsuebacter,2,"['PCL', 'PHA']",9.09,99.21,0.0,0,27.53,1998.0,False,True
+Caenibacterium thermophilum,Caenibacterium,2,"['PHB', 'PHV']",9.09,99.21,0.0,0,27.53,2004.0,False,True
+Streptomyces polychromogenes,Streptomyces,1,['PHB'],4.55,56.61,60.0,0,27.52,2017.0,False,True
+Caldimonas manganoxidans,Caldimonas,2,"['PHA', 'PHB']",9.09,98.82,0.0,0,27.43,2002.0,True,True
+Strain IZU-154,Strain,2,"['Nylon', 'PE']",9.09,98.82,0.0,0,27.43,1999.0,False,True
+Vibrio furnisii,Vibrio,1,['Nylon'],4.55,96.06,10.0,0,27.38,2007.0,False,True
+Geobacillus thermocatenulatus,Geobacillus,2,"['Nylon', 'PLA']",9.09,98.42,0.0,0,27.33,2004.0,False,True
+Aspergillus glaucus,Aspergillus,2,"['PE', 'PVC']",9.09,30.18,85.0,0,27.27,2022.0,False,True
+Sphingomonas sp.,Sphingomonas,2,"['O-PVA', 'PVA']",9.09,98.03,0.0,0,27.23,2005.0,True,True
+Nocardia asteroides,Nocardia,1,['PE'],4.55,99.21,5.0,0,27.17,2006.0,False,True
+Bacillus aryabhattai,Bacillus,2,"['HDPE', 'PHB']",9.09,29.39,85.0,0,27.07,2022.0,False,True
+Bacillus pseudomycoides,Bacillus,2,"['PET', 'PHB']",9.09,29.39,85.0,0,27.07,2022.0,False,True
+Bacillus sp. SB14,Bacillus,2,"['LLDPE', 'PES']",9.09,29.39,85.0,0,27.07,2022.0,False,False
+Mortierella alpina,Mortierella,1,['PE'],4.55,98.42,5.0,0,26.97,2006.0,False,True
+Amycolatopsis thailandensis,Amycolatopsis,1,['PLA'],4.55,78.3,30.0,0,26.94,2011.0,False,True
+Paecilomyces lilacinus,Paecilomyces,1,['PHBV'],4.55,98.03,5.0,0,26.87,2006.0,False,True
+Clostridium acetobutylicum,Clostridium,2,"['PCL', 'PHBV']",9.09,96.45,0.0,0,26.84,2001.0,False,True
+Schlegelella sp.,Schlegelella,2,"['PHA', 'PHB']",9.09,96.06,0.0,0,26.74,2004.0,True,True
+Rhodococcus erythropolis,Rhodococcus,1,['LDPE'],4.55,85.4,20.0,0,26.71,2009.0,False,True
+Bacillus safensis,Bacillus,1,['PLA'],4.55,29.39,90.0,0,26.71,2023.0,False,False
+Bacillus thermoruber,Bacillus,1,['PCL'],4.55,29.39,90.0,0,26.71,2023.0,False,True
+Rhizopus delemar,Rhizopus,2,"['PET', 'PU']",9.09,95.66,0.0,0,26.64,1997.0,False,True
+Acinetobacter junii,Acinetobacter,3,"['PCL', 'PHC', 'PTS']",13.64,90.14,0.0,0,26.63,1998.0,False,True
+Streptomyces pulveraceus,Streptomyces,4,"['PCL', 'PHB', 'PHBV', 'PHO']",18.18,56.61,35.0,0,26.61,2012.0,False,True
+Streptomyces atratus,Streptomyces,4,"['P3HP', 'PHB', 'PHBV', 'PHO']",18.18,56.61,35.0,0,26.61,2012.0,False,True
+Streptomyces beijiangensis,Streptomyces,4,"['PCL', 'PHB', 'PHBV', 'PHO']",18.18,56.61,35.0,0,26.61,2012.0,False,True
+Acidovorax avenae,Acidovorax,2,"['PBSA', 'PCL']",9.09,95.27,0.0,0,26.54,2000.0,False,True
+Leptobacillium leptobactrum,Leptobacillium,1,['PHB'],4.55,99.61,0.0,0,26.27,1994.0,False,True
+Rhodoferax fermentans,Rhodoferax,1,['PHA'],4.55,99.61,0.0,0,26.27,1998.0,False,True
+Gliocladium roseum,Gliocladium,1,['PCL'],4.55,99.61,0.0,0,26.27,1987.0,False,True
+Cunninghamella sp.,Cunninghamella,1,['PBSA'],4.55,99.61,0.0,0,26.27,1999.0,False,True
+Tritirachium album,Tritirachium,1,['PLA'],4.55,99.61,0.0,0,26.27,2005.0,False,True
+Terracoccus luteus,Terracoccus,1,['PHA'],4.55,99.61,0.0,0,26.27,1998.0,False,True
+Bacteroides sp.,Bacteroides,1,['PEG'],4.55,99.61,0.0,0,26.27,1986.0,False,True
+Terrabacter tumescens,Terrabacter,1,['PHA'],4.55,99.61,0.0,0,26.27,1998.0,False,True
+Acetobacterium sp.,Acetobacterium,1,['PEG'],4.55,99.61,0.0,0,26.27,1991.0,False,True
+Streptoalloteichus hindustanus,Streptoalloteichus,1,['PLA'],4.55,99.61,0.0,0,26.27,2002.0,False,True
+Propionispora sp.,Propionispora,1,['PCL'],4.55,99.61,0.0,0,26.27,2004.0,False,True
+Aspergillus tamarii,Aspergillus,2,"['PET', 'PU']",9.09,30.18,80.0,0,26.27,2021.0,False,True
+Chryseomonas luteola,Chryseomonas,1,['PHB'],4.55,99.61,0.0,0,26.27,1999.0,False,True
+Desulfovibrio desulfuricans,Desulfovibrio,1,['PEG'],4.55,99.61,0.0,0,26.27,1986.0,False,True
+Pelobacter venetianus,Pelobacter,1,['PEG'],4.55,99.61,0.0,0,26.27,1992.0,False,True
+Rasamsonia argillacea,Rasamsonia,1,['PCL'],4.55,99.61,0.0,0,26.27,2000.0,False,True
+Lentzea albidocapillata,Lentzea,1,['PLA'],4.55,99.21,0.0,0,26.17,2002.0,False,True
+Steroidobacter cummioxidans,Steroidobacter,1,['NR'],4.55,99.21,0.0,0,26.17,1990.0,True,True
+Inonotus circinatus,Inonotus,1,['PHB'],4.55,99.21,0.0,0,26.17,1992.0,False,True
+Lederbergia lenta,Lederbergia,1,['PLA'],4.55,99.21,0.0,0,26.17,2000.0,True,True
+Pseudomonas fluvialis,Pseudomonas,1,['PET'],4.55,19.13,100.0,0,26.15,2025.0,True,True
+Pseudomonas subflava,Pseudomonas,1,['PET'],4.55,19.13,100.0,0,26.15,2025.0,True,True
+Thermomyces dupontii,Thermomyces,1,['PCL'],4.55,98.82,0.0,0,26.07,2000.0,False,True
+Kibdelosporangium aridum,Kibdelosporangium,1,['PLA'],4.55,98.82,0.0,0,26.07,2003.0,False,True
+Paenarthrobacter ureafaciens,Paenarthrobacter,1,['Nylon'],4.55,98.82,0.0,0,26.07,1975.0,True,True
+Metarhizium marquandii,Metarhizium,1,['PHB'],4.55,98.82,0.0,0,26.07,1992.0,False,True
+Sarocladium kiliense,Sarocladium,1,['LDPE'],4.55,98.82,0.0,0,26.07,1988.0,False,True
+Aspergillus keveii,Aspergillus,1,['PVA'],4.55,30.18,85.0,0,25.91,2022.0,False,False
+Aspergillus tritici,Aspergillus,1,['PCL'],4.55,30.18,85.0,0,25.91,2022.0,False,False
+Aspergillus ochraceus,Aspergillus,1,['PCL'],4.55,30.18,85.0,0,25.91,2022.0,False,False
+Curvularia protuberata,Curvularia,1,['PETG'],4.55,98.03,0.0,0,25.87,2000.0,False,True
+Curvularia senegalensis,Curvularia,1,['PU'],4.55,98.03,0.0,0,25.87,1994.0,False,True
+Sphingomonas macrogoltabidus,Sphingomonas,1,['PEG'],4.55,98.03,0.0,0,25.87,2005.0,True,True
+Rhodotorula sphaerocarpa,Rhodotorula,1,['PHB'],4.55,97.63,0.0,0,25.77,2000.0,False,True
+Cordyceps confragosa,Cordyceps,1,['LDPE'],4.55,97.63,0.0,0,25.77,1988.0,False,True
+Bacillus subterraneus,Bacillus,1,['PHB'],4.55,29.39,85.0,0,25.71,2022.0,False,False
+Bacillus aquimaris,Bacillus,1,['PHB'],4.55,29.39,85.0,0,25.71,2022.0,False,False
+Bacillus zanthoxyli,Bacillus,1,['PHB'],4.55,29.39,85.0,0,25.71,2022.0,False,True
+Bacillus paramycoides,Bacillus,1,['PBAT'],4.55,29.39,85.0,0,25.71,2022.0,False,True
+Bacillus infantis,Bacillus,1,['PHB'],4.55,29.39,85.0,0,25.71,2022.0,False,False
+Bacillus hwajinpoensis,Bacillus,1,['PHB'],4.55,29.39,85.0,0,25.71,2022.0,False,False
+Bacillus firmus,Bacillus,1,['PE'],4.55,29.39,85.0,0,25.71,2022.0,False,False
+Bacillus thioparans,Bacillus,1,['PHB'],4.55,29.39,85.0,0,25.71,2022.0,False,False
+Bacillus pakistanensis,Bacillus,1,['PHB'],4.55,29.39,85.0,0,25.71,2022.0,False,False
+Streptomyces lydicus,Streptomyces,1,['PHB'],4.55,56.61,50.0,0,25.52,2015.0,False,True
+Pseudomonas lini,Pseudomonas,2,"['PS', 'PU']",9.09,19.13,90.0,0,25.51,2023.0,False,True
+Rhizopus oligosporus,Rhizopus,1,['PLA'],4.55,95.66,0.0,0,25.28,1996.0,False,True
+Burkholderia vietnamiensis,Burkholderia,1,['PTS'],4.55,95.27,0.0,0,25.18,1998.0,False,True
+Saccharothrix syringae,Saccharothrix,1,['PLA'],4.55,94.87,0.0,0,25.08,2002.0,False,True
+Saccharothrix texasensis,Saccharothrix,1,['PLA'],4.55,94.87,0.0,0,25.08,2002.0,False,True
+Saccharothrix mutabilis,Saccharothrix,1,['PLA'],4.55,94.87,0.0,0,25.08,2002.0,False,True
+Saccharothrix waywayandensis,Saccharothrix,1,['PLA'],4.55,94.87,0.0,0,25.08,2005.0,False,True
+Saccharothrix longispora,Saccharothrix,1,['PLA'],4.55,94.87,0.0,0,25.08,2002.0,False,True
+Saccharothrix cryophilis,Saccharothrix,1,['PLA'],4.55,94.87,0.0,0,25.08,2002.0,False,True
+Saccharothrix espanaensis,Saccharothrix,1,['PLA'],4.55,94.87,0.0,0,25.08,2002.0,False,True
+Saccharothrix australiensis,Saccharothrix,1,['PLA'],4.55,94.87,0.0,0,25.08,2002.0,False,True
+Saccharothrix coeruleofusca,Saccharothrix,1,['PLA'],4.55,94.87,0.0,0,25.08,2002.0,False,True
+Amycolatopsis alba,Amycolatopsis,4,"['PBS', 'PCL', 'PHB', 'PLA']",18.18,78.3,0.0,0,25.03,1999.0,False,True
+Amycolatopsis fastidiosa,Amycolatopsis,4,"['PBS', 'PCL', 'PHB', 'PLA']",18.18,78.3,0.0,0,25.03,1999.0,False,True
+Amycolatopsis mediterranei,Amycolatopsis,4,"['PBS', 'PCL', 'PHB', 'PLA']",18.18,78.3,0.0,0,25.03,1999.0,False,True
+Amycolatopsis azurea,Amycolatopsis,4,"['PBS', 'PCL', 'PHB', 'PLA']",18.18,78.3,0.0,0,25.03,1999.0,False,True
+Aspergillus giganteus,Aspergillus,1,['PU'],4.55,30.18,80.0,0,24.91,2021.0,False,True
+Talaromyces pinophilus,Talaromyces,1,['PHB'],4.55,94.08,0.0,0,24.88,2000.0,False,True
+Streptomyces ascomycinicus,Streptomyces,2,"['PHA', 'PHB']",9.09,56.61,40.0,0,24.88,2013.0,True,True
+Talaromyces minioluteus,Talaromyces,1,['PHB'],4.55,94.08,0.0,0,24.88,2000.0,False,True
+Bacillus gottheilii,Bacillus,4,"['PE', 'PET', 'PP', 'PS']",18.18,29.39,60.0,0,24.8,2017.0,False,True
+Ralstonia eutropha,Ralstonia,1,['PHA'],4.55,93.69,0.0,0,24.79,1998.0,False,True
+Bacillus atrophaeus,Bacillus,1,['PHA'],4.55,29.39,80.0,0,24.71,2021.0,False,True
+Serratia rubidaea,Serratia,1,['PU'],4.55,92.9,0.0,0,24.59,1991.0,False,True
+Trichoderma virens,Trichoderma,1,['LDPE'],4.55,92.5,0.0,0,24.49,2004.0,False,True
+Pseudomonas pseudoalcaligenes,Pseudomonas,1,['PBAT'],4.55,19.13,90.0,0,24.15,2023.0,True,True
+Pseudomonas plecoglossicida,Pseudomonas,1,['PS'],4.55,19.13,90.0,0,24.15,2023.0,False,False
+Pseudomonas nitroreducens,Pseudomonas,1,['PS'],4.55,19.13,90.0,0,24.15,2023.0,False,False
+Pseudomonas multiresinivorans,Pseudomonas,1,['PS'],4.55,19.13,90.0,0,24.15,2023.0,False,False
+Enterobacter agglomerans,Enterobacter,1,['PU'],4.55,90.93,0.0,0,24.1,1991.0,False,True
+Bacillus flexus,Bacillus,2,"['PP', 'PVC']",9.09,29.39,70.0,0,24.07,2019.0,False,True
+Brevibacillus reuszeri,Brevibacillus,1,['PHA'],4.55,90.53,0.0,0,24.0,1998.0,False,True
+Aspergillus udagawae,Aspergillus,1,['PBSA'],4.55,30.18,75.0,0,23.91,2020.0,False,True
+Aspergillus brasiliensis,Aspergillus,1,['LDPE'],4.55,30.18,75.0,0,23.91,2020.0,False,True
+Amycolatopsis methanolica,Amycolatopsis,3,"['PBS', 'PCL', 'PLA']",13.64,78.3,0.0,0,23.67,1999.0,False,True
+Streptomyces thermoviolaceus,Streptomyces,1,['PCL'],4.55,56.61,40.0,0,23.52,2013.0,True,True
+Pseudomonas capeferrum,Pseudomonas,1,['PU'],4.55,19.13,85.0,0,23.15,2022.0,False,True
+Pseudomonas stutzeri,Pseudomonas,1,['HDPE'],4.55,19.13,85.0,0,23.15,2022.0,False,False
+Pseudomonas tuomurensis,Pseudomonas,1,['HDPE'],4.55,19.13,85.0,0,23.15,2022.0,False,False
+Bacillus niacini,Bacillus,1,['PVA'],4.55,29.39,70.0,0,22.71,2019.0,False,True
+Streptomyces bangladeshensis,Streptomyces,1,['PHB'],4.55,56.61,35.0,0,22.52,2012.0,False,True
+Pseudomonas pelagia,Pseudomonas,2,"['PCL', 'PU']",9.09,19.13,75.0,0,22.51,2020.0,False,True
+Pseudomonas oceani,Pseudomonas,2,"['PCL', 'PU']",9.09,19.13,75.0,0,22.51,2020.0,False,True
+Pseudomonas bauzanensis,Pseudomonas,2,"['PCL', 'PU']",9.09,19.13,75.0,0,22.51,2020.0,False,True
+Pseudomonas litoralis,Pseudomonas,2,"['PCL', 'PU']",9.09,19.13,75.0,0,22.51,2020.0,False,True
+Amycolatopsis rugosa,Amycolatopsis,2,"['PBS', 'PCL']",9.09,78.3,0.0,0,22.3,1999.0,False,True
+Amycolatopsis coloradensis,Amycolatopsis,2,"['PCL', 'PLA']",9.09,78.3,0.0,0,22.3,1999.0,False,True
+Amycolatopsis sulphurea,Amycolatopsis,2,"['PBS', 'PCL']",9.09,78.3,0.0,0,22.3,1999.0,False,True
+Aspergillus versicolor,Aspergillus,2,"['PBSA', 'PCL']",9.09,30.18,60.0,0,22.27,2017.0,False,True
+Pseudomonas frederiksbergensis,Pseudomonas,4,"['PBS', 'PBSA', 'PCL', 'PLA']",18.18,19.13,60.0,0,22.24,2017.0,False,True
+Bacillus vallismortis,Bacillus,2,"['HDPE', 'LDPE']",9.09,29.39,60.0,0,22.07,2017.0,False,True
+Aspergillus calidoustus,Aspergillus,1,['PLA'],4.55,30.18,65.0,0,21.91,2018.0,False,True
+Aspergillus nomiae,Aspergillus,1,['LDPE'],4.55,30.18,65.0,0,21.91,2018.0,False,True
+Bacillus idriensis,Bacillus,1,['PHB'],4.55,29.39,65.0,0,21.71,2018.0,False,True
+Pseudomonas citronellolis,Pseudomonas,2,"['LDPE', 'PVC']",9.09,19.13,70.0,0,21.51,2019.0,False,True
+Aspergillus clavatus,Aspergillus,2,"['LDPE', 'PES']",9.09,30.18,55.0,0,21.27,2016.0,False,True
+Penicillium ochrochloron,Penicillium,2,"['PHB', 'PU']",9.09,73.96,0.0,0,21.22,2003.0,False,True
+Pseudomonas protegens,Pseudomonas,3,"['HDPE', 'LDPE', 'PU']",13.64,19.13,60.0,0,20.87,2017.0,True,True
+Penicillium glabrum,Penicillium,1,['PE Blend'],4.55,73.96,5.0,0,20.85,2006.0,False,True
+Bacillus stratosphericus,Bacillus,1,['PES'],4.55,29.39,60.0,0,20.71,2017.0,False,True
+Bacillus altitudinis,Bacillus,1,['PES'],4.55,29.39,60.0,0,20.71,2017.0,False,True
+Streptomyces thermogriseus,Streptomyces,1,['PCL'],4.55,56.61,25.0,0,20.52,2010.0,False,True
+Aspergillus foetidus,Aspergillus,2,"['PE', 'PLA']",9.09,30.18,50.0,0,20.27,2015.0,False,True
+Penicillium daleae,Penicillium,1,['PHB'],4.55,73.96,0.0,0,19.85,1992.0,False,True
+Penicillium janthinellum,Penicillium,1,['PHB'],4.55,73.96,0.0,0,19.85,1995.0,False,True
+Penicillium chermesinum,Penicillium,1,['PHB'],4.55,73.96,0.0,0,19.85,1995.0,False,True
+Penicillium adametzii,Penicillium,1,['PHB'],4.55,73.96,0.0,0,19.85,1992.0,False,True
+Penicillium restrictum,Penicillium,1,['PHB'],4.55,73.96,0.0,0,19.85,1992.0,False,True
+Pseudomonas oleovorans,Pseudomonas,2,"['PCL', 'PET']",9.09,19.13,60.0,0,19.51,2017.0,True,True
+Pseudomonas monteilii,Pseudomonas,1,['LDPE'],4.55,19.13,65.0,0,19.15,2018.0,False,True
+Pseudomonas pachastrellae,Pseudomonas,1,['PCL'],4.55,19.13,65.0,0,19.15,2018.0,False,True
+Fusarium moniliforme,Fusarium,2,"['PCL', 'PLA']",9.09,62.92,0.0,0,18.46,1996.0,False,True
+Pseudomonas mandelii,Pseudomonas,1,['PCL'],4.55,19.13,60.0,0,18.15,2017.0,False,True
+Aspergillus japonicus,Aspergillus,1,['LDPE'],4.55,30.18,45.0,0,17.91,2014.0,False,True
+Pseudomonas azotoformans,Pseudomonas,1,['PP'],4.55,19.13,55.0,0,17.15,2016.0,False,True
+Fusarium redolens,Fusarium,1,['LDPE'],4.55,62.92,0.0,0,17.09,1990.0,False,True
+Streptomyces griseus,Streptomyces,2,"['LDPE Blend', 'PE Blend']",9.09,56.61,0.0,0,16.88,1992.0,False,True
+Streptomyces badius,Streptomyces,2,"['LDPE Blend', 'PE Blend']",9.09,56.61,0.0,0,16.88,1992.0,False,True
+Streptomyces viridosporus,Streptomyces,2,"['LDPE Blend', 'PE Blend']",9.09,56.61,0.0,0,16.88,1992.0,False,True
+Streptomyces thermonitrificans,Streptomyces,1,['PCL'],4.55,56.61,5.0,0,16.52,2006.0,False,True
+Aspergillus nidulans,Aspergillus,2,"['LDPE', 'PLA']",9.09,30.18,30.0,0,16.27,2011.0,False,True
+Streptomyces sp.,Streptomyces,1,['PHB'],4.55,56.61,0.0,0,15.52,1999.0,False,True
+Streptomyces thermocarboxydovorans,Streptomyces,1,['PHB'],4.55,56.61,0.0,0,15.52,2004.0,False,True
+Streptomyces thermovulgaris,Streptomyces,1,['PHB'],4.55,56.61,0.0,0,15.52,2004.0,False,True
+Pseudomonas lemoignei,Pseudomonas,4,"['PCL', 'PHA', 'PHB', 'PHC']",18.18,19.13,25.0,0,15.24,2010.0,False,True
+Pseudomonas otitidis,Pseudomonas,1,['PU'],4.55,19.13,45.0,0,15.15,2014.0,False,True
+Bacillus mycoides,Bacillus,1,['LDPE'],4.55,29.39,30.0,0,14.71,2011.0,False,True
+Bacillus thermoamylovorans,Bacillus,1,['PCL'],4.55,29.39,25.0,0,13.71,2010.0,False,True
+Pseudomonas syringae,Pseudomonas,1,['LDPE'],4.55,19.13,35.0,0,13.15,2012.0,False,True
+Pseudomonas beteli,Pseudomonas,1,['PHO'],4.55,19.13,35.0,0,13.15,2012.0,False,True
+Aspergillus ustus,Aspergillus,3,"['PCL', 'PETG', 'PHB']",13.64,30.18,0.0,0,11.64,2000.0,False,True
+Bacillus sphericus,Bacillus,1,['Nylon'],4.55,29.39,10.0,0,10.71,2007.0,False,True
+Aspergillus penicillioides,Aspergillus,1,['PHB'],4.55,30.18,0.0,0,8.91,1992.0,False,True
+Bacillus smithii,Bacillus,1,['PLA'],4.55,29.39,0.0,0,8.71,2001.0,False,True
+Bacillus stearothermophilus,Bacillus,1,['PLA'],4.55,29.39,0.0,0,8.71,2003.0,False,True
+Bacillus brevis,Bacillus,1,['PLA'],4.55,29.39,0.0,0,8.71,1999.0,False,True
+Pseudomonas veronii,Pseudomonas,2,"['PCL', 'PHC']",9.09,19.13,0.0,0,7.51,1998.0,False,True
+Pseudomonas pavonaceae,Pseudomonas,2,"['PCL', 'PHC']",9.09,19.13,0.0,0,7.51,1998.0,False,True
+Pseudomonas vesicularis,Pseudomonas,1,['PVA'],4.55,19.13,0.0,0,6.15,1998.0,False,True
+Pseudomonas indica,Pseudomonas,1,['P(3HB-co-3MP)'],4.55,19.13,0.0,0,6.15,2004.0,False,True
+Pseudomonas amygdali,Pseudomonas,1,['PCL'],4.55,19.13,0.0,0,6.15,1998.0,False,True
+Pseudomonas rhodesiae,Pseudomonas,1,['PCL'],4.55,19.13,0.0,0,6.15,1998.0,False,True
