@@ -1,0 +1,933 @@
+organism,bacdive_found,bacdive_strain_id,bacdive_url,bacdive_temp_c,bacdive_ph,bacdive_oxygen,bacdive_morphology,bacdive_isolation
+Uncultured bacterium,No,,,,,,,
+Pseudomonas sp.,Yes,170025,https://bacdive.dsmz.de/strain/170025,,,,,
+Streptomyces sp.,Yes,15991,https://bacdive.dsmz.de/strain/15991,28; 30; 10; 45,,obligate aerobe,positive; rod-shaped,Sample typeSoil
+Aspergillus niger,No,,,,,,,
+Bacillus sp.,Yes,130,https://bacdive.dsmz.de/strain/130,45,,,Incubation period3-7 days,Hveravellier; Iceland; ISL; Europe
+Aspergillus fumigatus,No,,,,,,,
+Pseudomonas chlororaphis,Yes,13160,https://bacdive.dsmz.de/strain/13160,26; 28; 30; 5; 45,,aerobe,negative; rod-shaped,#Engineered; #Laboratory; #Contaminant
+Bacillus pumilus,Yes,756,https://bacdive.dsmz.de/strain/756,30; 5; 10,,obligate aerobe,positive; rod-shaped,
+Pseudomonas aeruginosa,Yes,12800,https://bacdive.dsmz.de/strain/12800,30; 44; 0; 37; 7; 4; 47; 5,,obligate aerobe,negative; 0.2-0.6 µm; rod-shaped,
+Fusarium solani,No,,,,,,,
+Agaricus bisporus,No,,,,,,,
+Cupriavidus necator,Yes,2033,https://bacdive.dsmz.de/strain/2033,26; 28; 30,,aerobe,negative,#Environmental; #Terrestrial; #Soil
+Bacillus cereus,Yes,624,https://bacdive.dsmz.de/strain/624,30; 10; 55,,facultative anaerobe,positive; rod-shaped,
+Phanerochaete chrysosporium,No,,,,,,,
+Fusarium oxysporum,No,,,,,,,
+Thermobifida fusca,Yes,11256,https://bacdive.dsmz.de/strain/11256,50; 55; 45; 60; 35; 28; 10; 25; 30,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Saccharomonospora viridis,Yes,13414,https://bacdive.dsmz.de/strain/13414,45; 28; 50,,aerobe,,#Environmental; #Terrestrial; #Wetland (Swamp); #Condition; #Acidic
+Amycolatopsis sp.,Yes,13224,https://bacdive.dsmz.de/strain/13224,28,,,,Sample typeSoil
+Fusarium sp.,No,,,,,,,
+Aspergillus terreus,No,,,,,,,
+Aspergillus flavus,No,,,,,,,
+Bacillus subtilis,Yes,176405,https://bacdive.dsmz.de/strain/176405,30,,,,genetic engineering; Japan; JPN; Asia
+Rhodococcus sp.,Yes,10905,https://bacdive.dsmz.de/strain/10905,28; 30,,obligate aerobe,positive; rod-shaped,
+Aspergillus sp.,No,,,,,,,
+Paucimonas lemoignei,Yes,2067,https://bacdive.dsmz.de/strain/2067,40; 28; 30; 41; 5; 45,,obligate aerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Soil
+Alcanivorax borkumensis,Yes,391,https://bacdive.dsmz.de/strain/391,28; 30; 5,,obligate aerobe,negative; rod-shaped,#Environmental; #Aquatic; #Marine; #Sediment
+Serratia marcescens,Yes,5165,https://bacdive.dsmz.de/strain/5165,30; 37; 5; 10,,aerobe,negative; rod-shaped,#Environmental; #Aquatic; #Pond (small)
+Ralstonia pickettii,Yes,2085,https://bacdive.dsmz.de/strain/2085,30; 42; 5; 45,,aerobe,"rod-shaped; monotrichous, polar",#Infection; #Medical environment; #Medical practice; #Host Body-Site; #Oral cavity and airways; #Trachea
+Bacillus licheniformis,Yes,689,https://bacdive.dsmz.de/strain/689,37; 30; 10,,facultative anaerobe,positive; rod-shaped,
+Pseudoalteromonas sp.,No,,,,,,,
+Penicillium sp.,No,,,,,,,
+Marinobacter sp.,Yes,476,https://bacdive.dsmz.de/strain/476,30,,,negative,#Environmental; #Aquatic; #Marine; #Sediment
+Thermobifida cellulosilytica,Yes,11260,https://bacdive.dsmz.de/strain/11260,45,,facultative anaerobe,positive,#Engineered; #Biodegradation; #Composting; #Host Body Product; #Gastrointestinal tract; #Feces (Stool)
+Moraxella sp.,Yes,131821,https://bacdive.dsmz.de/strain/131821,28,,,,#Host; #Plants; #Shrub (Scrub); #Host Body-Site; #Plant; #Flower
+Penicillium chrysogenum,No,,,,,,,
+Priestia megaterium,Yes,103160,https://bacdive.dsmz.de/strain/103160,,,,,
+Stutzerimonas stutzeri,Yes,12996,https://bacdive.dsmz.de/strain/12996,37; 30; 5; 10,,obligate aerobe,negative; rod-shaped,#Host Body Product; #Fluids; #Cerebrospinal fluid
+Stenotrophomonas sp.,Yes,17562,https://bacdive.dsmz.de/strain/17562,30,,,,#Host; #Fishes
+Rhodococcus fascians,Yes,10883,https://bacdive.dsmz.de/strain/10883,30; 28; 37; 41; 45,,aerobe,positive; oval-shaped,Fasciation of sweet peas (Lathyrus odoratus); Lathyrus odoratus
+Comamonas acidovorans,Yes,2941,https://bacdive.dsmz.de/strain/2941,30,,facultative anaerobe,negative,#Engineered; #Environmental; #Terrestrial; #Soil
+Pseudomonas putida,Yes,12871,https://bacdive.dsmz.de/strain/12871,27; 25; 26; 28; 37; 41; 30; 10; 5,,obligate aerobe,negative; rod-shaped; polar,#Engineered; #Laboratory; #Lab enrichment
+Enterobacter sp.,Yes,4360,https://bacdive.dsmz.de/strain/4360,30,,facultative anaerobe,negative; rod-shaped,
+Pseudomonas mendocina,Yes,12866,https://bacdive.dsmz.de/strain/12866,30; 37,,aerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Soil
+Alcaligenes faecalis,Yes,326,https://bacdive.dsmz.de/strain/326,30,,,,#Engineered; #Waste; #Wastewater; #Water treatment plant
+Pseudogymnoascus pannorum,No,,,,,,,
+Enterobacter hormaechei,Yes,136418,https://bacdive.dsmz.de/strain/136418,37,,facultative anaerobe,negative; rod-shaped,Caracas; Venezuela; VEN; Middle and South America
+Cladosporium sp.,No,,,,,,,
+Pseudomonas fluorescens,Yes,12851,https://bacdive.dsmz.de/strain/12851,28; 30; 41; 26; 37,,obligate aerobe,negative; rod-shaped,#Engineered; #Built environment; #Container (Reservoir)
+Prerenniporia tephropora,No,,,,,,,
+Pseudomonas alcaligenes,Yes,12807,https://bacdive.dsmz.de/strain/12807,26; 30; 5,,aerobe,negative; rod-shaped,#Engineered; #Built environment; #Water reservoir (Aquarium/pool); #Environmental; #Aquatic
+Bacillus amyloliquefaciens,Yes,598,https://bacdive.dsmz.de/strain/598,30; 10; 55,,obligate aerobe,positive; 1.8-3.0 µm; 0.7-0.9 µm,#Engineered; #Industrial; #Industrial production; #Environmental; #Terrestrial; #Soil
+Phoma sp.,No,,,,,,,
+Achromobacter xylosoxidans,Yes,318,https://bacdive.dsmz.de/strain/318,30; 24; 5; 45,,obligate aerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Soil
+Arthrobacter sp.,Yes,7537,https://bacdive.dsmz.de/strain/7537,30,,,,#Environmental; #Terrestrial; #Soil
+Fusarium verticillioides,No,,,,,,,
+Trichoderma harzianum,No,,,,,,,
+Roseateles depolymerans,Yes,2992,https://bacdive.dsmz.de/strain/2992,28; 45.0; 35.0; 37,,obligate aerobe,negative; 2.0 µm; 0.5 µm,#Environmental; #Aquatic; #River (Creek)
+Aspergillus oryzae,No,,,,,,,
+Exiguobacterium sp.,Yes,7551,https://bacdive.dsmz.de/strain/7551,30,,,,#Engineered; #Food production; #Dairy product
+Amycolatopsis orientalis,Yes,13214,https://bacdive.dsmz.de/strain/13214,28; 30,,obligate aerobe,Yellow; 10-14 days; ISP 2,#Environmental; #Terrestrial; #Soil
+Talaromyces funiculosus,No,,,,,,,
+Streptococcus sp.,Yes,11845,https://bacdive.dsmz.de/strain/11845,37,,anaerobe,,#Engineered; #Waste; #Wastewater; #Environmental; #Aquatic; #Pond (small)
+Actinomadura sp.,Yes,16953,https://bacdive.dsmz.de/strain/16953,37; 28,,obligate aerobe,,#Environmental; #Terrestrial; #Soil
+Penicillium citrinum,No,,,,,,,
+Brevibacillus sp.,Yes,11432,https://bacdive.dsmz.de/strain/11432,30,,facultative anaerobe,,
+Penicillium simplicissimum,No,,,,,,,
+Brevibacillus brevis,Yes,171287,https://bacdive.dsmz.de/strain/171287,,,,,France; FRA; Europe
+Micromonospora sp.,Yes,159638,https://bacdive.dsmz.de/strain/159638,28,,,,#Environmental; #Aquatic; #Lake (large); #Sediment
+Paenibacillus sp.,Yes,159373,https://bacdive.dsmz.de/strain/159373,30,,facultative anaerobe,,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Root (Rhizome)"
+Schlegelella thermodepolymerans,Yes,2995,https://bacdive.dsmz.de/strain/2995,50; 42,,aerobe,negative,#Engineered; #Waste; #Activated sludge
+Aureobasidium pullulans,No,,,,,,,
+Purpureocillium lilacinum,No,,,,,,,
+Alcanivorax sp.,Yes,23550,https://bacdive.dsmz.de/strain/23550,28,,facultative anaerobe,negative,#Environmental; #Terrestrial; #Sediment
+Rhizopus oryzae,No,,,,,,,
+Paenibacillus amylolyticus,Yes,11464,https://bacdive.dsmz.de/strain/11464,30,,,,
+Phlebiopsis sp.,No,,,,,,,
+Comamonas testosteroni,Yes,2923,https://bacdive.dsmz.de/strain/2923,30,,obligate aerobe,negative,#Environmental; #Terrestrial; #Soil
+Xylaria sp.,No,,,,,,,
+Schizophyllum commune,No,,,,,,,
+Neopestalotiopsis phangngaensis,No,,,,,,,
+Lihuaxuella thermophila,Yes,24646,https://bacdive.dsmz.de/strain/24646,50,,facultative anaerobe,,#Environmental; #Terrestrial; #Soil; #Geologic
+Variovorax paradoxus,Yes,3008,https://bacdive.dsmz.de/strain/3008,30; 25; 5; 41; 45,,aerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Soil
+Aspergillus fischeri,No,,,,,,,
+Rhodococcus ruber,Yes,159878,https://bacdive.dsmz.de/strain/159878,30; 42,,aerobe,positive; 2.01-2.05 µm; 1.22-1.31 µm,#Host; #Invertebrates (Other); #Cnidaria (Corals); #Environmental; #Aquatic; #Coral reef
+Fusarium equiseti,No,,,,,,,
+Streptomyces anulatus,Yes,14992,https://bacdive.dsmz.de/strain/14992,28,,aerobe,positive,
+VIbrio sp.,Yes,175117,https://bacdive.dsmz.de/strain/175117,37,,,,cow  rumen; Hamilton; New Zealand; NZL; Australia and Oceania
+Comamonas sp.,Yes,2925,https://bacdive.dsmz.de/strain/2925,30,,,,#Engineered; #Contamination; #Environmental; #Aquatic; #Pond (small)
+Cryptococcus sp.,No,,,,,,,
+Pseudogymnoascus verrucosus,No,,,,,,,
+Pestalotiopsis sp.,No,,,,,,,
+Clonostachys rosea,No,,,,,,,
+Terribacillus sp.,No,,,,,,,
+Streptomyces roseolus,Yes,15565,https://bacdive.dsmz.de/strain/15565,28,,obligate aerobe,,#Environmental; #Terrestrial; #Soil
+Ideonella sakaiensis,Yes,140803,https://bacdive.dsmz.de/strain/140803,28; 35,,aerobe,negative; 1.2-1.5 µm; 0.6-0.8 µm,#Host; #Microbial
+Aspergillus tamarii,No,,,,,,,
+Amycolatopsis tolypomycina,Yes,13238,https://bacdive.dsmz.de/strain/13238,28; 30; 10; 41; 45,,facultative anaerobe,positive; rod-shaped,#Environmental; #Terrestrial; #Soil
+Gloeophyllum sepiarium,No,,,,,,,
+Lachnellula sp.,No,,,,,,,
+Pseudozyma antarctica,No,,,,,,,
+Stenotrophomonas maltophilia,Yes,17532,https://bacdive.dsmz.de/strain/17532,30; 42; 35; 37; 5; 10,,aerobe,negative; 1.5 µm; 0.5 µm,#Infection; #Patient; #Host Body-Site; #Oral cavity and airways
+Meyerozyma guilliermondii,No,,,,,,,
+Leptothrix sp.,Yes,176663,https://bacdive.dsmz.de/strain/176663,30,,,,floating filamentous biomass in river; Bella Unión; Uruguay; URY; Middle and South America
+Fusarium culmorum,No,,,,,,,
+Acidovorax sp.,Yes,2889,https://bacdive.dsmz.de/strain/2889,30,,,,
+Trichoderma sp.,No,,,,,,,
+Staphylococcus sp.,Yes,169300,https://bacdive.dsmz.de/strain/169300,37,,,,"Hepatobiliary; Kent Ridge, National University Hospital, Singapore; Singapore; SGP; Asia"
+Streptomyces omiyaensis,Yes,15451,https://bacdive.dsmz.de/strain/15451,28,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Pleurotus ostreatus,No,,,,,,,
+Cladosporium cladosporioides,No,,,,,,,
+Papiliotrema laurentii,No,,,,,,,
+Paracoccus denitrificans,Yes,13693,https://bacdive.dsmz.de/strain/13693,30; 26; 25; 5; 10,,aerobe,negative,#Engineered; #Agriculture; #Garden; #Environmental; #Terrestrial; #Soil
+Burkholderia sp.,Yes,1927,https://bacdive.dsmz.de/strain/1927,30,,,Incubation period1-2 days,#Environmental; #Terrestrial; #Soil
+Chaetomium globosum,No,,,,,,,
+Agromyces sp.,Yes,103273,https://bacdive.dsmz.de/strain/103273,,,,,compost; 1998-01-01; Germany; DEU; Europe
+Alternaria alternata,No,,,,,,,
+Pseudomonas aestusnigri,Yes,132179,https://bacdive.dsmz.de/strain/132179,28; 37,,aerobe,,#Engineered; #Contamination; #Oil (Fuel); #Environmental; #Terrestrial; #Tidal flat
+Bacillus thuringiensis,Yes,1006,https://bacdive.dsmz.de/strain/1006,30,,facultative anaerobe,positive; rod-shaped,#Host; #Arthropoda; #Insecta
+Delftia acidovorans,Yes,2941,https://bacdive.dsmz.de/strain/2941,30,,facultative anaerobe,negative,#Engineered; #Environmental; #Terrestrial; #Soil
+Halomonas aquamarina,Yes,6010,https://bacdive.dsmz.de/strain/6010,25; 20; 26; 37; 41; 45,,aerobe,negative,#Environmental; #Aquatic; #Marine
+Amycolatopsis azurea,Yes,13222,https://bacdive.dsmz.de/strain/13222,28; 30,,aerobe,Steel blue; 10-14 days; ISP 2,#Environmental; #Terrestrial; #Soil
+Heterobasidion annosum,No,,,,,,,
+Humicola insolens,No,,,,,,,
+Amycolatopsis mediterranei,Yes,13220,https://bacdive.dsmz.de/strain/13220,28; 30; 10; 41; 45,,aerobe,positive; filament-shaped,#Environmental; #Terrestrial; #Soil
+Pseudomonas frederiksbergensis,Yes,13063,https://bacdive.dsmz.de/strain/13063,30; 37; 41,,obligate aerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Soil
+Diaporthe sp.,No,,,,,,,
+Pseudomonas protegens,Yes,13154,https://bacdive.dsmz.de/strain/13154,28,,aerobe,negative,"#Environmental; #Terrestrial; #Soil; #Host; #Plants; #Herbaceous plants (Grass,Crops)"
+Paraphoma chrysanthemicola,No,,,,,,,
+Bacillus aryabhattai,Yes,1290,https://bacdive.dsmz.de/strain/1290,37; 10; 28,,obligate aerobe,positive; rod-shaped,#Engineered; #Industrial; #Engineered product; #Environmental; #Air
+Pseudomonas lemoignei,Yes,2067,https://bacdive.dsmz.de/strain/2067,40; 28; 30; 41; 5; 45,,obligate aerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Soil
+Aneurinibacillus aneurinilyticus,Yes,11380,https://bacdive.dsmz.de/strain/11380,30; 10,,obligate aerobe,positive; rod-shaped,Japan; JPN; Asia; Human feces
+Hypoxylon sp.,No,,,,,,,
+Acinetobacter baumannii,Yes,8093,https://bacdive.dsmz.de/strain/8093,30; 37; 10,,obligate aerobe,negative; oval-shaped,#Host Body Product; #Fluids; #Urine
+Clostridium botulinum,No,,,,,,,
+Pseudomonas oryzihabitans,Yes,1837,https://bacdive.dsmz.de/strain/1837,30,,,,"#Host; #Human; #Host Body-Site; #Organ; #Skin, Nail, Hair"
+Acinetobacter calcoaceticus,Yes,8057,https://bacdive.dsmz.de/strain/8057,30; 41; 45,,obligate aerobe,negative; oval-shaped,#Environmental; #Terrestrial; #Soil
+Duganella zoogloeoides,Yes,23169,https://bacdive.dsmz.de/strain/23169,30; 25,,aerobe,negative,#Engineered; #Industrial; #Engineered product
+Amycolatopsis alba,Yes,13230,https://bacdive.dsmz.de/strain/13230,28,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Parengyodontium album,No,,,,,,,
+Phoma aliena,No,,,,,,,
+Shewanella sp.,Yes,24543,https://bacdive.dsmz.de/strain/24543,26,,,,#Host; #Invertebrates (Other); #Cnidaria (Corals); #Host Body Product; #Oral cavity and Airways; #Mucus
+Streptomyces beijiangensis,Yes,16366,https://bacdive.dsmz.de/strain/16366,28; 30; 20; 41; 45,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Schlegelella sp.,No,,,,,,,
+Streptomyces atratus,Yes,16320,https://bacdive.dsmz.de/strain/16320,28,,obligate aerobe,,#Environmental; #Terrestrial; #Soil
+Fusarium graminearum,No,,,,,,,
+Sphingomonas sp.,Yes,166381,https://bacdive.dsmz.de/strain/166381,28,,aerobe,negative; 2.3-3.2 µm; 0.8-1.1 µm,surface-sterilized stem tissue of Jatropha (cv. B1-9); 2009-09; Agrotechnology Experimental Station; Singapore; SGP
+Bacillus gottheilii,Yes,22924,https://bacdive.dsmz.de/strain/22924,30; 37,,aerobe,,#Engineered; #Industrial; #Plant (Factory); #Infection; #Medical product
+Amycolatopsis fastidiosa,Yes,13196,https://bacdive.dsmz.de/strain/13196,28,,aerobe,positive,#Environmental; #Terrestrial; #Soil
+Fomitiporia sp.,No,,,,,,,
+Exiguobacterium profundum,Yes,18119,https://bacdive.dsmz.de/strain/18119,30; 45,,facultative anaerobe,positive; 6 µm; 0.75 µm,#Environmental; #Aquatic; #Hydrothermal vent; #Terrestrial; #Mud (Sludge)
+Bacillus flexus,Yes,136039,https://bacdive.dsmz.de/strain/136039,30,,obligate aerobe,positive; rod-shaped,"France; FRA; Europe; Cosmetic, Cosmetic product"
+Verticillium sp.,Yes,157529,https://bacdive.dsmz.de/strain/157529,28,,,,#Host; #Invertebrates (Other); #Annelida; #Host Body-Site; #Gastrointestinal tract
+Aspergillus awamori,No,,,,,,,
+Thermobifida alba,Yes,132007,https://bacdive.dsmz.de/strain/132007,37; 5; 15,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil; #Engineered; #Agriculture; #Garden
+Streptomyces pulveraceus,Yes,16314,https://bacdive.dsmz.de/strain/16314,28,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Xanthomonas sp.,Yes,140395,https://bacdive.dsmz.de/strain/140395,20,,,,#Environmental; #Aquatic; #Marine; #Host; #Invertebrates (Other); #Porifera (Sponges)
+Halomonas sp.,Yes,6052,https://bacdive.dsmz.de/strain/6052,28,,,,#Engineered; #Laboratory; #Contaminant; #Lab enrichment
+Micrococcus luteus,Yes,130433,https://bacdive.dsmz.de/strain/130433,,,facultative anaerobe,,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Leaf (Phyllosphere)"
+Bjerkandera adusta,No,,,,,,,
+Serratia sp.,Yes,130310,https://bacdive.dsmz.de/strain/130310,30,,,,#Engineered; #Environmental; #Aquatic; #Pond (small)
+Microbulbifer sp.,Yes,139998,https://bacdive.dsmz.de/strain/139998,37,,,,#Condition; #Saline; #Environmental; #Aquatic; #Lake (large)
+Neodevriesia sp.,No,,,,,,,
+Geobacillus thermocatenulatus,Yes,1422,https://bacdive.dsmz.de/strain/1422,60; 37.0; 80.0; 60.0,,facultative anaerobe,positive; 6.0-12.0 µm; 0.9-1.5 µm,#Engineered; #Built environment; #Condition; #Thermophilic (>45°C)
+Xylaria feejeensis,No,,,,,,,
+Laceyella sp.,Yes,156598,https://bacdive.dsmz.de/strain/156598,37,,microaerophile,,#Host; #Human; #Male; #Host Body-Site; #Oral cavity and airways; #Lung
+Lysinibacillus fusiformis,Yes,1521,https://bacdive.dsmz.de/strain/1521,30,,obligate aerobe,positive; rod-shaped,Soil; United States of America; USA; North America
+Gordonia sp.,Yes,10587,https://bacdive.dsmz.de/strain/10587,28,,,,#Engineered; #Contamination; #Industrial; #Industrial production; #Environmental
+Gibberella sp.,No,,,,,,,
+Aspergillus glaucus,No,,,,,,,
+Fusarium pseudensiforme,No,,,,,,,
+Diaphorobacter sp.,Yes,2955,https://bacdive.dsmz.de/strain/2955,30,,,,#Environmental; #Aquatic; #River (Creek)
+Strain IZU-154,No,,,,,,,
+Saccharothrix waywayandensis,Yes,13308,https://bacdive.dsmz.de/strain/13308,28,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Rhodopseudomonas palustris,Yes,168493,https://bacdive.dsmz.de/strain/168493,30; 10; 41,,,negative; rod-shaped,
+Bacillus vietnamensis,Yes,1258,https://bacdive.dsmz.de/strain/1258,30; 35; 55,,aerobe,positive; 2.5 µm; 0.75 µm,#Engineered; #Food production; #Food
+Brevibacillus parabrevis,Yes,11415,https://bacdive.dsmz.de/strain/11415,30,,facultative anaerobe,,
+Brevibacillus borstelensis,Yes,11421,https://bacdive.dsmz.de/strain/11421,30; 37; 10; 55,,aerobe,positive,#Environmental; #Terrestrial; #Soil
+Mucor sp.,No,,,,,,,
+Micrococcus sp.,Yes,7752,https://bacdive.dsmz.de/strain/7752,28,,,,#Engineered; #Built environment; #Clean room
+Micromonosporales bacterium,No,,,,,,,
+Micromonospora matsumotoense,Yes,7980,https://bacdive.dsmz.de/strain/7980,28; 30; 10; 37; 41; 45,,aerobe,positive; rod-shaped,#Environmental; #Terrestrial; #Forest; #Soil
+Nigrospora oryzae,No,,,,,,,
+Fomitopsis palustris,No,,,,,,,
+Moniliophthora roreri,No,,,,,,,
+Aspergillus sydowii,No,,,,,,,
+Aspergillus ustus,No,,,,,,,
+Fusarium decemcellulare,No,,,,,,,
+Flavodon ambrosius,No,,,,,,,
+Aspergillus tubingensis,No,,,,,,,
+Rhodococcus rhodochrous,Yes,10908,https://bacdive.dsmz.de/strain/10908,28; 30; 10,,aerobe,positive; oval-shaped,
+Alteromonas sp.,Yes,23572,https://bacdive.dsmz.de/strain/23572,28,,,,#Environmental; #Aquatic; #Marine
+Aspergillus versicolor,No,,,,,,,
+Arcopilus aureus,No,,,,,,,
+Trametes versicolor,No,,,,,,,
+Pseudomonas citronellolis,Yes,12823,https://bacdive.dsmz.de/strain/12823,30,,aerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Soil; #Host; #Plants; #Tree
+Rhodotorula mucilaginosa,No,,,,,,,
+Burkholderia cepacia,Yes,1906,https://bacdive.dsmz.de/strain/1906,28; 30; 41,,obligate aerobe,negative; rod-shaped,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Root (Rhizome)"
+Rhizobacter sp.,Yes,132314,https://bacdive.dsmz.de/strain/132314,28,,obligate aerobe,negative,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Root (Rhizome)"
+Brevibacillus agri,Yes,11416,https://bacdive.dsmz.de/strain/11416,30; 45; 10,,aerobe,positive; rod-shaped,
+Bacillus sp. SC9,No,,,,,,,
+Debaryomyces hansenii,No,,,,,,,
+Pycnoporus cinnabarinus,No,,,,,,,
+Delftia sp.,Yes,2942,https://bacdive.dsmz.de/strain/2942,30,,,,#Engineered; #Waste; #Wastewater; #Water treatment plant
+Epicoccum sp.,No,,,,,,,
+Plectosphaerella cucumerina,No,,,,,,,
+Polyangium brachysporum,No,,,,,,,
+Penicillium roqueforti,No,,,,,,,
+Cladosporium halotolerans,No,,,,,,,
+Penicillium brevicompactum,No,,,,,,,
+Nocardiopsis prasina,Yes,11185,https://bacdive.dsmz.de/strain/11185,28,,aerobe,positive,#Environmental; #Terrestrial; #Soil
+Paraphoma radicina,No,,,,,,,
+Paraphoma sp.,No,,,,,,,
+Penicillium oxalicum,No,,,,,,,
+Oleispira antarctica,Yes,11291,https://bacdive.dsmz.de/strain/11291,15,,obligate aerobe,negative,#Environmental; #Aquatic; #Marine
+Paenarthrobacter ureafaciens,Yes,7571,https://bacdive.dsmz.de/strain/7571,30; 28,,obligate aerobe,negative; rod-shaped,"Soil; Environment, Soil"
+Cellulosimicrobium sp.,Yes,139747,https://bacdive.dsmz.de/strain/139747,28,,,,#Environmental; #Terrestrial; #Forest; #Soil
+Coprinellus aureogranulatus,No,,,,,,,
+Curvularia lunata,No,,,,,,,
+Cordyceps farinosa,No,,,,,,,
+Pleosporales sp.,No,,,,,,,
+Acidovorax delafieldii,Yes,2885,https://bacdive.dsmz.de/strain/2885,30; 25; 41,,obligate aerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Soil
+Acremonium sp.,No,,,,,,,
+Acinetobacter septicus,Yes,23129,https://bacdive.dsmz.de/strain/23129,37; 30,,aerobe,negative,#Infection; #Patient; #Host Body Product; #Fluids; #Blood; #Host
+Thermomonospora curvata,Yes,16921,https://bacdive.dsmz.de/strain/16921,45; 50,,obligate aerobe,positive,"#Host Body Product; #Plant; #Straw; #Host; #Plants; #Herbaceous plants (Grass,Crops)"
+Phanerochaete pseudomagnolia,No,,,,,,,
+Phellinus amazonicus,No,,,,,,,
+Phlebiopsis flavidoalba,No,,,,,,,
+Corynebacterium sp.,Yes,157676,https://bacdive.dsmz.de/strain/157676,37,,,,#Host Body Product; #Gastrointestinal tract; #Feces (Stool)
+Acinetobacter junii,Yes,8086,https://bacdive.dsmz.de/strain/8086,28; 30; 10; 25; 45,,obligate aerobe,negative; rod-shaped,#Host; #Human; #Host Body Product; #Fluids; #Urine
+Actinomucor elegans,No,,,,,,,
+Acidimicrobiales bacterium,No,,,,,,,
+Kaistella jeonii,Yes,5676,https://bacdive.dsmz.de/strain/5676,22; 15; 21.5; 37; 41; 45,,aerobe,negative,#Host; #Plants; #Moss
+Thermoascus aurantiacus,No,,,,,,,
+Amycolatopsis methanolica,Yes,165740,https://bacdive.dsmz.de/strain/165740,28,,obligate aerobe,positive,soil; country of origin unknown
+Aequorivita sp.,Yes,139670,https://bacdive.dsmz.de/strain/139670,20,,obligate aerobe,,Antarctica; ATA
+Streptomyces gougerotti,No,,,,,,,
+Actinoplanes ianthinogenes,Yes,7817,https://bacdive.dsmz.de/strain/7817,28,,obligate aerobe,,#Environmental; #Terrestrial; #Soil
+Agrobacterium tumefaciens,Yes,13581,https://bacdive.dsmz.de/strain/13581,26; 30; 25; 5; 41,,obligate aerobe,negative,#Host; #Plants; #Shrub (Scrub)
+Alternaria burnsii,No,,,,,,,
+Alcaligenes sp.,Yes,332,https://bacdive.dsmz.de/strain/332,30,,,,
+Streptomyces griseus,Yes,14904,https://bacdive.dsmz.de/strain/14904,28; 30,,obligate aerobe,,
+Streptomyces lateritius,Yes,15342,https://bacdive.dsmz.de/strain/15342,28,,obligate aerobe,,#Environmental; #Terrestrial; #Soil
+Streptomyces viridosporus,Yes,16126,https://bacdive.dsmz.de/strain/16126,28; 30; 10,,aerobe,positive,
+Talaromyces verruculosus,No,,,,,,,
+Alternaria pseudoeichhorniae,No,,,,,,,
+Alternaria sp.,No,,,,,,,
+Anoxybacillus flavithermus,Yes,154782,https://bacdive.dsmz.de/strain/154782,,,,,#Environmental; #Aquatic
+Amycolatopsis coloradensis,Yes,13229,https://bacdive.dsmz.de/strain/13229,28,,aerobe,positive,#Environmental; #Terrestrial; #Soil
+Jonesia denitrificans,Yes,6314,https://bacdive.dsmz.de/strain/6314,37; 30; 28,,anaerobe,negative; rod-shaped,"#Host; #Mammals; #Bovinae (Cow, Cattle); #Host Body Product; #Fluids; #Blood"
+Geomyces sp.,No,,,,,,,
+Ketobacter sp.,No,,,,,,,
+Kibdelosporangium aridum,Yes,13290,https://bacdive.dsmz.de/strain/13290,28,,obligate aerobe,positive,#Environmental; #Terrestrial; #Desert; #Soil
+Acinetobacter pittii,Yes,8146,https://bacdive.dsmz.de/strain/8146,37; 30; 10; 45,,aerobe,negative; rod-shaped,#Host; #Human; #Host Body Product; #Fluids; #Cerebrospinal fluid
+Acidovorax avenae,Yes,2891,https://bacdive.dsmz.de/strain/2891,25; 30; 5; 10,,obligate aerobe,negative; rod-shaped,"#Host; #Plants; #Herbaceous plants (Grass,Crops)"
+Actinoallomurus spadix,Yes,17006,https://bacdive.dsmz.de/strain/17006,37; 28; 5,,aerobe,positive,#Environmental; #Terrestrial; #Soil
+Acinetobacter guillouiae,Yes,8097,https://bacdive.dsmz.de/strain/8097,30; 10; 37; 41; 45,,aerobe,negative; ovoid-shaped,#Engineered; #Waste; #Wastewater
+Acinetobacter sp.,Yes,8073,https://bacdive.dsmz.de/strain/8073,30; 41; 45,,obligate aerobe,negative; rod-shaped,#Engineered; #Waste; #Wastewater; #Water treatment plant
+Ureibacillus massiliensis,Yes,155073,https://bacdive.dsmz.de/strain/155073,37,,aerobe,,#Engineered; #Industrial; #Engineered product
+Actinokineospora spheciospongiae,Yes,130584,https://bacdive.dsmz.de/strain/130584,28,,aerobe,,#Engineered; #Agriculture; #Grove (Orchard); #Environmental; #Terrestrial; #Desert
+Actinomadura keratinilytica,Yes,16998,https://bacdive.dsmz.de/strain/16998,45; 28,,aerobe,positive,"#Host; #Mammals; #Bovinae (Cow, Cattle); #Host Body-Site; #Limb"
+Thermomyces lanuginosus,No,,,,,,,
+Cladosporium sphaerospermum,No,,,,,,,
+Cladosporium subcinereum,No,,,,,,,
+Cladosporium tenuissimum,No,,,,,,,
+Caenibacterium thermophilum,Yes,2995,https://bacdive.dsmz.de/strain/2995,50; 42,,aerobe,negative,#Engineered; #Waste; #Activated sludge
+Caldimonas manganoxidans,Yes,138523,https://bacdive.dsmz.de/strain/138523,45; 5; 10,,obligate aerobe,negative; rod-shaped,Matsue; Japan; JPN; Asia
+Clostridium acetobutylicum,Yes,2529,https://bacdive.dsmz.de/strain/2529,37,,anaerobe,,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Engineered; #Food production"
+Clostridium sp.,No,,,,,,,
+Penicillium stoloniferum,No,,,,,,,
+Perenniporia sp.,No,,,,,,,
+Cordyceps fumosorosea,No,,,,,,,
+Coprinellus bipellis,No,,,,,,,
+Crossiella sp.,No,,,,,,,
+Cupriavidus sp.,Yes,331,https://bacdive.dsmz.de/strain/331,30,,,,
+Pseudomonas lini,Yes,13106,https://bacdive.dsmz.de/strain/13106,28; 30; 37; 41,,aerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Soil; #Host Body-Site; #Plant; #Rhizosphere
+Pseudomonas litoralis,Yes,13186,https://bacdive.dsmz.de/strain/13186,28,,aerobe,negative; 0.8-1.9 µm; 0.5-0.9 µm,#Environmental; #Aquatic; #Marine
+Pseudomonas oleovorans,Yes,12867,https://bacdive.dsmz.de/strain/12867,26; 28; 30; 5,,obligate aerobe,negative; rod-shaped,#Engineered; #Industrial; #Industrial production
+Pseudomonas pavonaceae,Yes,162732,https://bacdive.dsmz.de/strain/162732,25,,,,
+Pseudomonas pseudoalcaligenes,Yes,2901,https://bacdive.dsmz.de/strain/2901,28; 25,,obligate aerobe,negative,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Other; #Wound"
+Plesporaceae sp.,No,,,,,,,
+Pseudomonas bauzanensis,Yes,13184,https://bacdive.dsmz.de/strain/13184,28,,aerobe,negative,#Engineered; #Contamination; #Heavy metal; #Industrial; #Environmental
+Proteus mirabilis,Yes,5058,https://bacdive.dsmz.de/strain/5058,37; 30,,facultative anaerobe,negative; rod-shaped,
+Proteus sp.,Yes,5071,https://bacdive.dsmz.de/strain/5071,37,,,,#Host Body Product; #Gastrointestinal tract; #Feces (Stool)
+Citrobacter koseri,Yes,4329,https://bacdive.dsmz.de/strain/4329,30; 37,,facultative anaerobe,negative; rod-shaped,#Host; #Human; #Host Body Product; #Fluids; #Blood
+Cladosporium pseudocladosporioides,No,,,,,,,
+Colletotrichum fructicola,No,,,,,,,
+Penicillium expansum,No,,,,,,,
+Penicillium ochrochloron,No,,,,,,,
+Paecilomyces sp.,No,,,,,,,
+Paecilomyces variotii,No,,,,,,,
+Pantoea sp.,Yes,23935,https://bacdive.dsmz.de/strain/23935,30,,,,#Engineered; #Food production; #Meat
+Didymosphaeriaceae sp.,No,,,,,,,
+Delftia tsuruhatensis,Yes,2952,https://bacdive.dsmz.de/strain/2952,37; 35.0,,,negative; 2.4-4.0 µm; 0.7-1.2 µm,#Engineered; #Waste; #Activated sludge; #Water treatment plant
+Emericella nidulans,No,,,,,,,
+Bacillus zanthoxyli,Yes,11600,https://bacdive.dsmz.de/strain/11600,30,,facultative anaerobe,positive; 4-4.8 µm; 0.35-0.4 µm,#Host; #Plants; #Shrub (Scrub); #Host Body-Site; #Plant; #Rhizosphere
+Botrytis cinerea,No,,,,,,,
+Brevundimonas sp.,Yes,2314,https://bacdive.dsmz.de/strain/2314,28,,,,#Engineered; #Built environment; #Clean room
+Pseudomonas veronii,Yes,13055,https://bacdive.dsmz.de/strain/13055,28; 30; 41; 45,,aerobe,negative; rod-shaped,#Environmental; #Aquatic
+Ralstonia sp.,Yes,2087,https://bacdive.dsmz.de/strain/2087,30,,,,#Engineered; #Waste; #Activated sludge
+Remotididymella sp.,No,,,,,,,
+Psychrobacter sp.,Yes,5920,https://bacdive.dsmz.de/strain/5920,37,,obligate aerobe,negative,#Host; #Fishes
+Rhizopus delemar,No,,,,,,,
+Rhizopus nigricans,No,,,,,,,
+Rhizobacter gummiphilus,Yes,168636,https://bacdive.dsmz.de/strain/168636,,,obligate aerobe,negative,
+Cephalosporium sp.,No,,,,,,,
+Chaetomium murorum,No,,,,,,,
+Pseudomonas oceani,Yes,132649,https://bacdive.dsmz.de/strain/132649,28,,aerobe,negative; 2.1-2.6 µm; 0.4-0.6 µm,#Environmental; #Aquatic; #Marine
+Pseudomonas pelagia,Yes,13176,https://bacdive.dsmz.de/strain/13176,25; 28,,aerobe,negative; 1.9 µm; 0.45 µm,#Host; #Algae; #Green algae; #Condition; #Psychrophilic (<10°C); #Climate
+Azospirillum brasilense,Yes,13972,https://bacdive.dsmz.de/strain/13972,28; 30,,obligate aerobe,negative,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Root (Rhizome)"
+Azotobacter vinelandii,Yes,12749,https://bacdive.dsmz.de/strain/12749,30; 28,,,,
+Bacillus sp. SB14,No,,,,,,,
+Bacillus megaterium,Yes,103160,https://bacdive.dsmz.de/strain/103160,,,,,
+Aspergillus clavatus,No,,,,,,,
+Bacillus pseudomycoides,Yes,1151,https://bacdive.dsmz.de/strain/1151,30; 40; 15; 28; 10; 55,,facultative anaerobe,positive; 3.0-5.0 µm; 1.0 µm,#Environmental; #Terrestrial; #Soil
+Rhodotorula sp.,No,,,,,,,
+Rhodococcus erythropolis,Yes,11030,https://bacdive.dsmz.de/strain/11030,28; 30; 37; 41; 45,,obligate aerobe,positive; coccus-shaped,#Environmental; #Air; #Indoor Air
+Rhodospirillum rubrum,Yes,14005,https://bacdive.dsmz.de/strain/14005,120; 28; 30; 5; 37; 41,,anaerobe,negative,
+Bacillus vallismortis,Yes,1150,https://bacdive.dsmz.de/strain/1150,30; 50; 10; 22; 55,,facultative anaerobe,positive; 2.0-4.0 µm; 0.8-1.0 µm,#Environmental; #Terrestrial; #Sandy; #Host; #Plants; #Tree
+Bacillus velezensis,Yes,153720,https://bacdive.dsmz.de/strain/153720,,,,,"Málaga,Estuary of River Velez; Spain; ESP; Europe"
+Engyodontium album,No,,,,,,,
+Mortierella sp.,No,,,,,,,
+Neonectria sp.,No,,,,,,,
+Nigrofomes melanoporus,No,,,,,,,
+Microbispora sp.,Yes,159382,https://bacdive.dsmz.de/strain/159382,28,,,,#Host; #Plants
+Micromonosporaceae bacterium,No,,,,,,,
+Marinactinospora thermotolerans,Yes,11263,https://bacdive.dsmz.de/strain/11263,28,,aerobe,positive,#Environmental; #Aquatic; #Marine; #Sediment
+Exophilia sp.,No,,,,,,,
+Flavobacterium sp.,Yes,3774,https://bacdive.dsmz.de/strain/3774,26,,,,#Engineered; #Industrial; #Cooling tower; #Environmental; #Aquatic
+Fusarium redolens,No,,,,,,,
+Aspergillus foetidus,No,,,,,,,
+Aspergillus giganteus,No,,,,,,,
+Asteromyces cruciatus,No,,,,,,,
+Aspergillus nidulans,No,,,,,,,
+Sarcina aurantiaca,No,,,,,,,
+Sarocladium strictum,No,,,,,,,
+Staphylococcus epidermidis,Yes,14529,https://bacdive.dsmz.de/strain/14529,37; 15,,facultative anaerobe,positive; coccus-shaped,#Host Body-Site; #Organ; #Nose
+Sinomonas sp.,Yes,23359,https://bacdive.dsmz.de/strain/23359,37,,,,
+Rhodococcus opacus,Yes,11044,https://bacdive.dsmz.de/strain/11044,30; 28,,aerobe,positive; rod-shaped,#Engineered; #Contamination; #Environmental; #Terrestrial; #Soil
+Stachybotrys chartarum,No,,,,,,,
+Arthrinium sacchari,No,,,,,,,
+Amycolatopsis rugosa,Yes,13315,https://bacdive.dsmz.de/strain/13315,28; 30,,obligate aerobe,positive; rod-shaped,"#Host; #Mammals; #Bovinae (Cow, Cattle); #Host Body-Site; #Organ; #Rumen"
+Amycolatopsis sulphurea,Yes,13223,https://bacdive.dsmz.de/strain/13223,28,,aerobe,,#Environmental; #Terrestrial; #Soil; #Engineered; #Agriculture; #Garden
+Aequorivita viscosa,Yes,24014,https://bacdive.dsmz.de/strain/24014,28; 30,,aerobe,negative; 4.25 µm; 2 µm,#Environmental; #Terrestrial; #Tidal flat; #Host; #Plants; #Aquatic plant
+Aequorivita vladivostokensis,Yes,139663,https://bacdive.dsmz.de/strain/139663,25; 5; 41; 45,,obligate aerobe,negative; rod-shaped,Troitsa bay; Sea of Japan; RUS; Holothurian (Apostichopus japonicus) collected from Troitsa Bay in the Gulf of Peter the Great
+Steroidobacter cummioxidans,Yes,158252,https://bacdive.dsmz.de/strain/158252,28,,obligate aerobe,negative,
+Stenotrophomonas panacihumi,Yes,155979,https://bacdive.dsmz.de/strain/155979,30,,aerobe,negative,#Engineered; #Agriculture; #Field; #Environmental; #Terrestrial; #Soil
+Stenotrophomonas pavanii,Yes,17570,https://bacdive.dsmz.de/strain/17570,28; 28.5,,obligate aerobe,negative; rod-shaped,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Stem (Branch)"
+Streptomyces ciscaucasicus,Yes,15068,https://bacdive.dsmz.de/strain/15068,28,,facultative anaerobe,,#Environmental; #Terrestrial; #Soil
+Streptomyces cyaneogriseus,Yes,127799,https://bacdive.dsmz.de/strain/127799,,,,,
+Streptomyces ascomycinicus,Yes,16468,https://bacdive.dsmz.de/strain/16468,28; 30; 10; 41; 45,,obligate aerobe,positive; rod-shaped,#Environmental; #Terrestrial; #Soil
+Streptomyces avidinii,Yes,15040,https://bacdive.dsmz.de/strain/15040,28; 30,,aerobe,,Soil; soil
+Streptomyces badius,Yes,15046,https://bacdive.dsmz.de/strain/15046,28,,facultative anaerobe,positive,#Environmental; #Terrestrial; #Soil
+Arthrobacter oryzae,Yes,7618,https://bacdive.dsmz.de/strain/7618,28,,aerobe,positive; rod-shaped,#Environmental; #Terrestrial; #Soil; #Engineered; #Agriculture; #Field
+Fulvifomes sp.,No,,,,,,,
+Fusarium moniliforme,No,,,,,,,
+Matsuebacter chitosanotabidus,No,,,,,,,
+Memnoniella echinata,No,,,,,,,
+Lysinibacillus sp.,Yes,1541,https://bacdive.dsmz.de/strain/1541,28,,,,#Engineered; #Built environment; #Clean room
+Lysinibacillus xylanilyticus,Yes,1540,https://bacdive.dsmz.de/strain/1540,30,,aerobe,positive; 4 µm; 0.9 µm,#Environmental; #Terrestrial; #Forest
+Microbacterium flavum,Yes,7438,https://bacdive.dsmz.de/strain/7438,28,,obligate aerobe,,#Environmental; #Aquatic; #Marine; #Host; #Invertebrates (Other); #Tunicata
+Laceyella sacchari,Yes,16741,https://bacdive.dsmz.de/strain/16741,50; 55; 28; 65; 35; 30,,aerobe,positive,#Host; #Plants; #Decomposing plant; #Engineered; #Industrial; #Industrial production
+Lederbergia lenta,Yes,139166,https://bacdive.dsmz.de/strain/139166,30; 45; 55,,obligate aerobe,positive; rod-shaped,
+Klebsiella pneumoniae,Yes,4946,https://bacdive.dsmz.de/strain/4946,30,,,,#Engineered; #Waste; #Wastewater
+Laetisaria arvalis,No,,,,,,,
+Lecanicillium araneicola,No,,,,,,,
+Gracilibacillus sp.,Yes,132742,https://bacdive.dsmz.de/strain/132742,30,,,,#Environmental; #Terrestrial; #Soil; #Condition; #Saline
+Gloeophyllum trabeum,No,,,,,,,
+Thelebolus globosus,No,,,,,,,
+Trichaptum abietinum,No,,,,,,,
+Actinomycetes bacterium,No,,,,,,,
+Vibrio parahaemolyticus,Yes,179114,https://bacdive.dsmz.de/strain/179114,,,,,
+Vibrio gazogenes,Yes,17322,https://bacdive.dsmz.de/strain/17322,28; 25; 5; 41,,aerobe,negative,#Environmental; #Aquatic; #Marine; #Terrestrial; #Mud (Sludge)
+Thermobifida halotolerans,Yes,11261,https://bacdive.dsmz.de/strain/11261,37; 30,,aerobe,positive,#Condition; #Saline
+Trichoderma viride,No,,,,,,,
+Tropicoporus linteus,No,,,,,,,
+Absidia sp.,No,,,,,,,
+Vibrio alginolyticus,Yes,17256,https://bacdive.dsmz.de/strain/17256,30; 25; 37; 5,,facultative anaerobe,negative,#Engineered; #Food production; #Food; #Host; #Other; #Decomposing animal
+Verticillium leptobactrum,No,,,,,,,
+Yokenella regensburgei,Yes,137687,https://bacdive.dsmz.de/strain/137687,30; 5; 37,,facultative anaerobe,negative; rod-shaped,Germany; DEU; Europe; Intestinal flora of insect (Pyrrhcoris apterus)
+Abortiporus biennis,No,,,,,,,
+Acetobacterium sp.,Yes,5403,https://bacdive.dsmz.de/strain/5403,30,,anaerobe,,#Environmental; #Terrestrial; #Mud (Sludge)
+Trichoderma fomiticola,No,,,,,,,
+Trichoderma hamatum,No,,,,,,,
+Trichoderma lixii,No,,,,,,,
+Trichoderma virens,No,,,,,,,
+Trichothecium roseum,No,,,,,,,
+Thermopolyspora flexuosa,Yes,16630,https://bacdive.dsmz.de/strain/16630,45; 28; 30; 5; 15; 22,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Thyrostroma jaczewskii,No,,,,,,,
+Thermobacillus composti,Yes,11666,https://bacdive.dsmz.de/strain/11666,50,,aerobe,negative; 3.5 µm; 0.6 µm,#Engineered; #Biodegradation; #Composting; #Bioreactor
+Aliishimia ponticola,Yes,166218,https://bacdive.dsmz.de/strain/166218,10; 40; 4; 45,,aerobe,negative; rod-shaped,seawater; Jeju island on the South Sea; Republic of Korea; KOR
+Alkalihalobacillus algicola,Yes,136911,https://bacdive.dsmz.de/strain/136911,30; 10; 45; 55,,aerobe,filament-shaped; positive,"Pacific Ocean, Kuril Islands; From degraded thallus of  Brown alga, `Fucus evanescens`; Kuril Islands, Pacific ocean; Pacific Ocean"
+Alkalihalobacillus hwajinpoensis,Yes,1229,https://bacdive.dsmz.de/strain/1229,30; 32.5,,anaerobe,positive; 2.75 µm; 0.6 µm,#Engineered; #Contamination; #Heavy metal; #Environmental; #Terrestrial; #Mud (Sludge)
+Alternaria Solani,No,,,,,,,
+Alternaria brassicae,No,,,,,,,
+Alternaria chlamydospora,No,,,,,,,
+Albosynnema elegans,No,,,,,,,
+Streptomyces swartbergensis,Yes,168364,https://bacdive.dsmz.de/strain/168364,,,obligate aerobe,,
+Streptomyces thermocarboxydovorans,Yes,16343,https://bacdive.dsmz.de/strain/16343,45; 10,,obligate aerobe,positive,#Engineered; #Agriculture; #Garden; #Environmental; #Terrestrial; #Soil
+Streptomyces thermogriseus,Yes,16348,https://bacdive.dsmz.de/strain/16348,50,,obligate aerobe,,#Environmental; #Aquatic; #Thermal spring; #Condition; #Thermophilic (>45°C)
+Streptomyces thermonitrificans,Yes,16051,https://bacdive.dsmz.de/strain/16051,50,,aerobe,,"#Host; #Mammals; #Bovinae (Cow, Cattle); #Host Body Product; #Gastrointestinal tract; #Feces (Stool)"
+Streptomyces thermoviolaceus,Yes,127867,https://bacdive.dsmz.de/strain/127867,,,,,
+Streptomyces hypolithicus,Yes,16459,https://bacdive.dsmz.de/strain/16459,28; 22,,,Sand yellow; 10-14 days; ISP 2,#Environmental; #Terrestrial; #Geologic; #Soil
+Streptomyces lydicus,Yes,15391,https://bacdive.dsmz.de/strain/15391,28,,aerobe,positive,#Environmental; #Terrestrial; #Soil
+Thermoanaerobacter sp.,Yes,16805,https://bacdive.dsmz.de/strain/16805,70,,anaerobe,,#Environmental; #Aquatic; #Terrestrial; #Mud (Sludge); #Condition
+Terracoccus luteus,Yes,6291,https://bacdive.dsmz.de/strain/6291,28; 30; 41; 45,,obligate aerobe,positive; coccus-shaped,#Environmental; #Terrestrial; #Soil
+Terribacillus saccharophilus,Yes,1517,https://bacdive.dsmz.de/strain/1517,30,,aerobe,positive; 1.75 µm; 0.55 µm,#Environmental; #Aquatic; #Marine; #Surface water
+Streptomyces thermovulgaris,Yes,16051,https://bacdive.dsmz.de/strain/16051,50,,aerobe,,"#Host; #Mammals; #Bovinae (Cow, Cattle); #Host Body Product; #Gastrointestinal tract; #Feces (Stool)"
+Streptomyces werraensis,Yes,16127,https://bacdive.dsmz.de/strain/16127,28,,aerobe,,
+Streptomyces sp.,No,,,,,,,
+Talaromyces islandicus,No,,,,,,,
+Talaromyces minioluteus,No,,,,,,,
+Streptomyces rochei,Yes,16190,https://bacdive.dsmz.de/strain/16190,28,,facultative anaerobe,positive,Soil; Pamir; USSR
+Alteromonas oceani,Yes,158616,https://bacdive.dsmz.de/strain/158616,4; 50; 28,,aerobe,negative; 1.5-2.5 µm; 0.3-0.8 µm,#Environmental; #Aquatic; #Hydrothermal vent; #Marine
+Stemphylium vesicarium,No,,,,,,,
+Stenotrophomonas geniculata,No,,,,,,,
+Stenotrophomonas humi,Yes,17566,https://bacdive.dsmz.de/strain/17566,28; 26; 30,,aerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Soil
+Talaromyces pinophilus,No,,,,,,,
+Talaromyces rugulosus,No,,,,,,,
+Talaromyces variabilis,No,,,,,,,
+Terrabacter tumescens,Yes,6285,https://bacdive.dsmz.de/strain/6285,28; 25; 30; 10; 41; 45,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Grammothele fuligo,No,,,,,,,
+Gymnopilus junonius,No,,,,,,,
+Geonectria subalpina,No,,,,,,,
+Geotrichum candidum,No,,,,,,,
+Gibellulopsis nigrescens,No,,,,,,,
+Gliocladium roseum,No,,,,,,,
+Gloeophyllum abietinum,No,,,,,,,
+Gloeophyllum odoratum,No,,,,,,,
+Halomonas cerina,Yes,6067,https://bacdive.dsmz.de/strain/6067,28; 26,,aerobe,negative; 2.35 µm; 0.8 µm,#Environmental; #Terrestrial; #Soil; #Condition; #Saline
+Halomonas denitrificans,Yes,6049,https://bacdive.dsmz.de/strain/6049,28; 30,,aerobe,negative; 1.2-1.6 µm; 0.6-0.8 µm,#Condition; #Saline
+Halomonas gudaonensis,Yes,6054,https://bacdive.dsmz.de/strain/6054,28; 30,,aerobe,negative; 1.2 µm; 0.35 µm,#Engineered; #Contamination; #Oil (Fuel); #Environmental; #Terrestrial; #Soil
+Halomonas maura,Yes,6030,https://bacdive.dsmz.de/strain/6030,28; 30; 5; 15,,obligate anaerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Soil; #Condition; #Saline
+Halomonas pacifica,Yes,6017,https://bacdive.dsmz.de/strain/6017,26; 25; 5; 45,,obligate aerobe,negative; rod-shaped,#Environmental; #Aquatic; #Marine
+Gloeophyllum striatum,No,,,,,,,
+Gongronella sp.,No,,,,,,,
+Gordonia desulfuricans,Yes,10602,https://bacdive.dsmz.de/strain/10602,28; 30,,facultative anaerobe,positive,#Environmental; #Terrestrial; #Soil
+Halopseudomonas formosensis,Yes,133985,https://bacdive.dsmz.de/strain/133985,30,,,negative; 1.7 µm; 0.8 µm,#Engineered; #Food production; #Food
+Halopseudomonas pelagia,Yes,13176,https://bacdive.dsmz.de/strain/13176,25; 28,,aerobe,negative; 1.9 µm; 0.45 µm,#Host; #Algae; #Green algae; #Condition; #Psychrophilic (<10°C); #Climate
+Halopseudomonas yangmingensis,Yes,130581,https://bacdive.dsmz.de/strain/130581,37,,obligate aerobe,negative,#Environmental; #Aquatic; #Thermal spring; #Terrestrial; #Soil
+Hamadaea flava,Yes,132477,https://bacdive.dsmz.de/strain/132477,28,,aerobe,positive,#Environmental; #Terrestrial; #Soil
+Hamadaea sp.,Yes,159674,https://bacdive.dsmz.de/strain/159674,28,,,,#Environmental; #Terrestrial; #Soil; #Host Body-Site; #Plant; #Rhizosphere
+Exiguobacterium sibiricum,Yes,18118,https://bacdive.dsmz.de/strain/18118,28; 30,,aerobe,positive; oval-shaped,#Host; #Arthropoda; #Crustacea
+Exiguobacterium undae,Yes,18108,https://bacdive.dsmz.de/strain/18108,28; 18; 37; 45,,aerobe,rod-shaped; peritrichous,#Engineered; #Agriculture; #Garden; #Environmental; #Aquatic; #Pond (small)
+Halobyssothecium obiones,No,,,,,,,
+Inonotus hispidus,No,,,,,,,
+Janthinobacterium sp.,Yes,127839,https://bacdive.dsmz.de/strain/127839,,,,,
+Heterobasidion sp.,No,,,,,,,
+Hydropisphaera saulensis,No,,,,,,,
+Hymenomonas globosa,No,,,,,,,
+Hypocrea sp.,No,,,,,,,
+Hypocreales sp.,No,,,,,,,
+Hypomyces luteovirens,No,,,,,,,
+Kocuria palustris,Yes,7643,https://bacdive.dsmz.de/strain/7643,30; 28; 10; 41; 45,,aerobe,positive; coccus-shaped,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Rhizosphere"
+Kocuria sp.,Yes,7651,https://bacdive.dsmz.de/strain/7651,28,,,,#Environmental; #Aquatic; #Marine; #Sediment
+Kribbella albertanoniae,Yes,24247,https://bacdive.dsmz.de/strain/24247,28,,obligate aerobe,positive,#Environmental; #Biofilm; #Terrestrial; #Geologic
+Kutzneria sp.,No,,,,,,,
+Microbacterium oleivorans,Yes,7420,https://bacdive.dsmz.de/strain/7420,28; 33.5; 30; 41; 45,,aerobe,positive; rod-shaped,#Engineered; #Built environment; #Container (Reservoir); #Industrial; #Oil reservoir
+Microbacterium paraoxydans,Yes,7414,https://bacdive.dsmz.de/strain/7414,37; 10; 41; 45,,aerobe,positive; rod-shaped,#Infection; #Patient; #Host; #Human; #Child; #Host Body Product
+Microbacterium radiodurans,Yes,7454,https://bacdive.dsmz.de/strain/7454,28,,aerobe,positive; 0.5-0.8 µm; 0.4-0.6 µm,#Environmental; #Terrestrial; #Sandy
+Microbacterium sp.,Yes,143844,https://bacdive.dsmz.de/strain/143844,,,,,#Host; #Human; #Host Body Product; #Fluids; #Urine
+Leptobacillium leptobactrum,No,,,,,,,
+Leptosphaeria sp.,No,,,,,,,
+Leucobacter sp.,Yes,103237,https://bacdive.dsmz.de/strain/103237,,,,,
+Lactobacillus paracasei,Yes,162870,https://bacdive.dsmz.de/strain/162870,30,,,,
+Lactobacillus sp.,Yes,6528,https://bacdive.dsmz.de/strain/6528,30; 37; 10; 45,,facultative anaerobe,positive; rod-shaped,#Engineered; #Food production; #Meat
+Lasionectria martinicensis,No,,,,,,,
+Leiotrametes menziesii,No,,,,,,,
+Lentinus tigrinus,No,,,,,,,
+Limnospira indica,No,,,,,,,
+Linnemannia gamsii,No,,,,,,,
+Lophiostoma arundinis,No,,,,,,,
+Lulwoana uniseptata,No,,,,,,,
+Lentzea albidocapillata,Yes,13309,https://bacdive.dsmz.de/strain/13309,28; 37; 30; 10; 15; 45,,aerobe,positive; rod-shaped,#Infection; #Patient; #Specimen; #Host; #Human; #Female
+Lentzea waywayandensis,Yes,13308,https://bacdive.dsmz.de/strain/13308,28,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Lenzites warnieri,No,,,,,,,
+Lepista nuda,No,,,,,,,
+Fusarium subglutinans,No,,,,,,,
+Fusarium tricinctum,No,,,,,,,
+Fuscoporia sp.,No,,,,,,,
+Haploporus alabamae,No,,,,,,,
+Herbihabitans rhizosphaerae,Yes,132633,https://bacdive.dsmz.de/strain/132633,28,,aerobe,positive; rod-shaped,"#Environmental; #Terrestrial; #Soil; #Host; #Plants; #Herbaceous plants (Grass,Crops)"
+Hericium erinaceus,No,,,,,,,
+Lichtheimia ramosa,No,,,,,,,
+Lichtheimia sp.,No,,,,,,,
+Fusarium fujikuroi,No,,,,,,,
+Flammulina velutipes,No,,,,,,,
+Fomes meliae,No,,,,,,,
+Fomitiporia neotropica,No,,,,,,,
+Eupenicillium rubidurum,No,,,,,,,
+Eutypa sp.,No,,,,,,,
+Eutypella sp.,No,,,,,,,
+Exiguobacterium marinum,Yes,18111,https://bacdive.dsmz.de/strain/18111,28; 30,,facultative anaerobe,"rod-shaped; monotrichous, polar",#Environmental; #Terrestrial; #Tidal flat
+Malassezia sp.,No,,,,,,,
+Malbranchea cinnamomea,No,,,,,,,
+Desulfovibrio desulfuricans,Yes,4073,https://bacdive.dsmz.de/strain/4073,30; 37,,anaerobe,negative,#Engineered; #Industrial; #Engineered product; #Environmental; #Terrestrial; #Sandy
+Diaporthe italiana,No,,,,,,,
+Fusarium proliferatum,No,,,,,,,
+Fomitopsis pinicola,No,,,,,,,
+Fomitopsis sp.,No,,,,,,,
+Fusarium avenaceum,No,,,,,,,
+Methylobacterium radiotolerans,Yes,7152,https://bacdive.dsmz.de/strain/7152,28; 30,,aerobe,negative,#Host Body-Site; #Plant; #Fruit (Seed)
+Meyerozyma caribbica,No,,,,,,,
+Marinobacter algicola,Yes,482,https://bacdive.dsmz.de/strain/482,28; 30,,aerobe,negative; 1.6-2.5 µm; 0.45-0.55 µm,#Engineered; #Laboratory; #Lab enrichment; #Host; #Protozoa; #Dinoflagellate
+Marinobacter gudaonensis,Yes,488,https://bacdive.dsmz.de/strain/488,30; 27.5,,,negative; 1.5 µm; 0.4 µm,#Engineered; #Contamination; #Oil (Fuel); #Environmental; #Terrestrial; #Soil
+Marinobacter sediminum,Yes,479,https://bacdive.dsmz.de/strain/479,28; 43,,aerobe,negative; 1.8-2.5 µm; 0.3-0.4 µm,#Environmental; #Aquatic; #Marine; #Terrestrial; #Coast
+Massilia sp.,Yes,11316,https://bacdive.dsmz.de/strain/11316,30,,,,#Environmental; #Terrestrial; #Soil
+Metacordyceps chlamydosporia,No,,,,,,,
+Lysinibacillus sphaericus,Yes,173622,https://bacdive.dsmz.de/strain/173622,,,,positive; rod-shaped,"Human, Blood; Homo sapiens; Gironde; France; FRA"
+Microbispora,Yes,16975,https://bacdive.dsmz.de/strain/16975,28; 30; 5; 15,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Microbispora catharanthi,Yes,163696,https://bacdive.dsmz.de/strain/163696,28,,obligate aerobe,positive,"Root ofCatharanthus roseusfrom the botanical garden; Catharanthus roseus; Fac. of Pharm. Sci., Chulalongkorn Univ., Bangkok; Thailand; THA"
+Microbispora oryzae,Yes,169811,https://bacdive.dsmz.de/strain/169811,,,,,
+Microbispora rosea,Yes,160875,https://bacdive.dsmz.de/strain/160875,28,,obligate aerobe,positive,"Alluvial paddy field soil; Aikawa, Yamanashi Pref.; Japan; JPN; Asia"
+Metarhizium anisopliae,No,,,,,,,
+Metarhizium marquandii,No,,,,,,,
+Metarhizium robertsii,No,,,,,,,
+Methylobacterium fujisawaense,Yes,7166,https://bacdive.dsmz.de/strain/7166,30,,aerobe,negative; rod-shaped,Japan; JPN; Asia
+Niallia circulans,Yes,134969,https://bacdive.dsmz.de/strain/134969,30,,facultative anaerobe,positive; rod-shaped,Bordeaux; France; FRA; Europe
+Nocardia asteroides,Yes,10640,https://bacdive.dsmz.de/strain/10640,28; 30; 45,,aerobe,positive; rod-shaped,
+Nocardia farcinica,Yes,10669,https://bacdive.dsmz.de/strain/10669,37; 30; 10,,obligate aerobe,positive; rod-shaped,#Host Body-Site; #Limb; #Foot; #Infection; #Disease
+Nocardioidaceae bacterium,No,,,,,,,
+Nocardioides marinus,Yes,11126,https://bacdive.dsmz.de/strain/11126,28,,aerobe,positive; 1-1.8 µm; 0.4-0.6 µm,#Environmental; #Aquatic; #Marine
+Nocardioides zeae,Yes,24254,https://bacdive.dsmz.de/strain/24254,28; 30,,obligate aerobe,positive,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Stem (Branch)"
+Neosartorya fischeri,No,,,,,,,
+Neosetophoma poaceicola,No,,,,,,,
+Micromonospora echinospora,Yes,128414,https://bacdive.dsmz.de/strain/128414,,,,,
+Micromonospora lutea,Yes,8030,https://bacdive.dsmz.de/strain/8030,28,,aerobe,positive,#Environmental; #Aquatic; #Mangrove; #Sediment
+Micromonospora qiuiae,Yes,8033,https://bacdive.dsmz.de/strain/8033,28,,aerobe,positive,#Environmental; #Aquatic; #Mangrove; #Terrestrial; #Soil
+Micromonospora rifamycinica,Yes,8010,https://bacdive.dsmz.de/strain/8010,28,,aerobe,positive,#Environmental; #Aquatic; #Mangrove; #Marine
+Microbispora rosea subsp. Aerata,Yes,16512,https://bacdive.dsmz.de/strain/16512,37,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Microbispora triticiradicis,Yes,160812,https://bacdive.dsmz.de/strain/160812,28,,aerobe,positive; 0.96-1.54 µm; 0.92-1.43 µm,"Ear of wheat; Henan province, Zhumadian (32° 98' N, 114° 02' E); China; CHN; Asia"
+Micrococcus lylae,Yes,7748,https://bacdive.dsmz.de/strain/7748,37; 30; 28,,aerobe,positive; coccus-shaped,"#Host; #Human; #Host Body-Site; #Organ; #Skin, Nail, Hair"
+Micrococcus mucilaginosus,No,,,,,,,
+Micromonospora saelicesensis,Yes,8001,https://bacdive.dsmz.de/strain/8001,28,,aerobe,positive,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Root nodule"
+Micromonospora taraxaci,Yes,130444,https://bacdive.dsmz.de/strain/130444,28,,obligate aerobe,positive,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Root (Rhizome)"
+Micromonospora viridifaciens,Yes,7996,https://bacdive.dsmz.de/strain/7996,28,,obligate aerobe,positive; rod-shaped,#Environmental; #Terrestrial; #Soil
+Microporus sp.,No,,,,,,,
+Moesziomyces antarcticus,No,,,,,,,
+Micromonospora acroterricola,Yes,166243,https://bacdive.dsmz.de/strain/166243,28,,aerobe,positive; 0.7-1.2 µm,"surface sample of a high altitude soil; 2012-11; Cerro Chajnantor, near San Pedro de Atacama; Chile; CHL"
+Micromonospora carbonacea,Yes,7883,https://bacdive.dsmz.de/strain/7883,28,,facultative anaerobe,,#Environmental; #Terrestrial; #Soil
+Micromonospora craterilacus,Yes,166130,https://bacdive.dsmz.de/strain/166130,28,,aerobe,positive,coastal sediment; 2013-11-01; Nemrut Lake; Turkey; TUR
+Marasmiellus ramealis,No,,,,,,,
+Marasmius oreades,No,,,,,,,
+Monascus sp.,No,,,,,,,
+Monocillium mucidum,No,,,,,,,
+Morinia sp.,No,,,,,,,
+Moritella sp.,Yes,24229,https://bacdive.dsmz.de/strain/24229,5,,,,#Environmental; #Aquatic; #Marine
+Mortierella alpina,No,,,,,,,
+Mortierella lignicola,No,,,,,,,
+Enterobacter asburiae,Yes,4374,https://bacdive.dsmz.de/strain/4374,30; 37; 5,,facultative anaerobe,negative; rod-shaped,#Host Body Product; #Fluids; #Urogenital tract; #Vaginal secretion
+Enterobacter hormaechei subsp. Xiangfangensis,Yes,132178,https://bacdive.dsmz.de/strain/132178,30,,aerobe,negative,#Engineered; #Food production; #Fermented
+Enterobacter ludwigii,Yes,4372,https://bacdive.dsmz.de/strain/4372,37; 30; 5,,aerobe,negative; rod-shaped,#Host Body Product; #Fluids; #Urine
+Dichomitus squalens,No,,,,,,,
+Dichostereum effuscatum,No,,,,,,,
+Didymella pinodella,No,,,,,,,
+Didymella sp.,No,,,,,,,
+Diutina rugosa,No,,,,,,,
+Enterovibrio sp.,Yes,157681,https://bacdive.dsmz.de/strain/157681,28,,,negative,#Host; #Arthropoda; #Crustacea; #Host Body-Site; #Gastrointestinal tract; #Stomach
+Epicoccum dendrobii,No,,,,,,,
+Epicoccum duchesneae,No,,,,,,,
+Epicoccum sorghinum,No,,,,,,,
+Epicoccum tritici,No,,,,,,,
+Escherichia coli,Yes,4907,https://bacdive.dsmz.de/strain/4907,37; 30; 5,,facultative anaerobe,negative; rod-shaped,#Host Body Product; #Fluids; #Urine
+Embarria clematidis,No,,,,,,,
+Enterobacter agglomerans,Yes,127833,https://bacdive.dsmz.de/strain/127833,,,,,
+Neocamarosporium sp.,No,,,,,,,
+Neodidymelliopsis longicolla,No,,,,,,,
+Neodidymelliopsis sp.,No,,,,,,,
+Mucor circinelloides,No,,,,,,,
+Murilentithecium clematidis,No,,,,,,,
+Mycena galericulata,No,,,,,,,
+Coniochaeta hoffmannii,No,,,,,,,
+Coniochaeta sp.,No,,,,,,,
+Neosetophoma rosigena,No,,,,,,,
+Neosetophoma sp.,No,,,,,,,
+Nesiotobacter exalbescens,Yes,13683,https://bacdive.dsmz.de/strain/13683,28; 45; 30; 5; 10; 37; 41,,aerobe,negative; rod-shaped,#Environmental; #Aquatic; #Condition; #Saline
+Nia vibrissa,No,,,,,,,
+Mycosphaerella lateris,No,,,,,,,
+Myrothecium gramineum,No,,,,,,,
+Neisseria sp.,Yes,10468,https://bacdive.dsmz.de/strain/10468,30,,microaerophile,negative,#Host; #Human; #Host Body-Site; #Oral cavity and airways; #Throat
+Neocamarosporium solicola,No,,,,,,,
+Novosphingobium sp.,Yes,132095,https://bacdive.dsmz.de/strain/132095,28,,obligate aerobe,negative,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Leaf (Phyllosphere)"
+Ochrobactrum intermedium,Yes,1888,https://bacdive.dsmz.de/strain/1888,30; 37,,aerobe,rod-shaped; lophotrichous,#Host; #Human; #Host Body Product; #Fluids; #Blood
+Penicillium janthinellum,No,,,,,,,
+Penicillium pinophilum,No,,,,,,,
+Penicillium polonicum,No,,,,,,,
+Penicillium restrictum,No,,,,,,,
+Penicillium crustosum,No,,,,,,,
+Penicillium daleae,No,,,,,,,
+Ophiosimulans tanaceti,No,,,,,,,
+Oscillatoria subbrevis,No,,,,,,,
+Paecilomyces lilacinus,No,,,,,,,
+Nocardiopsis sp.,Yes,160821,https://bacdive.dsmz.de/strain/160821,28,,,,marine sediments; South China Sea; China; CHN; Asia
+Nodulosphaeria multiseptata,No,,,,,,,
+Nonomuraea fastidiosa,Yes,16536,https://bacdive.dsmz.de/strain/16536,28; 30; 5; 15,,obligate aerobe,positive; rod-shaped,#Environmental; #Terrestrial; #Mud (Sludge); #Aquatic; #Thermal spring
+Nonomuraea terrinata,Yes,16559,https://bacdive.dsmz.de/strain/16559,28,,,,#Environmental; #Terrestrial; #Soil
+Nothophoma quercina,No,,,,,,,
+Paractinoplanes rishiriensis,Yes,23113,https://bacdive.dsmz.de/strain/23113,28,,obligate aerobe,,#Environmental; #Terrestrial; #Soil
+Paractinoplanes tereljensis,Yes,7844,https://bacdive.dsmz.de/strain/7844,28; 24,,aerobe,positive,#Environmental; #Terrestrial; #Soil
+Paradendryphiella arenariae,No,,,,,,,
+Paenibacillus macerans,Yes,11475,https://bacdive.dsmz.de/strain/11475,30; 37; 10,,aerobe,negative; rod-shaped,
+Paenibacillus urinalis,Yes,11630,https://bacdive.dsmz.de/strain/11630,35; 33.5; 37,,facultative anaerobe,negative; 3.2 µm; 1 µm,#Host; #Human; #Female; #Host Body Product; #Fluids; #Urine
+Panaeolus sphinctrinus,No,,,,,,,
+Paracoccus aminophilus,Yes,13714,https://bacdive.dsmz.de/strain/13714,30; 5; 10,,obligate aerobe,negative,#Environmental; #Terrestrial; #Soil
+Ochrobactrum oryzae,Yes,1887,https://bacdive.dsmz.de/strain/1887,28; 30,,aerobe,negative; 1.4 µm; 0.8 µm,#Environmental; #Aquatic; #Host Body-Site; #Plant; #Root (Rhizome); #Host
+Dermacpccis sp.,No,,,,,,,
+Mycena sanguinolenta,No,,,,,,,
+Mycobacterium sp.,Yes,8334,https://bacdive.dsmz.de/strain/8334,28; 30; 10; 45,,obligate aerobe,rod-shaped,#Environmental; #Terrestrial; #Soil
+Mycosphaerella arachidis,No,,,,,,,
+Paracoccus sp.,Yes,13699,https://bacdive.dsmz.de/strain/13699,30,,,,"#Host; #Mammals; #Bovinae (Cow, Cattle); #Host Body Product; #Gastrointestinal tract; #Feces (Stool)"
+Paractinoplanes deccanensis,Yes,7802,https://bacdive.dsmz.de/strain/7802,28,,obligate aerobe,,Soil; Decca; India; IND; Asia
+Paractinoplanes durhamensis,Yes,7832,https://bacdive.dsmz.de/strain/7832,28,,obligate aerobe,positive,#Environmental; #Aquatic; #Sediment; #Terrestrial
+Paractinoplanes polyasparticus,Yes,170355,https://bacdive.dsmz.de/strain/170355,,,,,
+Curvularia senegalensis,No,,,,,,,
+Coprinopsis lagopus,No,,,,,,,
+Cordyceps confragosa,No,,,,,,,
+Cosmospora sp.,No,,,,,,,
+Colletotrichum theobromicola,No,,,,,,,
+Collimonas arenae,Yes,11310,https://bacdive.dsmz.de/strain/11310,28; 20,,obligate aerobe,negative,#Environmental; #Terrestrial; #Grassland; #Soil
+Collimonas pratensis,Yes,11311,https://bacdive.dsmz.de/strain/11311,28; 20,,obligate aerobe,negative,#Environmental; #Terrestrial; #Grassland; #Soil
+Parathyridaria sp.,No,,,,,,,
+Dactylosporangium aurantiacum,Yes,7869,https://bacdive.dsmz.de/strain/7869,28,,obligate aerobe,,#Environmental; #Terrestrial; #Soil
+Dactylosporangium matsuzakiense,Yes,7871,https://bacdive.dsmz.de/strain/7871,28,,obligate aerobe,,#Environmental; #Terrestrial; #Soil
+Dactylosporangium siamense,Yes,24209,https://bacdive.dsmz.de/strain/24209,28; 29,,obligate aerobe,positive; ovoid-shaped,#Environmental; #Terrestrial; #Forest; #Soil
+Dactylosporangium sp.,Yes,128340,https://bacdive.dsmz.de/strain/128340,,,,,
+Dactylosporangium sucinum,Yes,159617,https://bacdive.dsmz.de/strain/159617,28,,obligate aerobe,positive,#Environmental; #Terrestrial; #Forest; #Soil
+Dactylosporangium vinaceum,Yes,7871,https://bacdive.dsmz.de/strain/7871,28,,obligate aerobe,,#Environmental; #Terrestrial; #Soil
+Cunninghamella sp.,No,,,,,,,
+Curvularia protuberata,No,,,,,,,
+Penicillium aurantiogriseum,No,,,,,,,
+Penicillium chermesinum,No,,,,,,,
+Paraglaciecola sp.,No,,,,,,,
+Parasarocladium sp.,No,,,,,,,
+Cladosporium asperulatum,No,,,,,,,
+Cladosporium basi-inflatum,No,,,,,,,
+Cyathus pallidus,No,,,,,,,
+Cytospora ceratosperma,No,,,,,,,
+Penicillium echinulatum,No,,,,,,,
+Penicillium glabrum,No,,,,,,,
+Penicillium granulatum,No,,,,,,,
+Penicillium griseofulvum,No,,,,,,,
+Peethambara spirostriata,No,,,,,,,
+Pelobacter venetianus,Yes,4220,https://bacdive.dsmz.de/strain/4220,30,,anaerobe,,#Environmental; #Terrestrial; #Mud (Sludge)
+Pelosinus fermentans,Yes,17204,https://bacdive.dsmz.de/strain/17204,25,,anaerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Geologic
+Penicillium adametzii,No,,,,,,,
+Cladosporium xanthochromaticum,No,,,,,,,
+Cladosporium xylophilum,No,,,,,,,
+Clonostachys buxi,No,,,,,,,
+Clonostachys pnagiana,No,,,,,,,
+Cladosporium funiculosum,No,,,,,,,
+Cladosporium montecillanum,No,,,,,,,
+Cladosporium perangustum,No,,,,,,,
+Cladosporium ramotenellum,No,,,,,,,
+Phellinus robustus,No,,,,,,,
+Penicillium variabile,No,,,,,,,
+Perenniporia martia,No,,,,,,,
+Burkholderia vietnamiensis,Yes,1939,https://bacdive.dsmz.de/strain/1939,28; 30; 37; 5; 10,,aerobe,negative; rod-shaped,"#Environmental; #Terrestrial; #Soil; #Host; #Plants; #Herbaceous plants (Grass,Crops)"
+Clonostachys sp.,No,,,,,,,
+Clostridium hathewayi,Yes,2808,https://bacdive.dsmz.de/strain/2808,37,,anaerobe,positive; rod-shaped,#Host; #Human; #Host Body Product; #Gastrointestinal tract; #Feces (Stool)
+Cobetia sp.,Yes,163076,https://bacdive.dsmz.de/strain/163076,25,,,,
+Cochliobolus sp.,No,,,,,,,
+Phlebia radiata,No,,,,,,,
+Phormidium lucidum,No,,,,,,,
+Photobacterium ganghwense,Yes,17233,https://bacdive.dsmz.de/strain/17233,28; 35; 25; 30,,facultative anaerobe,negative; 1.3-2 µm; 0.8-1.2 µm,#Environmental; #Aquatic; #Marine
+Photorhabdus luminescens,Yes,5035,https://bacdive.dsmz.de/strain/5035,28; 30; 5; 10; 41,,facultative anaerobe,negative; rod-shaped,#Host; #Invertebrates (Other); #Nematoda
+Phaeophleospora eucalypticola,No,,,,,,,
+Phaeosphaeria oryzae,No,,,,,,,
+Phaeosphaeria spartinicola,No,,,,,,,
+Phellinus apiahynus,No,,,,,,,
+Phytohabitans aurantiacus,Yes,174737,https://bacdive.dsmz.de/strain/174737,28,,,,"soil; Utoro, Shari, Hokkaido; Japan; JPN; Asia"
+Phytohabitans houttuyneae,Yes,23124,https://bacdive.dsmz.de/strain/23124,28; 30,,aerobe,positive,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Root (Rhizome)"
+Phytohabitans rumicis,Yes,23125,https://bacdive.dsmz.de/strain/23125,28; 27,,aerobe,positive,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Root (Rhizome)"
+Picochlorum maculatum,No,,,,,,,
+Piptoporus betulinus,No,,,,,,,
+Piscinibacter gummiphilus,Yes,168636,https://bacdive.dsmz.de/strain/168636,,,obligate aerobe,negative,
+Plantactinospora alkalitolerans,Yes,160111,https://bacdive.dsmz.de/strain/160111,28,,,,"marine sediment; Ordu, Balck Sea; Turkey; TUR; Asia"
+Plantactinospora endophytica,Yes,8047,https://bacdive.dsmz.de/strain/8047,28,,aerobe,positive,#Host; #Plants; #Tree; #Host Body-Site; #Plant; #Leaf (Phyllosphere)
+Pseudomonas stutzeri,Yes,12996,https://bacdive.dsmz.de/strain/12996,37; 30; 5; 10,,obligate aerobe,negative; rod-shaped,#Host Body Product; #Fluids; #Cerebrospinal fluid
+Pseudomonas subflava,Yes,175991,https://bacdive.dsmz.de/strain/175991,,,,,
+Pseudomonas syringae,Yes,12927,https://bacdive.dsmz.de/strain/12927,28; 30; 5; 41; 45,,obligate aerobe,negative; rod-shaped,#Host; #Plants; #Tree
+Pseudomonas tuomurensis,No,,,,,,,
+Pseudomonas otitidis,Yes,13113,https://bacdive.dsmz.de/strain/13113,37,,obligate aerobe,negative; rod-shaped,#Infection; #Disease; #Inflammation; #Patient
+Pseudomonas pachastrellae,Yes,13125,https://bacdive.dsmz.de/strain/13125,28; 24; 30; 5; 41,,aerobe,negative; 1.5 µm; 0.45 µm,#Environmental; #Aquatic; #Marine; #Host; #Invertebrates (Other); #Porifera (Sponges)
+Pseudomonas plecoglossicida,Yes,13086,https://bacdive.dsmz.de/strain/13086,28; 30; 5; 41,,aerobe,negative; rod-shaped,#Host; #Fishes
+Pseudomonas mandelii,Yes,13134,https://bacdive.dsmz.de/strain/13134,30; 37; 41,,aerobe,negative; rod-shaped,#Environmental; #Aquatic
+Porodaedalea pini,No,,,,,,,
+Priestia aryabhattai,Yes,1290,https://bacdive.dsmz.de/strain/1290,37; 10; 28,,obligate aerobe,positive; rod-shaped,#Engineered; #Industrial; #Engineered product; #Environmental; #Air
+Promicromonospora panici,Yes,176614,https://bacdive.dsmz.de/strain/176614,28,,,,"roots ofPanicum turgidum; Ksar Ghilane (32° 59' N, 9° 36' E); Tunisia; TUN; Africa"
+Pleospora leptosphaerulinoides,No,,,,,,,
+Pleurostoma richardsiae,No,,,,,,,
+Pleurotus pulmonarius,No,,,,,,,
+Podospora anserina,No,,,,,,,
+Pseudomonas rhodesiae,Yes,13072,https://bacdive.dsmz.de/strain/13072,30; 41; 45,,obligate aerobe,negative; rod-shaped,#Environmental; #Aquatic
+Pseudomonas amygdali,Yes,13051,https://bacdive.dsmz.de/strain/13051,27; 25; 37; 41,,obligate aerobe,negative; rod-shaped,#Host; #Plants; #Tree
+Pseudomonas azotoformans,Yes,13141,https://bacdive.dsmz.de/strain/13141,28; 25; 30; 37; 41,,aerobe,negative; rod-shaped,"#Engineered; #Agriculture; #Field; #Host; #Plants; #Herbaceous plants (Grass,Crops)"
+Pseudomonas beteli,Yes,13142,https://bacdive.dsmz.de/strain/13142,28,,obligate aerobe,negative,"#Host; #Plants; #Herbaceous plants (Grass,Crops)"
+Propionispora sp.,No,,,,,,,
+Proteus vulgaris,Yes,5069,https://bacdive.dsmz.de/strain/5069,37; 30; 5; 10; 41,,facultative anaerobe,negative; rod-shaped,
+Pseudoalteromonas lipolytica,Yes,12702,https://bacdive.dsmz.de/strain/12702,28; 25; 30,,aerobe,negative; 01-02 µm; 0.5-0.8 µm,#Environmental; #Aquatic; #Marine
+Polyporus arcularius,No,,,,,,,
+Polyporus tuberaster,No,,,,,,,
+Cladosporium rectoides,No,,,,,,,
+Citrobacter freundii,Yes,4325,https://bacdive.dsmz.de/strain/4325,30; 37; 5,,aerobe,negative; rod-shaped,"water of a canal; Environment, Water (channel)"
+Citrobacter sedlakii,Yes,4345,https://bacdive.dsmz.de/strain/4345,30; 37,,aerobe,negative; rod-shaped,#Host; #Human; #Host Body Product; #Gastrointestinal tract; #Feces (Stool)
+Cladosporium allicinum,No,,,,,,,
+Cladosporium antropophilum,No,,,,,,,
+Pestalotiopsis microspora,No,,,,,,,
+Pestalotiopsis thailandica,No,,,,,,,
+Pseudomassariosphaeria bromicola,No,,,,,,,
+Catellatospora bangladeshensis,Yes,7856,https://bacdive.dsmz.de/strain/7856,28,,aerobe,positive; rod-shaped,#Environmental; #Terrestrial; #Sandy; #Soil
+Catellatospora methionotrophica,Yes,7855,https://bacdive.dsmz.de/strain/7855,28; 30; 10; 37; 41; 45,,obligate aerobe,filament-shaped; positive,#Environmental; #Terrestrial; #Forest; #Soil
+Cellulomonas iranensis,Yes,2366,https://bacdive.dsmz.de/strain/2366,28; 30; 10,,facultative anaerobe,positive; rod-shaped,#Environmental; #Terrestrial; #Forest; #Soil
+Burkholderia aenigmatica,Yes,167252,https://bacdive.dsmz.de/strain/167252,,,,,
+Burkholderia ambifaria,Yes,1946,https://bacdive.dsmz.de/strain/1946,28; 30; 5; 10; 41,,aerobe,negative; rod-shaped,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Rhizosphere"
+Burkholderia gladioli,Yes,1911,https://bacdive.dsmz.de/strain/1911,30; 5,,aerobe,negative; rod-shaped,"#Host; #Plants; #Herbaceous plants (Grass,Crops)"
+Pseudomonas indica,Yes,13071,https://bacdive.dsmz.de/strain/13071,30; 5; 10,,aerobe,negative; rod-shaped,#Engineered; #Industrial; #Oil reservoir; #Environmental; #Terrestrial; #Soil
+Rheinheimera sp.,Yes,22959,https://bacdive.dsmz.de/strain/22959,28,,,,#Host; #Invertebrates (Other); #Porifera (Sponges)
+Chaetomium sp.,No,,,,,,,
+Chaetopsina pnagiana,No,,,,,,,
+Chitinimonas sp.,Yes,162131,https://bacdive.dsmz.de/strain/162131,30,,,,Freshwater sediment of Jiuxiang cave in Yiliang; Yunnan Province; China; CHN; Asia
+Caldimonas taiwanensis,Yes,168749,https://bacdive.dsmz.de/strain/168749,,,,,
+Calonectria pseudonaviculata,No,,,,,,,
+Candida antarctica,No,,,,,,,
+Candida rugosa,No,,,,,,,
+Candidatus bathyarchaeota,No,,,,,,,
+Chloroidium saccharophilum,No,,,,,,,
+Chrysebacterium nepalense,No,,,,,,,
+Chryseobacterium sp.,Yes,5519,https://bacdive.dsmz.de/strain/5519,28,,,,#Engineered; #Waste; #Activated sludge
+Chryseomonas luteola,Yes,13045,https://bacdive.dsmz.de/strain/13045,30; 5,,obligate aerobe,negative; rod-shaped,#Host; #Human; #Host Body-Site; #Other; #Wound
+Chrysonectria finisterensis,No,,,,,,,
+Chrysosporium sp.,No,,,,,,,
+Citrobacter amalonaticus,Yes,4323,https://bacdive.dsmz.de/strain/4323,30; 37,,aerobe,negative; rod-shaped,#Host; #Human; #Host Body Product; #Gastrointestinal tract; #Feces (Stool)
+Ceriporiopsis gilvescens,No,,,,,,,
+Pseudomonas monteilii,Yes,13074,https://bacdive.dsmz.de/strain/13074,28; 30; 5; 37; 41,,aerobe,negative; rod-shaped,#Host; #Human; #Host Body-Site; #Oral cavity and airways; #Airways; #Host Body Product
+Pseudomonas multiresinivorans,Yes,170026,https://bacdive.dsmz.de/strain/170026,,,,,
+Pseudomonas nitroreducens,Yes,170026,https://bacdive.dsmz.de/strain/170026,,,,,
+Pseudomonas capeferrum,No,,,,,,,
+Pseudomonas fluvialis,Yes,158598,https://bacdive.dsmz.de/strain/158598,,,aerobe,negative; 0.8-1.5 µm; 0.1-0.2 µm,#Environmental; #Aquatic; #Sediment
+Bacillus thermoruber,Yes,11409,https://bacdive.dsmz.de/strain/11409,45; 42; 10; 22,,aerobe,positive; rod-shaped,#Engineered; #Biodegradation; #Composting; #Food production; #Food
+Bacillus thioparans,Yes,134617,https://bacdive.dsmz.de/strain/134617,25,,obligate aerobe,positive; rod-shaped,"Sample typeEnvironment, Wastewater"
+Chitinophaga jiangningensis,Yes,131266,https://bacdive.dsmz.de/strain/131266,28; 30,,,negative,#Environmental; #Terrestrial
+Brucella tritici,Yes,1884,https://bacdive.dsmz.de/strain/1884,30; 4; 40,,aerobe,negative; 0.6-1.4 µm; 0.4-0.6 µm,"#Host Body-Site; #Plant; #Rhizoplane; #Host; #Plants; #Herbaceous plants (Grass,Crops)"
+Bordetella petrii,Yes,382,https://bacdive.dsmz.de/strain/382,30; 37; 5; 15,,aerobe,negative; 1.0-2.8 µm; 0.4-0.7 µm,#Engineered; #Bioreactor; #Environmental; #Aquatic; #River (Creek)
+Botryosphaeria dothidea,No,,,,,,,
+Botrytis sp.,No,,,,,,,
+Bacteroides sp.,Yes,1598,https://bacdive.dsmz.de/strain/1598,37,,anaerobe,Incubation period2-3 days,#Engineered; #Food production; #Dairy product; #Condition; #Anoxic (anaerobic)
+Bdellovibrio bacteriovorus,Yes,1647,https://bacdive.dsmz.de/strain/1647,30,,,negative,#Environmental; #Terrestrial; #Soil
+Bifidobacterium infantis,Yes,1743,https://bacdive.dsmz.de/strain/1743,37,,anaerobe,positive; rod-shaped,#Host; #Human; #Child; #Host Body-Site; #Gastrointestinal tract
+Bacillus stearothermophilus,Yes,1419,https://bacdive.dsmz.de/strain/1419,55; 60; 40; 37; 75; 10; 22; 30,,facultative anaerobe,2.0-3.5 µm; 0.6-1.0 µm; rod-shaped,"#Engineered; #Biodegradation; #Composting; #Food production; #Bottled, canned, packed food"
+Pseudonocardia sp.,Yes,13372,https://bacdive.dsmz.de/strain/13372,28,,,,
+Bacillus altitudinis,Yes,1263,https://bacdive.dsmz.de/strain/1263,45; 8; 25,,obligate aerobe,positive; rod-shaped,#Engineered; #Industrial; #Engineered product; #Environmental; #Air
+Bacillus aquimaris,Yes,1225,https://bacdive.dsmz.de/strain/1225,30; 4; 55,,aerobe,variable; 1.2-3.5 µm; 0.5-0.7 µm,#Environmental; #Aquatic; #Marine; #Terrestrial; #Tidal flat
+Brevibacillus reuszeri,Yes,11429,https://bacdive.dsmz.de/strain/11429,30,,facultative anaerobe,,USA; North America; Soil
+Brevibacterium sp.,Yes,1844,https://bacdive.dsmz.de/strain/1844,37,,,,#Host Body Product; #Oral cavity and Airways; #Pleural fluid; #Infection; #Patient
+Brevundimonas diminuta,Yes,2298,https://bacdive.dsmz.de/strain/2298,26; 30; 5; 41; 45,,obligate aerobe,negative,#Environmental; #Aquatic
+Brevundimonas vesicularis,Yes,2301,https://bacdive.dsmz.de/strain/2301,26; 25,,,,#Host; #Invertebrates (Other); #Annelida; #Host Body-Site; #Urogenital tract; #Bladder
+Brucella cytisi,Yes,1890,https://bacdive.dsmz.de/strain/1890,26; 25; 37,,aerobe,negative,#Host; #Plants; #Shrub (Scrub); #Host Body-Site; #Plant; #Root nodule
+Pseudozyma sp.,No,,,,,,,
+Psychrobacillus sp.,Yes,157054,https://bacdive.dsmz.de/strain/157054,37,,aerobe,,#Engineered; #Industrial
+Psychrobacter cryohalolentis,Yes,8202,https://bacdive.dsmz.de/strain/8202,20; 22,,aerobe,negative; 0.9-1.3 µm; 0.5-0.8 µm,#Environmental; #Aquatic; #Terrestrial; #Permafrost; #Condition
+Purpureocillium sp.,No,,,,,,,
+Pyrenochaetopsis microspora,No,,,,,,,
+Pseudomonas vesicularis,Yes,2301,https://bacdive.dsmz.de/strain/2301,26; 25,,,,#Host; #Invertebrates (Other); #Annelida; #Host Body-Site; #Urogenital tract; #Bladder
+Pseudonectria foliicola,No,,,,,,,
+Pseudonocardia alni,Yes,13368,https://bacdive.dsmz.de/strain/13368,28; 30,,aerobe,positive,#Host; #Plants; #Tree; #Host Body-Site; #Plant; #Root nodule
+Rhizobium viscosum,Yes,7573,https://bacdive.dsmz.de/strain/7573,28; 30; 37,,obligate aerobe,negative,#Environmental; #Terrestrial; #Soil
+Rhizocola hellebori,Yes,24218,https://bacdive.dsmz.de/strain/24218,28,,obligate aerobe,positive,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Root (Rhizome)"
+Rhizomucor miehei,No,,,,,,,
+Pyrenochaetopsis paucisetosa,No,,,,,,,
+Pyrenochaetopsis sp.,No,,,,,,,
+Rahnella aquatilis,Yes,5093,https://bacdive.dsmz.de/strain/5093,30; 25; 37; 5; 41,,facultative anaerobe,negative; rod-shaped,#Environmental; #Aquatic; #Freshwater
+Ralstonia eutropha,Yes,2000,https://bacdive.dsmz.de/strain/2000,30; 5; 45,,aerobe,negative; oval-shaped,#Environmental; #Terrestrial; #Soil
+Rasamsonia argillacea,No,,,,,,,
+Aspergillus calidoustus,No,,,,,,,
+Bacillus safensis,Yes,135379,https://bacdive.dsmz.de/strain/135379,37; 10; 45,,facultative anaerobe,positive; rod-shaped,Saint-Brieuc; France; FRA; Europe
+Bacillus smithii,Yes,815,https://bacdive.dsmz.de/strain/815,55; 56,,aerobe,positive; rod-shaped,#Engineered; #Food production; #Dairy product
+Bacillus sphericus,No,,,,,,,
+Bacillus idriensis,Yes,154521,https://bacdive.dsmz.de/strain/154521,37,,aerobe,,#Engineered; #Contamination; #Industrial
+Bacillus infantis,Yes,1265,https://bacdive.dsmz.de/strain/1265,30; 37; 40; 10,,obligate aerobe,3-10 µm; positive,#Infection; #Disease; #Patient; #Host Body Product; #Fluids
+Bacillus mycoides,Yes,167560,https://bacdive.dsmz.de/strain/167560,,,facultative anaerobe,,
+Bacillus niacini,Yes,157152,https://bacdive.dsmz.de/strain/157152,30,,aerobe,,Product; 2016-10-01; Sweden; SWE; Europe
+Saccharothrix coeruleofusca,Yes,13475,https://bacdive.dsmz.de/strain/13475,28,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Saccharothrix cryophilis,Yes,13288,https://bacdive.dsmz.de/strain/13288,28; 25; 30; 10; 37; 41; 45,,obligate aerobe,positive; filament-shaped,#Environmental; #Terrestrial; #Soil
+Rhodococcus sovatensis,Yes,133063,https://bacdive.dsmz.de/strain/133063,28; 37,,aerobe,positive; 1.2-2.2 µm; rod-shaped,#Environmental; #Aquatic; #Lake (large); #Condition; #Saline
+Rhodoferax fermentans,Yes,2989,https://bacdive.dsmz.de/strain/2989,28,,anaerobe,negative,#Engineered; #Waste; #Wastewater
+Rhodotorula sphaerocarpa,No,,,,,,,
+Rhizopus oligosporus,No,,,,,,,
+Rhodococcus equi,Yes,10843,https://bacdive.dsmz.de/strain/10843,28; 30; 45,,obligate aerobe,positive; oval-shaped,#Host; #Mammals; #Equidae (Horse); #Host Body-Site; #Oral cavity and airways; #Lung
+Aspergillus brasiliensis,No,,,,,,,
+Saccharothrix mutabilis,Yes,13481,https://bacdive.dsmz.de/strain/13481,28,,obligate aerobe,,
+Saccharothrix sp.,Yes,13489,https://bacdive.dsmz.de/strain/13489,28,,aerobe,Gram stainpositive,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Root (Rhizome)"
+Saccharothrix syringae,Yes,13480,https://bacdive.dsmz.de/strain/13480,28,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Saccharothrix texasensis,Yes,13484,https://bacdive.dsmz.de/strain/13484,28,,aerobe,,#Environmental; #Terrestrial; #Soil
+Roussoella scabrispora,No,,,,,,,
+Saccharopolyspora flava,Yes,13458,https://bacdive.dsmz.de/strain/13458,28,,aerobe,positive,#Environmental; #Terrestrial; #Soil; #Engineered; #Agriculture; #Garden
+Saccharopolyspora hirsuta,Yes,13447,https://bacdive.dsmz.de/strain/13447,28; 30; 40,,,positive,"#Host; #Plants; #Herbaceous plants (Grass,Crops)"
+Saccharothrix australiensis,Yes,13479,https://bacdive.dsmz.de/strain/13479,28,,aerobe,positive,#Environmental; #Terrestrial; #Soil
+Bacillus stratosphericus,No,,,,,,,
+Bacillus subterraneus,Yes,154740,https://bacdive.dsmz.de/strain/154740,42,,aerobe,Incubation period1-2 days,
+Bacillus thermoamylovorans,Yes,167216,https://bacdive.dsmz.de/strain/167216,,,,,
+Pseudophaeosphaeria rubi,No,,,,,,,
+Pseudoxanthomonas sp.,Yes,130779,https://bacdive.dsmz.de/strain/130779,30,,obligate aerobe,negative,#Engineered; #Contamination; #Environmental; #Terrestrial; #Soil
+Saccharothrix deserti,Yes,168127,https://bacdive.dsmz.de/strain/168127,,,,,
+Saccharothrix espanaensis,Yes,13482,https://bacdive.dsmz.de/strain/13482,28,,aerobe,,#Environmental; #Terrestrial; #Soil
+Saccharothrix longispora,Yes,13476,https://bacdive.dsmz.de/strain/13476,28,,facultative anaerobe,,#Environmental; #Terrestrial; #Soil
+Serratia rubidaea,Yes,5159,https://bacdive.dsmz.de/strain/5159,26; 30; 37; 5; 10,,facultative anaerobe,negative; rod-shaped,
+Salmonella sp.,Yes,142144,https://bacdive.dsmz.de/strain/142144,,,,,#Engineered; #Food production; #Food
+Samsoniella hepiali,No,,,,,,,
+Sarocladium kiliense,No,,,,,,,
+Amauroderma calcigenum,No,,,,,,,
+Amauroderma sp.,No,,,,,,,
+Aspergillus tritici,No,,,,,,,
+Aspergillus udagawae,No,,,,,,,
+Sphaerisporangium fuscum,Yes,176303,https://bacdive.dsmz.de/strain/176303,,,,,
+Sphaeropsis sapinea,No,,,,,,,
+Sclerostagonospora lathyri,No,,,,,,,
+Sclerotinia sclerotiorum,No,,,,,,,
+Sedecimiella taiwanensis,No,,,,,,,
+Septoria eucalyptorum,No,,,,,,,
+Septoria sp.,No,,,,,,,
+Septoriella sp.,No,,,,,,,
+Sphingobacterium multivorum,Yes,14120,https://bacdive.dsmz.de/strain/14120,30; 5; 41; 45,,aerobe,negative,#Infection; #Patient; #Specimen; #Host Body-Site; #Organ; #Spleen
+Sphingomonas macrogoltabidus,Yes,14274,https://bacdive.dsmz.de/strain/14274,30; 5; 41; 45,,obligate aerobe,negative,#Environmental; #Terrestrial; #Soil
+Stagonosporopsis citrulli,No,,,,,,,
+Stagonosporopsis dorenboschii,No,,,,,,,
+Staphylococcus cohnii,Yes,14518,https://bacdive.dsmz.de/strain/14518,37; 10; 45,,facultative anaerobe,positive; coccus-shaped,"#Host; #Human; #Host Body-Site; #Organ; #Skin, Nail, Hair"
+Shewanella putrefaciens,Yes,14054,https://bacdive.dsmz.de/strain/14054,26; 25; 5; 41; 45,,aerobe,negative,#Engineered; #Food production; #Dairy product
+Sistotrema brinkmannii,No,,,,,,,
+Solwaraspora sp.,No,,,,,,,
+Bacillus pakistanensis,Yes,130193,https://bacdive.dsmz.de/strain/130193,30,,aerobe,rod-shaped; positive,#Engineered; #Other; #Mine; #Condition; #Saline
+Bacillus paramycoides,Yes,140968,https://bacdive.dsmz.de/strain/140968,30; 28,,facultative anaerobe,positive; 1.8-2.2 µm; 0.8-1.2 µm,#Environmental; #Aquatic; #Marine; #Sediment
+Bacillus atrophaeus,Yes,1077,https://bacdive.dsmz.de/strain/1077,30; 10; 45; 55,,aerobe,positive; 2.0-4.0 µm; 0.5-1.0 µm,#Environmental; #Terrestrial; #Soil
+Bacillus brevis,Yes,171287,https://bacdive.dsmz.de/strain/171287,,,,,France; FRA; Europe
+Bacillus firmus,Yes,137856,https://bacdive.dsmz.de/strain/137856,30; 55,,obligate aerobe,positive; rod-shaped,Paris; France; FRA; Europe
+Bacillus hwajinpoensis,Yes,1229,https://bacdive.dsmz.de/strain/1229,30; 32.5,,anaerobe,positive; 2.75 µm; 0.6 µm,#Engineered; #Contamination; #Heavy metal; #Environmental; #Terrestrial; #Mud (Sludge)
+Aureobasidium melanogenum,No,,,,,,,
+Aureobasidium namibiae,No,,,,,,,
+Aquabacterium parvum,Yes,17924,https://bacdive.dsmz.de/strain/17924,28; 25; 30; 5; 41,,aerobe,negative; rod-shaped,#Environmental; #Aquatic; #Freshwater; #Biofilm
+Aquabacterium sp.,Yes,17929,https://bacdive.dsmz.de/strain/17929,28,,,,#Engineered; #Contamination; #Environmental; #Terrestrial; #Soil
+Arthrinium sp.,No,,,,,,,
+Amycolatopsis thailandensis,Yes,13274,https://bacdive.dsmz.de/strain/13274,28,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Amylosporus sp.,No,,,,,,,
+Amphora sp.,No,,,,,,,
+Alternaria solani,No,,,,,,,
+Alternaria tenuissima,No,,,,,,,
+Staphylococcus xylosus,Yes,14599,https://bacdive.dsmz.de/strain/14599,37; 10; 45,,aerobe,positive; coccus-shaped,"#Host; #Human; #Host Body-Site; #Organ; #Skin, Nail, Hair"
+Staphylocuccus aureus,No,,,,,,,
+Stemphylium lucomagnoense,No,,,,,,,
+Stemphylium lycopersici,No,,,,,,,
+Aestuariibacter halophilus,Yes,437,https://bacdive.dsmz.de/strain/437,40; 30; 5; 10; 41,,obligate aerobe,negative; 1.2-1.8 µm; 0.5-0.6 µm,#Environmental; #Aquatic; #Sediment; #Terrestrial; #Tidal flat
+Anoxybacillus sp.,Yes,558,https://bacdive.dsmz.de/strain/558,55,,,,#Engineered; #Built environment; #Clean room
+Apiospora marii,No,,,,,,,
+Apiospora rasikravindrae,No,,,,,,,
+Streptoalloteichus hindustanus,Yes,13492,https://bacdive.dsmz.de/strain/13492,28,,obligate aerobe,,#Environmental; #Terrestrial; #Soil
+Streptococcus equi,Yes,175776,https://bacdive.dsmz.de/strain/175776,,,,,
+Streptococcus mitior,No,,,,,,,
+Streptomyces albogriseolus,Yes,14936,https://bacdive.dsmz.de/strain/14936,28; 30; 10; 45,,facultative anaerobe,positive,#Environmental; #Terrestrial; #Soil
+Streptomyces albovinaceus,Yes,15010,https://bacdive.dsmz.de/strain/15010,28,,,,
+Stenotrophomonas rhizophila,Yes,17560,https://bacdive.dsmz.de/strain/17560,30; 41,,aerobe,negative,"#Host; #Plants; #Herbaceous plants (Grass,Crops); #Host Body-Site; #Plant; #Rhizosphere"
+Stereum sp.,No,,,,,,,
+Sterigmatomyces halophilus,No,,,,,,,
+Aspergillus nomiae,No,,,,,,,
+Aspergillus ochraceus,No,,,,,,,
+Aspergillus penicillioides,No,,,,,,,
+Aspergillus japonicus,No,,,,,,,
+Aspergillus keveii,No,,,,,,,
+Arthrographis kalrae,No,,,,,,,
+Asanoa hainanensis,Yes,7852,https://bacdive.dsmz.de/strain/7852,28,,aerobe,positive,"#Environmental; #Terrestrial; #Soil; #Host; #Plants; #Herbaceous plants (Grass,Crops)"
+Streptomyces bangladeshensis,Yes,16428,https://bacdive.dsmz.de/strain/16428,28; 35,,aerobe,positive,#Environmental; #Terrestrial; #Soil
+Verrucosispora sp.,Yes,169683,https://bacdive.dsmz.de/strain/169683,28,,,,forest soil; Yunnan; China; CHN; Asia
+Verticillium dahliae,No,,,,,,,
+Trichothecium sp.,No,,,,,,,
+Tritirachium album,No,,,,,,,
+Ulocladium sp.,No,,,,,,,
+Acidovorax facilis,Yes,2888,https://bacdive.dsmz.de/strain/2888,30; 25; 5; 37; 41,,obligate aerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Soil; #Engineered; #Agriculture; #Garden
+Acidovorax soli,Yes,2904,https://bacdive.dsmz.de/strain/2904,28; 30,,aerobe,negative; 1.3 µm; 0.5 µm,#Engineered; #Waste; #Landfill; #Environmental; #Terrestrial; #Soil
+Trametes polyzona,No,,,,,,,
+Vibrio coralliilyticus,Yes,17336,https://bacdive.dsmz.de/strain/17336,28; 25,,obligate aerobe,,#Host; #Invertebrates (Other); #Cnidaria (Corals)
+Vibrio furnisii,No,,,,,,,
+Vibrio proteolyticus,Yes,17245,https://bacdive.dsmz.de/strain/17245,32; 33.5; 30,,facultative anaerobe,negative; 1.65 µm; 0.55 µm,#Environmental; #Aquatic; #Lake (large); #Surface water
+Vibrio sp.,Yes,175117,https://bacdive.dsmz.de/strain/175117,37,,,,cow  rumen; Hamilton; New Zealand; NZL; Australia and Oceania
+Virgibacillus halodenitrificans,Yes,1475,https://bacdive.dsmz.de/strain/1475,30,,obligate aerobe,,#Condition; #Saline
+Westerdykella dispersa,No,,,,,,,
+Vagicola chlamydospora,No,,,,,,,
+Verrucosispora sioxanthis,No,,,,,,,
+Actinomycetota bacterium,No,,,,,,,
+Actinoplanes sp. DH11,No,,,,,,,
+Streptomyces polychromogenes,Yes,15477,https://bacdive.dsmz.de/strain/15477,28,,obligate aerobe,,#Environmental; #Terrestrial; #Soil
+Xerula longipes,No,,,,,,,
+Xylaria adscendens,No,,,,,,,
+Xylaria comosoides,No,,,,,,,
+Xylaria telfairii,No,,,,,,,
+Achromobacter denitrificans,Yes,318,https://bacdive.dsmz.de/strain/318,30; 24; 5; 45,,obligate aerobe,negative; rod-shaped,#Environmental; #Terrestrial; #Soil
+Alicycliphilus sp.,No,,,,,,,
+Aliiglaciecola lipolytica,Yes,133419,https://bacdive.dsmz.de/strain/133419,30,,aerobe,negative; 1.0-2.5 µm; rod-shaped,#Environmental; #Aquatic; #Marine
+Agaricus subrufescens,No,,,,,,,
+Agaricus xanthodermus,No,,,,,,,
+Agrocybe aegerita,No,,,,,,,
+Agrocybe dura,No,,,,,,,
+Agrocybe praecox,No,,,,,,,
+Agrocybe sp.,No,,,,,,,
+Ketobacter alkanivorans,Yes,159863,https://bacdive.dsmz.de/strain/159863,25,,aerobe,negative; 1.6-1.8 µm; 0.4-0.6 µm,#Environmental; #Terrestrial; #Coast; #Engineered; #Contamination; #Oil (Fuel)
+Kibdelosporangium banguiense,Yes,132398,https://bacdive.dsmz.de/strain/132398,28,,aerobe,,#Environmental; #Terrestrial; #Soil
+Kineococcus sp.,Yes,103057,https://bacdive.dsmz.de/strain/103057,,,,,2000-01-01; Germany; DEU; Europe
+Kitasatospora phosalacinea,Yes,16344,https://bacdive.dsmz.de/strain/16344,28,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil
+Klebsiella grimontii,Yes,157757,https://bacdive.dsmz.de/strain/157757,37,,,negative; rod-shaped,#Engineered; #Laboratory; #Infection
+Klebsiella pneumonia,Yes,4946,https://bacdive.dsmz.de/strain/4946,30,,,,#Engineered; #Waste; #Wastewater
+Hypoxylon fendleri,No,,,,,,,
+Inonotus circinatus,No,,,,,,,
+Acremonium flavum,No,,,,,,,
+Actinokineospora alba,Yes,13511,https://bacdive.dsmz.de/strain/13511,28; 30,,aerobe,positive,#Environmental; #Terrestrial; #Soil
+Acinetobacter gerneri,Yes,8132,https://bacdive.dsmz.de/strain/8132,30; 45,,obligate aerobe,negative; oval-shaped,#Engineered; #Waste; #Wastewater; #Water treatment plant
+Acinetobacter johnsonii,Yes,8088,https://bacdive.dsmz.de/strain/8088,30; 28; 41; 37; 25; 10; 45,,aerobe,negative; rod-shaped,#Host; #Human; #Infection; #Patient; #Host Body-Site; #Gastrointestinal tract
+Acinetobacter oleivorans,Yes,157136,https://bacdive.dsmz.de/strain/157136,30,,aerobe,negative,#Engineered; #Agriculture; #Field; #Environmental; #Terrestrial; #Soil
+Achromobacter sp.,Yes,310,https://bacdive.dsmz.de/strain/310,,,,,
+Geobacillus thermoleovorans,Yes,1451,https://bacdive.dsmz.de/strain/1451,55,,,,#Environmental; #Terrestrial; #Soil
+Geomyces pannorum,No,,,,,,,
+Thermoactinomyces vulgaris,Yes,103187,https://bacdive.dsmz.de/strain/103187,,,,,
+Undibacterium pigrum,Yes,11373,https://bacdive.dsmz.de/strain/11373,25; 22; 4; 30,,aerobe,negative; rod-shaped,#Environmental; #Aquatic; #Freshwater
+Actinokineospora xionganensis,No,,,,,,,
+Actinomadura atramentaria,Yes,16924,https://bacdive.dsmz.de/strain/16924,28; 30; 5; 15,,obligate aerobe,positive,#Environmental; #Terrestrial; #Soil; #Condition; #Thermophilic (>45°C)
+Actinomadura physcomitrii,Yes,164563,https://bacdive.dsmz.de/strain/164563,28,,aerobe,positive,Moss [Physcomitrium sphaericum(Ludw) Fuernr] from Yunnan Province; Physcomitrium sphaericum; China; CHN; Asia
+Actinomadura rayongensis,Yes,132197,https://bacdive.dsmz.de/strain/132197,28,,facultative anaerobe,,#Environmental; #Terrestrial; #Forest; #Soil
+Acinetobacter seifertii,Yes,132199,https://bacdive.dsmz.de/strain/132199,37; 30; 44,,obligate aerobe,negative,#Infection; #Inflammation; #Patient; #Host; #Human
+Acinetobacter ursingii,Yes,23129,https://bacdive.dsmz.de/strain/23129,37; 30,,aerobe,negative,#Infection; #Patient; #Host Body Product; #Fluids; #Blood; #Host
+Trametes sp.,No,,,,,,,
+Trichaptum biforme,No,,,,,,,
+Trichaptum byssogenum,No,,,,,,,
+Thermoleophilaceae bacterium,No,,,,,,,
+Thermomyces dupontii,No,,,,,,,
+Thalassospira xiamenensis,Yes,13966,https://bacdive.dsmz.de/strain/13966,25; 22,,anaerobe,negative; 5.5 µm; 1.55 µm,#Engineered; #Built environment; #Water reservoir (Aquarium/pool); #Industrial; #Oil reservoir
+Thelonectria veuillotiana,No,,,,,,,
+Thelypteris sp.,No,,,,,,,

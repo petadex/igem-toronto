@@ -1,0 +1,10 @@
+organism,search_key,search_term,sra_result_count,source
+bioreactor metagenome,PLA_degradation,polylactic acid[Title] AND degradation[Title],192,SRA_bioplastic_efetch
+soil metagenome,PLA_degradation,polylactic acid[Title] AND degradation[Title],192,SRA_bioplastic_efetch
+gut metagenome,PLA_degradation,polylactic acid[Title] AND degradation[Title],192,SRA_bioplastic_efetch
+anaerobic digester metagenome,PLA_degradation,polylactic acid[Title] AND degradation[Title],192,SRA_bioplastic_efetch
+plastic metagenome,PHB_degradation,polyhydroxybutyrate[Title] AND degradation[Title],158,SRA_bioplastic_efetch
+wastewater metagenome,PHB_degradation,polyhydroxybutyrate[Title] AND degradation[Title],158,SRA_bioplastic_efetch
+metagenome,PHB_degradation,polyhydroxybutyrate[Title] AND degradation[Title],158,SRA_bioplastic_efetch
+seawater metagenome,bioplastic_deg,bioplastic[Title] AND degradation[Title],48,SRA_bioplastic_efetch
+synthetic construct,PETase,PETase[Title],13,SRA_bioplastic_efetch
