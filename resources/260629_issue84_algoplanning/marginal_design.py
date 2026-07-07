@@ -577,6 +577,260 @@ def _snapshot(present, U, W, pieces):
 
 
 # --------------------------------------------------------------------------- #
+# 5b. Densify: degeneracy as a COVERAGE move (DeCoDe-lite), linkage-guided.
+#
+# #1 spends degeneracy only to shrink the oligo order. #2 lets it BUY coverage: a
+# degenerate codon over an INDEPENDENTLY-varying column encodes the whole cartesian
+# of natural haplotypes at that column, so it can cover cores that discrete
+# selection dropped -- with little junk BECAUSE the column is independent (the
+# cartesian is densely natural). Columns that co-vary (LINKED) are kept as discrete
+# haplotypes instead, so we never manufacture off-haplotype phantoms.
+#
+# Mechanics: within each fragment, cores split into CELLS keyed by (gap pattern,
+# linked-column haplotype). A cell can be encoded discretely (its kept pieces, one
+# oligo each) or as ONE degenerate oligo that degenerates the cell's INDEPENDENT
+# columns -- covering every natural piece of the cell. We greedily adopt degenerate
+# cells that add the most newly-covered natural sequence (then fewest oligos, least
+# junk) while the whole design's junk fraction stays <= the cutoff. Junk stays
+# exact (variant count = codon cartesian). Linkage is scored with APC-corrected
+# mutual information; the junk budget is the ultimate guard, so MI errors are safe.
+# --------------------------------------------------------------------------- #
+
+def _pair_mi(a_res, b_res, weights):
+    """Weighted mutual information (bits) between two aligned columns."""
+    total = sum(weights)
+    if total <= 0:
+        return 0.0
+    pa, pb, pab = defaultdict(float), defaultdict(float), defaultdict(float)
+    for a, b, w in zip(a_res, b_res, weights):
+        pa[a] += w
+        pb[b] += w
+        pab[(a, b)] += w
+    mi = 0.0
+    for (a, b), c in pab.items():
+        pxy = c / total
+        mi += pxy * math.log2(pxy / ((pa[a] / total) * (pb[b] / total)))
+    return max(0.0, mi)
+
+
+def _independent_cols(variable, colres, weights, tau):
+    """Variable columns whose max APC-corrected MI to any other variable column is
+    <= tau (near-independent -> safe to degenerate). `colres[r]` = residues (one per
+    core, aligned to `weights`) at relative column r."""
+    if len(variable) <= 1:
+        return set(variable)
+    mi = {}
+    for x in range(len(variable)):
+        for y in range(x + 1, len(variable)):
+            i, j = variable[x], variable[y]
+            mi[(i, j)] = mi[(j, i)] = _pair_mi(colres[i], colres[j], weights)
+    mean_i = {i: sum(mi[(i, j)] for j in variable if j != i) / (len(variable) - 1)
+              for i in variable}
+    overall = sum(mean_i.values()) / len(variable)
+    indep = set()
+    for i in variable:
+        worst = 0.0
+        for j in variable:
+            if j == i:
+                continue
+            apc = mi[(i, j)] - (mean_i[i] * mean_i[j] / overall if overall > 0 else 0.0)
+            worst = max(worst, apc)
+        if worst <= tau:
+            indep.add(i)
+    return indep
+
+
+def _build_group_oligo(block_rows, deg_cols, lead, tail, lctx, rctx):
+    """One degenerate IUPAC oligo over `block_rows` (equal-length, column-homologous):
+    pinned junction codons; degenerate codons on `deg_cols` (covering the block's AA
+    set there); fixed codons elsewhere (must be constant across the block). Returns
+    (oligo, variants, deg_bases, nt) or None if un-coverable or an expansion (with
+    junction context) could contain a forbidden site."""
+    width = len(block_rows[0])
+    codons, variants, deg = [], 1, 0
+    for r in range(width):
+        if r < len(lead):
+            codons.append(lead[r])
+            continue
+        if r >= width - len(tail):
+            codons.append(tail[r - (width - len(tail))])
+            continue
+        aas = frozenset(row[r] for row in block_rows) if r in deg_cols \
+            else frozenset(block_rows[0][r])
+        bc = best_codon_for(aas)
+        if bc is None:
+            return None
+        codon, covered, ndeg, _ = bc
+        codons.append(codon)
+        variants *= len(covered)
+        deg += ndeg
+    oligo = "".join(codons)
+    if _degenerate_has_forbidden(lctx + oligo + rctx):
+        return None
+    return oligo, variants, deg, len(oligo)
+
+
+def densify_select(present, pieces, weights, cuts, tokens, L, chemistry,
+                   arm_codons, max_junk_frac, max_junk, link_tau):
+    """DeCoDe-lite: choose, per fragment gap-group, one of three encodings under the
+    junk-fraction cutoff -- DISCRETE (kept pieces, one oligo each), HAP-SPLIT (one
+    degenerate oligo per linked-column haplotype, degenerating only INDEPENDENT
+    columns), or WHOLE-GROUP (a single degenerate oligo over all variable columns).
+    The greedy adopts the change that adds the most newly-covered natural sequence
+    (then fewest oligos, least junk). HAP-SPLIT/WHOLE-GROUP present every natural
+    piece of the group, so they can cover cores discrete selection dropped; keeping
+    linked columns discrete (HAP-SPLIT) avoids off-haplotype phantoms. Subsumes #1
+    (WHOLE-GROUP is exactly its compression). Returns (frags, frag_units, library,
+    U, W); U/W are the possibly-larger covered cores / natural weight."""
+    K = len(present)
+    n = len(pieces)
+    bounds = [0] + cuts + [L]
+    pins = (_pins_for_design(chemistry, cuts, tokens, arm_codons)
+            if chemistry in ("gg", "hr") and cuts else [((), ())] * len(cuts))
+
+    frag_groups = []                      # per f: list of group dicts
+    group_of = [[None] * K for _ in range(n)]     # core -> (per f) group index
+    for f in range(K):
+        a, b = bounds[f], bounds[f + 1]
+        lead, tail, lctx, rctx = _frag_pins(pins, f, K)
+        pat_cores = defaultdict(list)
+        for c in range(n):
+            sl = _ALIGNED[c][a:b]
+            pat_cores[tuple(i for i, ch in enumerate(sl) if ch != "-")].append(c)
+        groups = []
+        for pat, corelist in pat_cores.items():
+            width = len(pat)
+            piecemap = {c: pieces[c][f] for c in corelist}
+            colres = [[piecemap[c][r] for c in corelist] for r in range(width)]
+            cw = [weights[c] for c in corelist]
+            pinned = set(range(len(lead))) | set(range(width - len(tail), width))
+            variable = [r for r in range(width)
+                        if len(set(colres[r])) > 1 and r not in pinned]
+            indep = set(_independent_cols(variable, colres, cw, link_tau)) & set(variable)
+            linked = [r for r in variable if r not in indep]
+            rows = sorted(set(piecemap.values()))
+            g = {"rows": rows, "kept": set(r for r in rows if r in present[f]),
+                 "indep": sorted(indep), "variable": variable}
+            # option DISCRETE
+            g["opts"] = {0: {"oligos": len(g["kept"]), "variants": len(g["kept"]),
+                             "units": [("discrete", r) for r in sorted(g["kept"])]}}
+            # option WHOLE-GROUP (== #1 compression): degenerate every variable column
+            if variable:
+                o2 = _build_group_oligo(rows, set(variable), lead, tail, lctx, rctx)
+                if o2:
+                    g["opts"][2] = {"oligos": 1, "variants": o2[1],
+                                    "units": [("degenerate", tuple(rows), o2[0], o2[2], o2[3])]}
+            # option HAP-SPLIT: one oligo per linked-haplotype, degenerate indep cols
+            blocks = defaultdict(list)
+            for r in rows:
+                blocks[tuple(r[c] for c in linked)].append(r)
+            units, var, ok = [], 0, True
+            for block in blocks.values():
+                bo = _build_group_oligo(block, indep, lead, tail, lctx, rctx)
+                if bo is None:
+                    ok = False
+                    break
+                units.append(("degenerate", tuple(block), bo[0], bo[2], bo[3]))
+                var += bo[1]
+            if ok and units and (2 not in g["opts"] or len(units) < g["opts"][2]["oligos"]
+                                 or var < g["opts"][2]["variants"]):
+                g["opts"][1] = {"oligos": len(units), "variants": var, "units": units}
+            groups.append(g)
+            for c in corelist:
+                group_of[c][f] = len(groups) - 1
+        frag_groups.append(groups)
+
+    def library_of(mode):
+        lib = 1
+        for f in range(K):
+            lib *= max(1, sum(frag_groups[f][gi]["opts"][mode[f][gi]]["variants"]
+                              for gi in range(len(frag_groups[f]))))
+        return lib
+
+    def oligos_of(mode):
+        return sum(frag_groups[f][gi]["opts"][mode[f][gi]]["oligos"]
+                   for f in range(K) for gi in range(len(frag_groups[f])))
+
+    def covered_of(mode):
+        cnt = wsum = 0
+        for c in range(n):
+            ok = True
+            for f in range(K):
+                gi = group_of[c][f]
+                g = frag_groups[f][gi]
+                if mode[f][gi] != 0:            # degenerate options present all rows
+                    continue
+                if pieces[c][f] not in g["kept"]:
+                    ok = False
+                    break
+            if ok:
+                cnt += 1
+                wsum += weights[c]
+        return cnt, wsum
+
+    mode = [[0] * len(frag_groups[f]) for f in range(K)]
+    cur_cnt, cur_W = covered_of(mode)
+    cur_olig = oligos_of(mode)
+    while True:
+        best = None
+        for f in range(K):
+            for gi, g in enumerate(frag_groups[f]):
+                for m in g["opts"]:
+                    if m == mode[f][gi]:
+                        continue
+                    prev = mode[f][gi]
+                    mode[f][gi] = m
+                    lib = library_of(mode)
+                    cnt, W = covered_of(mode)
+                    olig = oligos_of(mode)
+                    mode[f][gi] = prev
+                    if lib > max_junk:
+                        continue
+                    frac = (lib - cnt) / lib if lib > 0 else 0.0
+                    if frac > max_junk_frac:
+                        continue
+                    dW, dO = W - cur_W, olig - cur_olig
+                    if dW < 0 or (dW == 0 and dO >= 0):
+                        continue           # must add coverage or shrink the order
+                    key = (-dW, dO, lib)
+                    if best is None or key < best[0]:
+                        best = (key, f, gi, m)
+        if best is None:
+            break
+        _, f, gi, m = best
+        mode[f][gi] = m
+        cur_cnt, cur_W = covered_of(mode)
+        cur_olig = oligos_of(mode)
+
+    frag_units, variants = [[] for _ in range(K)], [0] * K
+    for f in range(K):
+        for gi, g in enumerate(frag_groups[f]):
+            opt = g["opts"][mode[f][gi]]
+            frag_units[f].extend(opt["units"])
+            variants[f] += opt["variants"]
+
+    frags, library = [], 1
+    for f in range(K):
+        library *= max(1, variants[f])
+        nt = sum((len(u[1]) * 3 if u[0] == "discrete" else u[4]) for u in frag_units[f])
+        frags.append({
+            "a": bounds[f], "b": bounds[f + 1],
+            "n_oligos": len(frag_units[f]),
+            "natural_pieces": len(present[f]),
+            "variants": variants[f],
+            "n_pieces": len(present[f]),
+            "deg_bases": sum(u[3] for u in frag_units[f] if u[0] == "degenerate"),
+            "nt": nt,
+            "lengths": sorted({len(p) for p in present[f]}),
+            "degenerate_cells": sum(1 for u in frag_units[f] if u[0] == "degenerate"),
+            "indep_cols": sorted({r for gi, g in enumerate(frag_groups[f])
+                                  if mode[f][gi] == 1 for r in g["indep"]}),
+        })
+    U, W = covered_of(mode)
+    return frags, frag_units, library, U, W
+
+
+# --------------------------------------------------------------------------- #
 # 6. Fragment encoding: discrete pieces + JUNK-BUDGETED degenerate compression.
 #
 # Degeneracy is a second lever alongside fragmentation. A degenerate codon at a
@@ -871,15 +1125,21 @@ def _assemble_examples(rec, L, chemistry, arm_codons, k=3):
     """A few encoded cores rendered as assembled full-length DNA (for the report),
     by back-translating each core's ACTUAL pieces with the junction pins -- concrete
     and site-free even where the design uses a degenerate oligo for that layer."""
-    cuts, tokens, kept = rec["cuts"], rec["tokens"], rec["kept_pieces"]
-    K = len(kept)
+    cuts, tokens, units = rec["cuts"], rec["tokens"], rec["frag_units"]
+    K = len(units)
     bounds = [0] + cuts + [L]
     pins = _pins_for_design(chemistry, cuts, tokens, arm_codons) if cuts else []
-    kept_sets = [set(k_) for k_ in kept]
+    # a core is encoded iff each of its pieces is presented by that fragment's units
+    presented = []
+    for f in range(K):
+        s = set()
+        for u in units[f]:
+            s.add(u[1]) if u[0] == "discrete" else s.update(u[1])
+        presented.append(s)
     out, seen = [], set()
     for s in _ALIGNED:
         parts = [piece(s, bounds[i], bounds[i + 1]) for i in range(K)]
-        if not all(parts[i] in kept_sets[i] for i in range(K)):
+        if not all(parts[i] in presented[i] for i in range(K)):
             continue
         dnas, ok = [], True
         for f in range(K):
@@ -928,7 +1188,7 @@ def _domesticate_agnostic(rec, L):
 # --------------------------------------------------------------------------- #
 
 def evaluate_K(seqs, K, min_block, chemistry, arm_codons, L, max_junk_frac,
-               max_junk, degenerate, reserved=frozenset()):
+               max_junk, degenerate, reserved=frozenset(), densify=False, link_tau=0.2):
     placed = place_cuts(L, K, min_block, chemistry, arm_codons, reserved)
     if placed is None:
         return None                            # no chemistry-valid segmentation for this K
@@ -936,10 +1196,17 @@ def evaluate_K(seqs, K, min_block, chemistry, arm_codons, L, max_junk_frac,
     pieces = core_pieces(cuts, L)
     weights = _WEIGHTS
     present, U, W, traj = marginal_select(pieces, weights, max_junk_frac, max_junk)
+    disc = {"covered_cores": U, "covered_weight": W,
+            "library": _libsize(present), "oligos": _n_oligos(present)}
 
-    frags, frag_units, library = encode_design(
-        present, U, cuts, tokens, L, chemistry, arm_codons,
-        max_junk_frac, max_junk, degenerate)
+    if densify:
+        frags, frag_units, library, U, W = densify_select(
+            present, pieces, weights, cuts, tokens, L, chemistry, arm_codons,
+            max_junk_frac, max_junk, link_tau)
+    else:
+        frags, frag_units, library = encode_design(
+            present, U, cuts, tokens, L, chemistry, arm_codons,
+            max_junk_frac, max_junk, degenerate)
 
     n_cores = len(seqs)
     total_w = sum(weights)
@@ -947,9 +1214,10 @@ def evaluate_K(seqs, K, min_block, chemistry, arm_codons, L, max_junk_frac,
         "K": K,
         "cuts": cuts,
         "tokens": tokens,               # per-junction overhangs (gg) / arms (hr) / None
-        "kept_pieces": [sorted(present[f]) for f in range(K)],  # actual selected pieces
+        "kept_pieces": [sorted(present[f]) for f in range(K)],  # discrete kept pieces
         "frag_units": frag_units,       # per-fragment discrete/degenerate oligo plan
         "frags": frags,
+        "discrete": disc,               # baseline before densify (for report delta)
         "library_size": library,
         "junk": library - U,
         "n_cores_total": n_cores,
@@ -1015,7 +1283,22 @@ def build_report(args, results, rec, L, n_cores, total_w):
                if f["variants"] != f["natural_pieces"] else f"{f['natural_pieces']} distinct pieces")
         lines.append(f"  fragment {i}: cols [{f['a']},{f['b']})  {pcs}, length {lvar}")
         lines.append(f"      -> {f['n_oligos']} oligos, {f['deg_bases']} degenerate nt, ~{f['nt']} nt")
-    if args.degenerate:
+    if args.densify:
+        d = rec["discrete"]
+        deg_cells = sum(f.get("degenerate_cells", 0) for f in rec["frags"])
+        lines.append("")
+        lines.append(f"  DENSIFY (linkage-guided degenerate coverage, "
+                     f"--link-tau {args.link_tau}):")
+        lines.append(f"    discrete baseline : {d['covered_cores']}/{n_cores} cores, "
+                     f"{d['covered_weight']}/{total_w} seqs, {d['library']:,} library, "
+                     f"{d['oligos']} oligos")
+        lines.append(f"    after densify     : {rec['n_cores_encoded']}/{n_cores} cores, "
+                     f"{rec['encoded_weight']}/{total_w} seqs, {rec['library_size']:,} library "
+                     f"({rec['junk_pct']:.1f}% junk), {rec['total_oligos']} oligos")
+        lines.append(f"    => +{rec['encoded_weight'] - d['covered_weight']} seqs covered, "
+                     f"{d['oligos'] - rec['total_oligos']} fewer oligos, via {deg_cells} "
+                     f"degenerate cell(s) (independent columns only; linked columns kept discrete)")
+    elif args.degenerate:
         disc_oligos = sum(f["natural_pieces"] for f in rec["frags"])
         disc_lib = 1
         for f in rec["frags"]:
@@ -1206,6 +1489,14 @@ def main():
                     help="enable junk-BUDGETED degenerate-codon oligo compression "
                          "(spends leftover junk head-room under --max-junk-pct to "
                          "cut the oligo count; does not add coverage)")
+    ap.add_argument("--densify", action="store_true",
+                    help="enable linkage-guided degenerate COVERAGE moves (DeCoDe-lite): "
+                         "degenerate independent columns to cover cores discrete "
+                         "selection dropped, keeping linked columns discrete. Supersedes "
+                         "--degenerate. Needs greedy_oligo importable.")
+    ap.add_argument("--link-tau", type=float, default=0.2,
+                    help="APC-MI threshold (bits) below which a column counts as "
+                         "independent and may be degenerated by --densify (default 0.2)")
     ap.add_argument("--gg-enzyme", choices=["bsmbi", "esp3i", "bsai"], default="bsmbi",
                     help="Type IIS enzyme whose recognition site is domesticated out "
                          "of every full-length sequence (default bsmbi/esp3i = CGTCTC; "
@@ -1225,6 +1516,8 @@ def main():
     FORBIDDEN_SITES = frozenset({site, _revcomp(site)})
     reserved = (BACKBONE_OVERHANGS if args.chemistry == "gg"
                 and not args.shared_backbone_overhangs else frozenset())
+    if args.densify and not _HAVE_GREEDY:
+        sys.exit("--densify needs greedy_oligo.py importable (run from the script's dir).")
 
     seqs = read_aligned_cores(args.aln_fasta)
     prepare(seqs)
@@ -1236,7 +1529,8 @@ def main():
         if K > 1 and K * args.min_block_cols > L:
             break                       # can't fit this many fragments
         r = evaluate_K(seqs, K, args.min_block_cols, args.chemistry, args.arm_codons,
-                       L, max_junk_frac, args.max_junk, args.degenerate, reserved)
+                       L, max_junk_frac, args.max_junk, args.degenerate, reserved,
+                       args.densify, args.link_tau)
         if r is not None:
             results.append(r)
     if not results:
