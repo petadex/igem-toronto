@@ -14,17 +14,29 @@ Verified facts about s3://esm-protein-atlas (public, --no-sign-request):
 
 Install:  pip install pylance pyarrow msgpack numpy brotli zstandard boto3 tqdm
 
-Output model (content-addressed):
-  - PDBs are keyed by protein_hash:  <outdir>/<hash>.pdb  (or s3://bucket/prefix/<hash>.pdb)
-    One object per UNIQUE sequence, so the input's heavy ORF redundancy collapses.
+Output model (content-addressed; one object per UNIQUE sequence keyed by protein_hash, so
+the input's heavy ORF redundancy collapses). Mirrors the ESMFold2 predictor's triple, so
+Atlas and freshly-folded structures are directly comparable:
+  - <outdir>/structures/<hash>.<fmt>   all-atom coords (atom37 -> mmCIF/PDB; pLDDT in B-factor)
+  - <outdir>/arrays/<hash>.npz         per_residue_plddt[L], pae[L,L], residue_index[L]
+  - <outdir>/metrics.csv               protein_hash, source_dataset, seq_len, mean_plddt,
+                                       ptm, has_pae   (resume ledger + ORF-join key; mirrored
+                                       to <s3-prefix>/metrics.csv every ~5 min + at exit and
+                                       seeded back from S3 on a fresh box)
   - --orf-map writes the full orf_id -> protein_hash index (every ORF record, streamed).
-  - found_hashes.tsv lists which hashes actually have a structure (drives resume + the join).
-  - "which ORFs have a structure?"  ==  orf_map rows whose protein_hash is in found_hashes.
+  - "which ORFs have a structure?"  ==  orf_map rows whose protein_hash is in metrics.csv.
+
+pTM (global) and PAE ([L,L]) are read from the Atlas 'ptm'/'pae' columns and written to
+metrics.csv / arrays.npz -- earlier versions of this script kept only pLDDT (in the CIF
+B-factor) and discarded pTM/PAE. To backfill them for a pre-existing download, delete
+metrics.csv (and the old found_hashes.tsv) so the affected hashes are re-fetched.
 """
-import os, io, time, hashlib
+import os, io, csv, time, hashlib
 import numpy as np
-import lance, brotli, msgpack
 import zstandard as zstd
+# brotli, msgpack, lance and boto3 are imported lazily (inside the functions that use
+# them) so this module imports -- and --help / the pure helpers run -- without the heavy
+# S3/Lance stack installed. They are only needed for an actual Atlas query.
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from itertools import islice
 try:
@@ -48,6 +60,7 @@ DATASETS = {                                       # short name -> Lance dataset
 DATASET_ORDER = ["atlas", "1b"]                    # default query order (cheaper set first)
 OUTDIR = "pdbs"
 BATCH = 4000                                       # hashes per indexed query
+S3_DEST = "s3://petadex-protein-structures/esmatlas/"   # canonical sink (issue #79)
 
 # --- atom37 -> PDB ----------------------------------------------------------
 ATOM37 = ['N','CA','C','CB','O','CG','CG1','CG2','OG','OG1','SG','CD','CD1','CD2',
@@ -60,30 +73,6 @@ AA3 = {'A':'ALA','R':'ARG','N':'ASN','D':'ASP','C':'CYS','Q':'GLN','E':'GLU','G'
 def _arr(d):
     return np.frombuffer(bytes(d[b'data']), dtype=np.dtype(d[b'type'])).reshape(tuple(d[b'shape']))
 
-def blob_to_pdb(blob):
-    o = msgpack.unpackb(brotli.decompress(blob), raw=False, strict_map_key=False)
-    seq   = o['sequence']
-    pos_c = _arr(o['atom37_positions']).astype(np.float32)     # [n_present, 3]
-    mask  = _arr(o['atom37_mask']).astype(bool)                # [n_res, 37]
-    resid = _arr(o['residue_index'])                           # 1-based already
-    conf  = _arr(o['confidence']).astype(np.float32)           # per-residue pLDDT
-    nres  = mask.shape[0]
-    full = np.zeros((nres, 37, 3), np.float32); full[mask] = pos_c
-    bf = conf*100 if conf.size and conf.max() <= 1.0 else conf
-    out, serial = [], 1
-    for i in range(nres):
-        rn = AA3.get(seq[i], 'UNK')
-        for j in range(37):
-            if not mask[i, j]:
-                continue
-            x, y, z = full[i, j]; name = ATOM37[j]
-            an = (" " + name) if len(name) < 4 else name
-            out.append(f"ATOM  {serial:>5} {an:<4} {rn:>3} A{int(resid[i]):>4}    "
-                       f"{x:8.3f}{y:8.3f}{z:8.3f}{1.0:6.2f}{bf[i]:6.2f}          {name[0]:>2}")
-            serial += 1
-    out += ["TER", "END"]
-    return "\n".join(out) + "\n"
-
 _CIF_HEADER = ("loop_\n"
     "_atom_site.group_PDB\n_atom_site.id\n_atom_site.type_symbol\n"
     "_atom_site.label_atom_id\n_atom_site.label_comp_id\n_atom_site.label_asym_id\n"
@@ -92,31 +81,102 @@ _CIF_HEADER = ("loop_\n"
     "_atom_site.occupancy\n_atom_site.B_iso_or_equiv\n"
     "_atom_site.auth_seq_id\n_atom_site.auth_asym_id\n")
 
-def blob_to_cif(blob, name="structure"):
-    # Same atom37 -> coordinates decode as blob_to_pdb, emitted as an mmCIF atom_site
-    # loop. mmCIF has no 99,999-atom / numbering limits, so it's the safer container.
+def _decode_blob(blob):
+    # brotli + msgpack-numpy -> the atom37 structure, expanded to full [L,37,3] coords.
+    # pLDDT is normalised to the 0-100 scale HERE so every downstream writer is consistent.
+    import brotli, msgpack
     o = msgpack.unpackb(brotli.decompress(blob), raw=False, strict_map_key=False)
     seq   = o['sequence']
-    pos_c = _arr(o['atom37_positions']).astype(np.float32)
-    mask  = _arr(o['atom37_mask']).astype(bool)
-    resid = _arr(o['residue_index'])
-    conf  = _arr(o['confidence']).astype(np.float32)
+    pos_c = _arr(o['atom37_positions']).astype(np.float32)     # [n_present, 3]
+    mask  = _arr(o['atom37_mask']).astype(bool)                # [n_res, 37]
+    resid = _arr(o['residue_index'])                           # 1-based already
+    conf  = _arr(o['confidence']).astype(np.float32)           # per-residue pLDDT
     nres  = mask.shape[0]
-    full = np.zeros((nres, 37, 3), np.float32); full[mask] = pos_c
-    bf = conf*100 if conf.size and conf.max() <= 1.0 else conf
+    full  = np.zeros((nres, 37, 3), np.float32); full[mask] = pos_c
+    plddt = conf * 100 if conf.size and conf.max() <= 1.0 else conf   # -> 0-100
+    return {"seq": seq, "pos": full, "mask": mask, "resid": resid, "plddt": plddt, "nres": nres}
+
+def _cif_from_decoded(d, name="structure"):
+    # atom37 -> mmCIF atom_site loop (pLDDT in B_iso_or_equiv). mmCIF has no 99,999-atom /
+    # numbering limits, so it's the safer container.
+    seq, pos, mask, resid, bf = d["seq"], d["pos"], d["mask"], d["resid"], d["plddt"]
     out = [f"data_{name}", "#", _CIF_HEADER.rstrip("\n")]
     serial = 1
-    for i in range(nres):
+    for i in range(mask.shape[0]):
         rn = AA3.get(seq[i], 'UNK'); ri = int(resid[i])
         for j in range(37):
             if not mask[i, j]:
                 continue
-            x, y, z = full[i, j]; an = ATOM37[j]
+            x, y, z = pos[i, j]; an = ATOM37[j]
             out.append(f"ATOM {serial} {an[0]} {an} {rn} A 1 {ri} "
                        f"{x:.3f} {y:.3f} {z:.3f} 1.00 {bf[i]:.2f} {ri} A")
             serial += 1
     out.append("#")
     return "\n".join(out) + "\n"
+
+def _pdb_from_decoded(d):
+    seq, pos, mask, resid, bf = d["seq"], d["pos"], d["mask"], d["resid"], d["plddt"]
+    out, serial = [], 1
+    for i in range(mask.shape[0]):
+        rn = AA3.get(seq[i], 'UNK')
+        for j in range(37):
+            if not mask[i, j]:
+                continue
+            x, y, z = pos[i, j]; nm = ATOM37[j]
+            an = (" " + nm) if len(nm) < 4 else nm
+            out.append(f"ATOM  {serial:>5} {an:<4} {rn:>3} A{int(resid[i]):>4}    "
+                       f"{x:8.3f}{y:8.3f}{z:8.3f}{1.0:6.2f}{bf[i]:6.2f}          {nm[0]:>2}")
+            serial += 1
+    out += ["TER", "END"]
+    return "\n".join(out) + "\n"
+
+# Back-compat one-shot wrappers (decode + format), used anywhere that still holds a raw blob.
+def blob_to_cif(blob, name="structure"):
+    return _cif_from_decoded(_decode_blob(blob), name)
+
+def blob_to_pdb(blob):
+    return _pdb_from_decoded(_decode_blob(blob))
+
+def _as_float(x):
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+def _coerce_pae(pae_val, nres):
+    # Normalise the Atlas 'pae' column to an [L,L] float32 (or None). VERIFIED on a live
+    # row: the column is a *serialized numpy blob* -- np.savez bytes (a zip whose first
+    # member is the PAE array), NOT a plain list. So bytes are np.load()-ed; lists/ndarrays
+    # are still handled for robustness. Never raises -> a bad PAE can't drop the structure.
+    if pae_val is None:
+        return None
+    try:
+        if isinstance(pae_val, (bytes, bytearray, memoryview)):
+            obj = np.load(io.BytesIO(bytes(pae_val)), allow_pickle=False)
+            if hasattr(obj, "files"):                 # NpzFile -> take its first array
+                obj = obj[obj.files[0]]
+            arr = np.asarray(obj, dtype=np.float32)
+        else:
+            arr = np.asarray(pae_val, dtype=np.float32)
+    except Exception:
+        return None
+    if arr.ndim == 1:
+        if nres and arr.size == nres * nres:
+            arr = arr.reshape(nres, nres)
+        else:
+            return None
+    return arr if arr.ndim == 2 else None
+
+def build_npz_bytes(d, pae):
+    # per-residue pLDDT (0-100), residue_index, and PAE [L,L] if present -> a compressed
+    # .npz whose keys match the ESMFold2 predictor's arrays/<id>.npz, so the two structure
+    # sources are byte-comparable.
+    arrays = {"per_residue_plddt": d["plddt"].astype(np.float32),
+              "residue_index": np.asarray(d["resid"]).astype(np.int32)}
+    if pae is not None:
+        arrays["pae"] = pae.astype(np.float32)
+    buf = io.BytesIO(); np.savez_compressed(buf, **arrays)
+    return buf.getvalue()
 
 # --- FASTA -> set of unique protein_hashes (+ optional full orf_id->hash index) ---
 def parse_fasta(path, orf_map_path=None):
@@ -287,64 +347,106 @@ def count_hits(hashes, dsets, workers=16):
         print(f"  {n:>9} from {name}")
     print(f"  {len(remaining):>9} not found in any dataset")
 
+def _s3_put_file(s3, bucket, key, path, ctype="text/csv"):
+    # Mirror a local file to s3://bucket/key. Used to keep metrics.csv (the resume ledger +
+    # aggregate confidence table) durable off an ephemeral VM. Re-uploads the whole file, so
+    # it is called on a time interval (not per batch) -- cheap relative to the structure data.
+    with open(path, "rb") as fh:
+        s3.put_object(Bucket=bucket, Key=key, Body=fh.read(), ContentType=ctype)
+
+def _s3_get_file(s3, bucket, key, path):
+    # Pull s3://bucket/key down to a local path; return True if it existed (seeds resume
+    # from a previous run on a fresh instance). Signed client: reads our own private bucket.
+    try:
+        obj = s3.get_object(Bucket=bucket, Key=key)
+    except Exception:
+        return False
+    with open(path, "wb") as fh:
+        fh.write(obj["Body"].read())
+    return True
+
 def download(hashes, dsets, outdir=OUTDIR, s3_dest=None, fmt="cif", workers=16):
-    # Writes one structure per unique sequence, keyed by protein_hash, to
-    # <outdir>/<hash>.<fmt> or s3://bucket/prefix/<hash>.<fmt>. Atlas queries + decode
-    # + upload run concurrently across `workers` threads (the work is I/O-bound).
-    # found_hashes.tsv is the resume ledger + ORF-lookup join key; it is written only
-    # from the main thread as batches complete, so no file-write locking is needed.
-    serialize = (lambda blob, h: blob_to_cif(blob, h)) if fmt == "cif" \
-                else (lambda blob, h: blob_to_pdb(blob))
+    # Writes, per unique sequence (keyed by protein_hash), the SAME {structure, arrays,
+    # metrics} triple as the ESMFold2 predictor:
+    #   <outdir>/structures/<hash>.<fmt>   all-atom coords (pLDDT in the B-factor)
+    #   <outdir>/arrays/<hash>.npz         per_residue_plddt[L], pae[L,L], residue_index[L]
+    #   <outdir>/metrics.csv               protein_hash,source_dataset,seq_len,mean_plddt,
+    #                                      ptm,has_pae   (also the resume ledger + ORF join key)
+    # Atlas query + decode + upload run concurrently across `workers` threads (I/O-bound).
+    # metrics.csv is appended only from the main thread as batches complete -> no locking.
     ctype = {"cif": "chemical/x-mmcif", "pdb": "chemical/x-pdb"}[fmt]
+    metrics_path = os.path.join(outdir, "metrics.csv")
     os.makedirs(outdir, exist_ok=True)
-    found_path = os.path.join(outdir, "found_hashes.tsv")
+
+    s3 = bucket = prefix = metrics_key = None
+    if s3_dest:
+        import boto3
+        s3 = boto3.client("s3")                       # thread-safe put_object
+        bucket, prefix = _parse_s3(s3_dest)
+        metrics_key = "/".join(p for p in (prefix, "metrics.csv") if p)
+        if not os.path.exists(metrics_path) and _s3_get_file(s3, bucket, metrics_key, metrics_path):
+            print(f"resume ledger seeded from s3://{bucket}/{metrics_key}")
+    else:
+        os.makedirs(os.path.join(outdir, "structures"), exist_ok=True)
+        os.makedirs(os.path.join(outdir, "arrays"), exist_ok=True)
+
     done = set()
-    if os.path.exists(found_path):
-        with open(found_path) as fh:
+    if os.path.exists(metrics_path):                  # resume: protein_hash is column 0
+        with open(metrics_path) as fh:
             next(fh, None)                            # skip header
-            done = {line.split("\t", 1)[0] for line in fh if line.strip()}
+            done = {line.split(",", 1)[0] for line in fh if line.strip()}
     n0 = len(hashes)
     hashes.difference_update(done)                    # in place -- avoid a 124M-set copy
     remaining = hashes
     print(f"{n0} unique sequences | {len(done)} already done | "
           f"{len(remaining)} to fetch | {workers} workers")
 
-    s3 = bucket = prefix = None
-    if s3_dest:
-        import boto3
-        # one shared low-level client (boto3 clients are thread-safe for put_object)
-        s3 = boto3.client("s3")
-        bucket, prefix = _parse_s3(s3_dest)
-
-    def put(h, text):
+    def write_out(subdir, name, data):
         if s3:
-            key = f"{prefix}/{h}.{fmt}" if prefix else f"{h}.{fmt}"
-            s3.put_object(Bucket=bucket, Key=key, Body=text.encode(), ContentType=ctype)
+            key = "/".join(p for p in (prefix, subdir, name) if p)
+            body = data.encode() if isinstance(data, str) else data
+            s3.put_object(Bucket=bucket, Key=key, Body=body,
+                          ContentType=(ctype if subdir == "structures"
+                                       else "application/octet-stream"))
         else:
-            with open(os.path.join(outdir, f"{h}.{fmt}"), "w") as fh:
-                fh.write(text)
+            with open(os.path.join(outdir, subdir, name),
+                      "w" if isinstance(data, str) else "wb") as fh:
+                fh.write(data)
 
-    def process_chunk(ds, chunk):
-        # one worker: query a batch, then decode + upload every hit; return found hashes
+    def process_chunk(ds, chunk, src):
+        # one worker: query a batch, decode, write structure + arrays, return metric rows.
+        # 'ptm' and 'pae' are pulled alongside the structure_blob (previously dropped).
         q = ",".join(f"'{h}'" for h in chunk)
-        tbl = _scan_retry(ds, ["protein_hash", "structure_blob"], f"protein_hash IN ({q})")
+        tbl = _scan_retry(ds, ["protein_hash", "structure_blob", "ptm", "pae"],
+                          f"protein_hash IN ({q})")
         if not tbl:
             return []
-        got = []
+        rows = []
         for r in tbl:
             h = r["protein_hash"]
             try:
-                put(h, serialize(r["structure_blob"], h))
-                got.append(h)
+                d = _decode_blob(r["structure_blob"])
+                text = _cif_from_decoded(d, h) if fmt == "cif" else _pdb_from_decoded(d)
+                pae = _coerce_pae(r.get("pae"), d["nres"])
+                write_out("structures", f"{h}.{fmt}", text)
+                write_out("arrays", f"{h}.npz", build_npz_bytes(d, pae))
+                ptm = _as_float(r.get("ptm"))
+                rows.append({"protein_hash": h, "source_dataset": src, "seq_len": d["nres"],
+                             "mean_plddt": round(float(np.mean(d["plddt"])), 3),
+                             "ptm": (round(ptm, 4) if ptm is not None else ""),
+                             "has_pae": int(pae is not None)})
             except Exception as e:                    # a bad structure must not kill the batch
                 tqdm.write(f"  WARN {h}: {e}")
-        return got
+        return rows
 
     found = 0
-    write_header = not os.path.exists(found_path)
-    with open(found_path, "a") as ff, ThreadPoolExecutor(max_workers=workers) as ex:
+    last_sync = time.time()
+    write_header = not os.path.exists(metrics_path)
+    with open(metrics_path, "a", newline="") as mf, ThreadPoolExecutor(max_workers=workers) as ex:
+        writer = csv.writer(mf)
         if write_header:
-            ff.write("protein_hash\tsource_dataset\n")
+            writer.writerow(["protein_hash", "source_dataset", "seq_len",
+                             "mean_plddt", "ptm", "has_pae"])
         for u, ds in dsets:                           # try representative set first, then 1B
             if not remaining:
                 break
@@ -352,19 +454,27 @@ def download(hashes, dsets, outdir=OUTDIR, s3_dest=None, fmt="cif", workers=16):
             pending = list(remaining)                 # one snapshot; bounded submission below
             n_batches = (len(pending) + BATCH - 1) // BATCH
             with tqdm(total=n_batches, desc=f"download {src}", unit="batch") as pbar:
-                for got in _bounded(ex, lambda c, ds=ds: process_chunk(ds, c),
-                                    _ibatch(pending, BATCH), workers * 2):
-                    for h in got:
+                for rows in _bounded(ex, lambda c, ds=ds, src=src: process_chunk(ds, c, src),
+                                     _ibatch(pending, BATCH), workers * 2):
+                    for row in rows:
+                        h = row["protein_hash"]
                         if h in remaining:
-                            ff.write(f"{h}\t{src}\n")
+                            writer.writerow([h, row["source_dataset"], row["seq_len"],
+                                             row["mean_plddt"], row["ptm"], row["has_pae"]])
                             remaining.discard(h); found += 1
-                    ff.flush()                        # crash-safe: persist ledger per batch
+                    mf.flush()                        # crash-safe: persist ledger per batch
+                    if metrics_key and time.time() - last_sync > 300:   # mirror to S3 ~every 5 min
+                        _s3_put_file(s3, bucket, metrics_key, metrics_path)
+                        last_sync = time.time()
                     pbar.update(1)
                     pbar.set_postfix(found=found, unmatched=len(remaining))
+    if metrics_key:                                   # final mirror so the ledger is durable off-box
+        _s3_put_file(s3, bucket, metrics_key, metrics_path)
     dest = s3_dest if s3_dest else outdir
-    print(f"\nDone: {found} structures written to {dest} ; "
+    print(f"\nDone: {found} structures (+ arrays) written to {dest} ; "
           f"{len(remaining)} sequences not in the atlas.")
-    print(f"Found-set ledger: {found_path}")
+    where = f"s3://{bucket}/{metrics_key}" if metrics_key else metrics_path
+    print(f"Metrics + resume ledger: {metrics_path}" + (f" (mirrored to {where})" if metrics_key else ""))
 
 def main(fasta, count_only=False, sample=None, seed=0,
          orf_map=None, s3_dest=None, outdir=OUTDIR, fmt="cif", workers=16,
@@ -386,6 +496,7 @@ def main(fasta, count_only=False, sample=None, seed=0,
     if bad:
         raise SystemExit(f"unknown --datasets {bad}; choose from {list(DATASETS)}")
     print(f"querying datasets: {', '.join(names)}")
+    import lance
     dsets = [(DATASETS[n], lance.dataset(DATASETS[n], storage_options=STORAGE)) for n in names]
     if count_only:
         count_hits(hashes, dsets, workers=workers)
@@ -406,8 +517,10 @@ if __name__ == "__main__":
     ap.add_argument("--orf-map", default=None, metavar="PATH",
                     help="write the full orf_id->protein_hash index here (.tsv or .tsv.zst); "
                          "join against found_hashes.tsv to see which ORFs have a structure")
-    ap.add_argument("--s3", dest="s3_dest", default=None, metavar="s3://bucket/prefix",
-                    help="upload <hash>.<format> objects here instead of writing locally")
+    ap.add_argument("--s3", dest="s3_dest", default=S3_DEST, metavar="s3://bucket/prefix/",
+                    help=f"upload structures/ + arrays/ here (default {S3_DEST}); "
+                         f"pass --s3 '' to write locally instead (metrics.csv is always written "
+                         f"locally and, when uploading, mirrored to <prefix>/metrics.csv)")
     ap.add_argument("--outdir", default=OUTDIR,
                     help=f"local output dir for structures + found_hashes.tsv (default {OUTDIR})")
     ap.add_argument("--format", dest="fmt", choices=["cif", "pdb"], default="cif",
