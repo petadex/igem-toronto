@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uncultured bacterium | Bioplastic Organism Profile</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+       background: #f2f5fb; color: #1a1a2e; line-height: 1.6; }
+.header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+          color: #fff; padding: 28px 40px; }
+.header h1 { font-size: 1.85rem; font-weight: 700; letter-spacing: -0.4px; }
+.header .meta { color: #9fb3cc; font-size: 0.88rem; margin-top: 8px; }
+.tag-row { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { display: inline-block; border-radius: 4px; padding: 3px 10px; font-size: 0.78rem;
+       font-weight: 600; }
+.tag-bio  { background: #1a7a4a; color: #d4f5e6; }
+.tag-conv { background: #3a5cc0; color: #d4e3ff; }
+.tag-both { background: #7a4a1a; color: #f5e6d4; }
+.breadcrumb { padding: 10px 40px; background: #e6eaf3; font-size: 0.84rem; }
+.breadcrumb a { color: #3a7bd5; text-decoration: none; }
+.container { max-width: 1140px; margin: 0 auto; padding: 28px 40px; }
+.section { background: #fff; border-radius: 10px; border: 1px solid #d8dff0;
+           margin-bottom: 22px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
+.section-header { background: #f0f4fb; border-bottom: 1px solid #d8dff0;
+                  padding: 13px 22px; font-weight: 600; font-size: 0.98rem;
+                  color: #1a1a2e; display: flex; align-items: center; gap: 8px; }
+.section-body { padding: 20px 22px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.kv-row { display: flex; gap: 12px; margin-bottom: 9px; font-size: 0.9rem; }
+.kv-label { color: #6b7a99; min-width: 175px; flex-shrink: 0; }
+.kv-value { font-weight: 500; }
+.pill { display: inline-block; border-radius: 4px; padding: 2px 8px; font-size: 0.78rem;
+        margin: 2px; }
+.pill-bio  { background: #d4f5e6; color: #155724; }
+.pill-conv { background: #e8f0fe; color: #3a5cc0; }
+.pill-other { background: #f0f0f0; color: #555; }
+.badge { display: inline-block; border-radius: 4px; padding: 2px 8px;
+         font-size: 0.77rem; font-weight: 600; }
+.badge-yes { background: #d4edda; color: #155724; }
+.badge-no  { background: #f8d7da; color: #721c24; }
+.badge-na  { background: #e2e3e5; color: #383d41; }
+table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+th { background: #f0f4fb; padding: 9px 13px; text-align: left;
+     font-weight: 600; border-bottom: 2px solid #d8dff0; }
+td { padding: 8px 13px; border-bottom: 1px solid #edf0f5; vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+.stat-box { background: #f0f4fb; border-radius: 8px; padding: 16px; text-align: center; }
+.stat-val { font-size: 1.75rem; font-weight: 700; color: #3a5cc0; }
+.stat-lbl { font-size: 0.78rem; color: #6b7a99; margin-top: 4px; }
+.no-data  { color: #9aa3b5; font-style: italic; font-size: 0.88rem; }
+.note     { font-size: 0.78rem; color: #9aa3b5; margin-top: 10px; }
+.chart-wrap { position: relative; height: 220px; margin-bottom: 6px; }
+.chart-wrap-sm { position: relative; height: 160px; }
+a { color: #3a7bd5; }
+#search-input { width: 100%; padding: 10px 14px; font-size: 0.95rem;
+  border: 1px solid #c8d0e4; border-radius: 6px; margin-bottom: 14px; outline: none; }
+.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.filter-btn { padding: 5px 14px; border: 1px solid #c8d0e4; border-radius: 20px;
+              cursor: pointer; font-size: 0.83rem; background: #fff; }
+.filter-btn.active { background: #3a5cc0; color: #fff; border-color: #3a5cc0; }
+@media (max-width: 680px) {
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+  .container { padding: 14px; }
+  .header { padding: 18px 16px; }
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1><em>Uncultured bacterium</em></h1>
+  <div class="meta">
+    Tax ID: 77133 | 9 plastic type(s) |
+    56 PlasticDB entries | Years: 2008 to 2022
+  </div>
+  <div class="tag-row"><span class="tag tag-both">Bioplastic + Conventional</span></div>
+</div>
+<div class="breadcrumb"><a href="index.html">All organisms</a> / Uncultured bacterium</div>
+<div class="container">
+
+<!-- Charts -->
+<div class='section'><div class='section-header'>Research Overview</div><div class='section-body'>
+<div class="grid2" style="margin-bottom:20px">
+  <div>
+    <div style="font-size:0.82rem;font-weight:600;color:#6b7a99;margin-bottom:8px">
+      Plastic types degraded
+      <span style="color:#27ae60">&#9632;</span> bioplastic
+      <span style="color:#3a5cc0">&#9632;</span> conventional
+    </div>
+    <div class="chart-wrap"><canvas id="plastic-chart"></canvas></div>
+  </div>
+  <div>
+    <div style="font-size:0.82rem;font-weight:600;color:#6b7a99;margin-bottom:8px">
+      Research publications by year
+    </div>
+    <div class="chart-wrap"><canvas id="year-chart"></canvas></div>
+  </div>
+</div>
+<div class="grid2">
+  <div>
+    <div style="font-size:0.82rem;font-weight:600;color:#6b7a99;margin-bottom:8px">
+      Evidence methods used
+    </div>
+    <div class="chart-wrap-sm"><canvas id="ev-chart"></canvas></div>
+  </div>
+  <div>
+    <div style="font-size:0.82rem;font-weight:600;color:#6b7a99;margin-bottom:8px">
+      Enzyme families identified
+    </div>
+    <div class="chart-wrap-sm"><canvas id="enz-chart"></canvas></div>
+  </div>
+</div></div></div>
+
+<!-- PlasticDB Summary -->
+<div class="section"><div class="section-header">PlasticDB Summary</div>
+<div class="section-body"><div class="grid2"><div>
+<div class="kv-row"><span class="kv-label">Plastics degraded</span><span class="kv-value"><span class="pill pill-bio" title="bioplastic">PBAT</span><span class="pill pill-bio" title="bioplastic">PBS</span><span class="pill pill-bio" title="bioplastic">PBSA</span><span class="pill pill-bio" title="bioplastic">PCL</span><span class="pill pill-conv" title="conventional">PES</span><span class="pill pill-conv" title="conventional">PET</span><span class="pill pill-bio" title="bioplastic">PHA</span><span class="pill pill-bio" title="bioplastic">PHB</span><span class="pill pill-bio" title="bioplastic">PLA</span></span></div>
+<div class="kv-row"><span class="kv-label">Bioplastic entries</span><span class="kv-value">32 / 56</span></div>
+<div class="kv-row"><span class="kv-label">Thermophilic flag</span><span class="kv-value">No</span></div>
+<div class="kv-row"><span class="kv-label">Has linked sequence</span><span class="kv-value"><span class="badge badge-yes">Yes</span></span></div>
+<div class="kv-row"><span class="kv-label">Has named enzyme</span><span class="kv-value"><span class="badge badge-yes">Yes</span></span></div>
+<div class="kv-row"><span class="kv-label">Has GenBank ID</span><span class="kv-value"><span class="badge badge-yes">Yes</span></span></div>
+</div><div>
+<div class="kv-row"><span class="kv-label">Isolation environments</span><span class="kv-value"><span class="pill pill-other">Not recorded</span></span></div>
+<div class="kv-row"><span class="kv-label">Isolation locations</span><span class="kv-value"><span class="pill pill-other">Not recorded</span></span></div>
+</div></div></div></div>
+
+<!-- Entries table -->
+<div class="section"><div class="section-header">PlasticDB Entries (56 total)</div>
+<div class="section-body"><table><thead><tr><th>Plastic</th><th>Year</th><th>Enzyme</th><th>Enzyme family</th><th>Sequence</th><th>GenBank</th><th>DOI</th></tr></thead><tbody><tr><td><span class='pill pill-bio'>PLA</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PBS</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PBSA</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PCL</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PES</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PHB</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PHA</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PBS</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PBSA</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PCL</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PES</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PLA</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PHA</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PBS</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PBSA</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PCL</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PES</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PHB</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PLA</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PHA</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PLA</span></td><td>2008</td><td>PLA depolymerase</td><td style='font-size:0.78rem'>Depolymerase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PBAT</span></td><td>2017</td><td>Carboxylesterase</td><td style='font-size:0.78rem'>Esterase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PBAT</span></td><td>2017</td><td>Carboxylesterase</td><td style='font-size:0.78rem'>Esterase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PBAT</span></td><td>2017</td><td>Carboxylesterase</td><td style='font-size:0.78rem'>Esterase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PBAT</span></td><td>2017</td><td>Carboxylesterase</td><td style='font-size:0.78rem'>Esterase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PBAT</span></td><td>2017</td><td>Carboxylesterase</td><td style='font-size:0.78rem'>Esterase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PBAT</span></td><td>2017</td><td>Carboxylesterase</td><td style='font-size:0.78rem'>Esterase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PCL</span></td><td>2018</td><td>PETase</td><td style='font-size:0.78rem'>PETase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2018</td><td>PETase</td><td style='font-size:0.78rem'>PETase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2021</td><td>PETase</td><td style='font-size:0.78rem'>PETase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>N/A</td><td>Hydrolase</td><td style='font-size:0.78rem'>Hydrolase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2021</td><td>Polyester hydrolase</td><td style='font-size:0.78rem'>Hydrolase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PCL</span></td><td>2021</td><td>Polyester hydrolase</td><td style='font-size:0.78rem'>Hydrolase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2021</td><td>Polyester hydrolase</td><td style='font-size:0.78rem'>Hydrolase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2021</td><td>Polyester hydrolase</td><td style='font-size:0.78rem'>Hydrolase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2021</td><td>Polyester hydrolase</td><td style='font-size:0.78rem'>Hydrolase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2021</td><td>Polyester hydrolase</td><td style='font-size:0.78rem'>Hydrolase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2021</td><td>Polyester hydrolase</td><td style='font-size:0.78rem'>Hydrolase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2021</td><td>Polyester hydrolase</td><td style='font-size:0.78rem'>Hydrolase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PCL</span></td><td>2012</td><td>Cutinase</td><td style='font-size:0.78rem'>Cutinase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2012</td><td>Cutinase</td><td style='font-size:0.78rem'>Cutinase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PLA</span></td><td>2015</td><td>Esterase</td><td style='font-size:0.78rem'>Esterase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PCL</span></td><td>2015</td><td>Esterase</td><td style='font-size:0.78rem'>Esterase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PBSA</span></td><td>2015</td><td>Esterase</td><td style='font-size:0.78rem'>Esterase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PLA</span></td><td>2015</td><td>Esterase</td><td style='font-size:0.78rem'>Esterase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-bio'>PLA</span></td><td>2015</td><td>Esterase</td><td style='font-size:0.78rem'>Esterase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-yes">Yes</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2022</td><td>Hydrolase</td><td style='font-size:0.78rem'>Hydrolase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-no">No</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2022</td><td>PETase</td><td style='font-size:0.78rem'>PETase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-no">No</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2022</td><td>PETase</td><td style='font-size:0.78rem'>PETase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-no">No</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2022</td><td>PETase</td><td style='font-size:0.78rem'>PETase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-no">No</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2022</td><td>PETase</td><td style='font-size:0.78rem'>PETase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-no">No</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2022</td><td>PETase</td><td style='font-size:0.78rem'>PETase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-no">No</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2022</td><td>PETase</td><td style='font-size:0.78rem'>PETase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-no">No</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2022</td><td>PETase</td><td style='font-size:0.78rem'>PETase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-no">No</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2022</td><td>PETase</td><td style='font-size:0.78rem'>PETase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-no">No</span></td><td style='font-size:0.78rem'>nan</td></tr><tr><td><span class='pill pill-conv'>PET</span></td><td>2022</td><td>PETase</td><td style='font-size:0.78rem'>PETase</td><td><span class="badge badge-yes">Yes</span></td><td><span class="badge badge-no">No</span></td><td style='font-size:0.78rem'>nan</td></tr></tbody></table></div></div>
+
+<!-- Genome data -->
+<div class="section"><div class="section-header">Genome Data (NCBI Assembly)</div>
+<div class="section-body"><div class="grid3" style="margin-bottom:18px"><div class="stat-box"><div class="stat-val">2.18 Mbp</div><div class="stat-lbl">Genome size</div></div><div class="stat-box"><div class="stat-val" style="font-size:1.1rem">Complete Genome</div><div class="stat-lbl">Assembly level</div></div><div class="stat-box"><div class="stat-val">2.18 Mbp</div><div class="stat-lbl">Contig N50</div></div></div><div class="kv-row"><span class="kv-label">Assembly accession</span><span class="kv-value"><a href="https://www.ncbi.nlm.nih.gov/assembly/GCA_985558875.1" target="_blank">GCA_985558875.1</a></span></div><div class="kv-row"><span class="kv-label">Assembly name</span><span class="kv-value">N-BarE-26apr23-C7-circ</span></div><div class="kv-row"><span class="kv-label">Contig count</span><span class="kv-value">1</span></div><div class="kv-row"><span class="kv-label">Sequencing coverage</span><span class="kv-value">13x</span></div><p class="note">Source: NCBI Assembly. Best assembly selected by completeness (Complete > Chromosome > Scaffold > Contig).</p></div></div>
+
+<!-- PubMed literature -->
+<div class="section"><div class="section-header">PubMed Literature</div>
+<div class="section-body"><div class="grid2" style="margin-bottom:18px"><div class="stat-box"><div class="stat-val">173</div><div class="stat-lbl">Plastic/bioplastic papers</div></div><div class="stat-box"><div class="stat-val">281</div><div class="stat-lbl">Total PubMed papers</div></div></div><p class="note">Source: NCBI PubMed esearch. Plastic/bioplastic count uses query: organism + (plastic* OR bioplastic* OR polymer* OR degradation).</p></div></div>
+
+<!-- SRA sequencing -->
+<div class="section"><div class="section-header">NCBI SRA Sequencing Data</div>
+<div class="section-body"><div class="grid3" style="margin-bottom:18px"><div class="stat-box"><div class="stat-val">40287</div><div class="stat-lbl">SRA runs deposited</div></div><div class="stat-box"><div class="stat-val">349.50 Mbp</div><div class="stat-lbl">Bases (top 5 runs sampled)</div></div><div class="stat-box"><div class="stat-val">2026-2026</div><div class="stat-lbl">Deposit year range</div></div></div><div class="kv-row"><span class="kv-label">Sequencing platforms</span><span class="kv-value"><span class="pill pill-other">ILLUMINA</span></span></div><div class="kv-row"><span class="kv-label">Library strategies</span><span class="kv-value"><span class="pill pill-other">AMPLICON</span></span></div><p class="note">Source: NCBI SRA E-utilities esearch + esummary. Run count is exact from esearch. Platform/strategy sampled from top 5 runs.</p></div></div>
+
+<!-- BacDive physiological -->
+<div class="section"><div class="section-header">BacDive Physiological Data</div>
+<div class="section-body"><p class="no-data">Organism not found in BacDive public database.</p></div></div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+Chart.defaults.font.size = 11;
+
+// Plastic types chart
+new Chart(document.getElementById('plastic-chart'), {
+  type: 'bar',
+  data: {
+    labels: ["PHB", "PBS", "PES", "PHA", "PBSA", "PBAT", "PCL", "PLA", "PET"],
+    datasets: [{
+      data: [2, 3, 3, 3, 4, 6, 7, 7, 21],
+      backgroundColor: ["#27ae60", "#27ae60", "#3a5cc0", "#27ae60", "#27ae60", "#27ae60", "#27ae60", "#27ae60", "#3a5cc0"],
+      borderWidth: 0
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: '#edf0f5' }, title: { display: true, text: 'Entries', font: {size:10} } },
+      y: { grid: { display: false }, ticks: { font: { size: 10 } } }
+    }
+  }
+});
+
+// Research timeline chart
+new Chart(document.getElementById('year-chart'), {
+  type: 'bar',
+  data: {
+    labels: [2008, 2012, 2015, 2017, 2018, 2021, 2022],
+    datasets: [{
+      data: [21, 2, 5, 6, 2, 9, 10],
+      backgroundColor: '#3a5cc0',
+      borderWidth: 0,
+      borderRadius: 2
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { maxRotation: 45, font: { size: 9 } } },
+      y: { grid: { color: '#edf0f5' }, ticks: { stepSize: 1, font: { size: 10 } },
+            title: { display: true, text: 'Entries', font: { size: 10 } } }
+    }
+  }
+});
+
+// Evidence methods chart
+new Chart(document.getElementById('ev-chart'), {
+  type: 'bar',
+  data: {
+    labels: ["HPLC", "Spectrophotometry", "Clear zone", "Weight loss", "SEM", "MS", "DSC"],
+    datasets: [{
+      data: [25, 21, 19, 10, 2, 2, 1],
+      backgroundColor: ["#3a5cc0", "#27ae60", "#e67e22", "#e74c3c", "#9b59b6", "#1abc9c", "#f39c12"],
+      borderWidth: 0,
+      borderRadius: 2
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: '#edf0f5' }, ticks: { stepSize: 1, font: { size: 9 } } },
+      y: { grid: { display: false }, ticks: { font: { size: 9 } } }
+    }
+  }
+});
+
+// Enzyme families chart
+new Chart(document.getElementById('enz-chart'), {
+  type: 'doughnut',
+  data: {
+    labels: ["Depolymerase", "Esterase", "PETase", "Hydrolase", "Cutinase"],
+    datasets: [{
+      data: [21, 11, 12, 10, 2],
+      backgroundColor: ['#3a5cc0','#27ae60','#e67e22','#e74c3c','#9b59b6','#1abc9c'],
+      borderWidth: 2,
+      borderColor: '#fff'
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } }
+    }
+  }
+});
+</script>
+</body>
+</html>

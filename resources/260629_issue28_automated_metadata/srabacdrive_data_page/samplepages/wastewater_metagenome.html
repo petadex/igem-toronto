@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wastewater metagenome | Bioplastic Organism Profile</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+       background: #f2f5fb; color: #1a1a2e; line-height: 1.6; }
+.header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+          color: #fff; padding: 28px 40px; }
+.header h1 { font-size: 1.85rem; font-weight: 700; letter-spacing: -0.4px; }
+.header .meta { color: #9fb3cc; font-size: 0.88rem; margin-top: 8px; }
+.tag-row { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { display: inline-block; border-radius: 4px; padding: 3px 10px; font-size: 0.78rem;
+       font-weight: 600; }
+.tag-bio  { background: #1a7a4a; color: #d4f5e6; }
+.tag-conv { background: #3a5cc0; color: #d4e3ff; }
+.tag-both { background: #7a4a1a; color: #f5e6d4; }
+.breadcrumb { padding: 10px 40px; background: #e6eaf3; font-size: 0.84rem; }
+.breadcrumb a { color: #3a7bd5; text-decoration: none; }
+.container { max-width: 1140px; margin: 0 auto; padding: 28px 40px; }
+.section { background: #fff; border-radius: 10px; border: 1px solid #d8dff0;
+           margin-bottom: 22px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
+.section-header { background: #f0f4fb; border-bottom: 1px solid #d8dff0;
+                  padding: 13px 22px; font-weight: 600; font-size: 0.98rem;
+                  color: #1a1a2e; display: flex; align-items: center; gap: 8px; }
+.section-body { padding: 20px 22px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.kv-row { display: flex; gap: 12px; margin-bottom: 9px; font-size: 0.9rem; }
+.kv-label { color: #6b7a99; min-width: 175px; flex-shrink: 0; }
+.kv-value { font-weight: 500; }
+.pill { display: inline-block; border-radius: 4px; padding: 2px 8px; font-size: 0.78rem;
+        margin: 2px; }
+.pill-bio  { background: #d4f5e6; color: #155724; }
+.pill-conv { background: #e8f0fe; color: #3a5cc0; }
+.pill-other { background: #f0f0f0; color: #555; }
+.badge { display: inline-block; border-radius: 4px; padding: 2px 8px;
+         font-size: 0.77rem; font-weight: 600; }
+.badge-yes { background: #d4edda; color: #155724; }
+.badge-no  { background: #f8d7da; color: #721c24; }
+.badge-na  { background: #e2e3e5; color: #383d41; }
+table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+th { background: #f0f4fb; padding: 9px 13px; text-align: left;
+     font-weight: 600; border-bottom: 2px solid #d8dff0; }
+td { padding: 8px 13px; border-bottom: 1px solid #edf0f5; vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+.stat-box { background: #f0f4fb; border-radius: 8px; padding: 16px; text-align: center; }
+.stat-val { font-size: 1.75rem; font-weight: 700; color: #3a5cc0; }
+.stat-lbl { font-size: 0.78rem; color: #6b7a99; margin-top: 4px; }
+.no-data  { color: #9aa3b5; font-style: italic; font-size: 0.88rem; }
+.note     { font-size: 0.78rem; color: #9aa3b5; margin-top: 10px; }
+.chart-wrap { position: relative; height: 220px; margin-bottom: 6px; }
+.chart-wrap-sm { position: relative; height: 160px; }
+a { color: #3a7bd5; }
+#search-input { width: 100%; padding: 10px 14px; font-size: 0.95rem;
+  border: 1px solid #c8d0e4; border-radius: 6px; margin-bottom: 14px; outline: none; }
+.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.filter-btn { padding: 5px 14px; border: 1px solid #c8d0e4; border-radius: 20px;
+              cursor: pointer; font-size: 0.83rem; background: #fff; }
+.filter-btn.active { background: #3a5cc0; color: #fff; border-color: #3a5cc0; }
+@media (max-width: 680px) {
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+  .container { padding: 14px; }
+  .header { padding: 18px 16px; }
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1><em>wastewater metagenome</em></h1>
+  <div class="meta">
+    Tax ID:  | 0 plastic type(s) |
+    0 PlasticDB entries | Years: N/A to N/A
+  </div>
+  <div class="tag-row"><span class="tag" style="background:#5a1a7a;color:#f0d4f5">SRA-expanded</span></div>
+</div>
+<div class="breadcrumb"><a href="index.html">All organisms</a> / wastewater metagenome</div>
+<div class="container">
+
+<!-- Charts -->
+
+
+<!-- PlasticDB Summary -->
+<div class="section"><div class="section-header">PlasticDB Summary</div>
+<div class="section-body"><div class="grid2"><div>
+<div class="kv-row"><span class="kv-label">Plastics degraded</span><span class="kv-value"><span class='no-data'>none recorded</span></span></div>
+<div class="kv-row"><span class="kv-label">Bioplastic entries</span><span class="kv-value">0 / 0</span></div>
+<div class="kv-row"><span class="kv-label">Thermophilic flag</span><span class="kv-value">Not recorded</span></div>
+<div class="kv-row"><span class="kv-label">Has linked sequence</span><span class="kv-value"><span class="badge badge-no">No</span></span></div>
+<div class="kv-row"><span class="kv-label">Has named enzyme</span><span class="kv-value"><span class="badge badge-no">No</span></span></div>
+<div class="kv-row"><span class="kv-label">Has GenBank ID</span><span class="kv-value"><span class="badge badge-no">No</span></span></div>
+</div><div>
+<div class="kv-row"><span class="kv-label">Isolation environments</span><span class="kv-value"><span class="pill pill-other">Not recorded</span></span></div>
+<div class="kv-row"><span class="kv-label">Isolation locations</span><span class="kv-value"><span class="pill pill-other">Not recorded</span></span></div>
+</div></div></div></div>
+
+<!-- Entries table -->
+<div class="section"><div class="section-header">PlasticDB Entries (0 total)</div>
+<div class="section-body"><p class="no-data">No PlasticDB entries (organism added via SRA expansion).</p></div></div>
+
+<!-- Genome data -->
+<div class="section"><div class="section-header">Genome Data (NCBI Assembly)</div>
+<div class="section-body"><p class="no-data">Genome data not yet fetched.</p></div></div>
+
+<!-- PubMed literature -->
+<div class="section"><div class="section-header">PubMed Literature</div>
+<div class="section-body"><p class="no-data">PubMed data not yet fetched.</p></div></div>
+
+<!-- SRA sequencing -->
+<div class="section"><div class="section-header">NCBI SRA Sequencing Data</div>
+<div class="section-body"><p class="no-data">SRA data not yet fetched for this organism.</p></div></div>
+
+<!-- BacDive physiological -->
+<div class="section"><div class="section-header">BacDive Physiological Data</div>
+<div class="section-body"><p class="no-data">BacDive data not yet fetched.</p></div></div>
+
+</div>
+
+</body>
+</html>
