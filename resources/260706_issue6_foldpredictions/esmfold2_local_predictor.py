@@ -14,7 +14,7 @@ ESMC; overriding esmc_id points it at a different one (e.g. a finetune). That is
     informed run (later):   python esmfold2_local_predictor.py centroids.fasta --outdir out_ft \
                                 --esmc petadex/ESMC-6B-catalytic --label informed
 
-Each run writes structures + a results.csv for ONE backbone. Compare two runs afterwards with
+Each run writes structures/ + metrics/ + a tracker.csv for ONE backbone. Compare two runs with
 compare_runs.py. If the esmc_id override turns out not to be honoured by the installed esm build,
 fall back to --swap-fallback, which loads the base trunk and overwrites the ESMC weights in place
 using esmc_backbone_swap.py (same effect, uglier path).
@@ -31,9 +31,14 @@ Install:  pip install torch transformers "esm @ git+https://github.com/Biohub/es
 Example (no GPU/weights, exercises the whole pipeline with a fake model):
           python esmfold2_local_predictor.py centroids.fasta --mock-fold --outdir out_mock
 
-AWS / S3:  structures/, arrays/ and results.csv upload to --s3 (default the petadex sink); the
-    results.csv ledger is mirrored to S3 on an interval + at exit and re-seeded from S3 on a fresh
-    box, so an ephemeral/spot VM RESUMES cleanly (already-folded ids are skipped). --s3 '' keeps
+Output (per run dir, mirrored to --s3):  structures/<id>.cif (per-residue pLDDT = B-factor) +
+    metrics/<id>.json (run config + scalars + per-residue pLDDT + PAE, web-native, one file per
+    protein) + tracker.csv (the scalar LEDGER + resume/benchmark table). Pass --s3-only to upload
+    the cif/json straight to S3 and NOT keep local copies on the box (tracker.csv stays local for
+    resume) -- for fleet workers where accumulating CIFs would fill the disk.
+
+AWS / S3:  the tracker.csv ledger is mirrored to S3 on an interval + at exit and re-seeded from S3
+    on a fresh box, so an ephemeral/spot VM RESUMES cleanly (already-folded ids are skipped). --s3 '' keeps
     output local-only. Confirm weights + measure the dominant (download+load) cost first with:
           python esmfold2_local_predictor.py centroids.fasta --load-only     # loads model, folds nothing
     Validate the S3 path with NO GPU by combining --mock-fold with a real --s3 bucket.
@@ -53,7 +58,7 @@ ESMC_6B_REPO = "biohub/ESMC-6B"          # the trunk's default backbone (config 
 ESMC_6B_HIDDEN = 2560                    # lm_d_model in the trunk config; the dimension it reads
 REFERENCE_SPEED = {"full": 15.8, "fast": 9.4}   # H100, 1024 aa -- sanity check for wall times
 S3_DEST = "s3://petadex-protein-structures/esmfold2-centroids/"   # canonical sink (issue #6)
-MIRROR_EVERY_S = 300                     # re-upload results.csv to S3 at most this often (spot-safe)
+MIRROR_EVERY_S = 300                     # re-upload tracker.csv to S3 at most this often (spot-safe)
 
 VALID_AA = set("ACDEFGHIKLMNPQRSTVWYXBZUO")
 ESMC_CONTEXT = 2048                      # tokens; longer chains get truncated by the backbone
@@ -415,24 +420,33 @@ def mock_fold_result(model, seq, seed):
 # Output sink + results ledger
 # ===========================================================================
 class Sink:
-    """Writes structures/<id>.cif and arrays/<id>.npz locally and (optionally) to S3.
+    """Writes the per-protein outputs -- structures/<id>.cif and metrics/<id>.json -- locally and
+    (optionally) to S3, and mirrors/seeds the tracker.csv ledger.
 
-    Also mirrors/seeds the results.csv ledger so a benchmark survives an ephemeral
-    (spot) VM: seed_results() pulls any existing ledger down on a fresh box so finished
-    folds are skipped, mirror_results() re-uploads the whole ledger on an interval + at
-    exit. S3 auth is whatever boto3 finds -- on EC2 that's the attached IAM role.
+    Output layout (per run dir):
+        structures/<id>.cif   all-atom mmCIF (per-residue pLDDT is the B-factor column)
+        metrics/<id>.json     everything else per protein: run config + scalars (pTM, mean pLDDT,
+                              timing) + per-residue pLDDT array + PAE matrix. Web-native, one file
+                              per protein -> the front end fetches one; the back end globs them all.
+        tracker.csv           the LEDGER: one scalar row per fold (also the resume/benchmark table).
+
+    tracker.csv keeps the crash-safe append + S3 mirror/seed so a run survives an ephemeral (spot)
+    VM: seed_tracker() pulls it down on a fresh box so finished folds are skipped; mirror_tracker()
+    re-uploads it on an interval + at exit. S3 auth is whatever boto3 finds (EC2 IAM role / env keys).
     """
 
-    def __init__(self, outdir, s3_dest=None):
+    def __init__(self, outdir, s3_dest=None, write_local=True):
         self.outdir = outdir
+        self.write_local = write_local                # False (--s3-only): upload only, no local cif/json
         self.struct_dir = os.path.join(outdir, "structures")
-        self.array_dir = os.path.join(outdir, "arrays")
-        os.makedirs(self.struct_dir, exist_ok=True)
-        os.makedirs(self.array_dir, exist_ok=True)
+        self.metrics_dir = os.path.join(outdir, "metrics")
+        if write_local:
+            os.makedirs(self.struct_dir, exist_ok=True)
+            os.makedirs(self.metrics_dir, exist_ok=True)
         self.s3 = self.bucket = self.prefix = None
         if s3_dest:
             import boto3
-            self.s3 = boto3.client("s3")              # signed; EC2 IAM role writes to petadex
+            self.s3 = boto3.client("s3")              # signed; EC2 IAM role / env keys write to petadex
             body = s3_dest[5:]                         # strip "s3://"
             self.bucket, _, self.prefix = body.partition("/")
             self.prefix = self.prefix.strip("/")
@@ -442,10 +456,10 @@ class Sink:
         body = data.encode() if isinstance(data, str) else data
         self.s3.put_object(Bucket=self.bucket, Key=key, Body=body, ContentType=ctype)
 
-    def seed_results(self, local_path, name=None):
+    def seed_tracker(self, local_path, name=None):
         """Fresh box, no local ledger: pull the S3 copy so done folds are skipped. The S3 leaf
         defaults to the local basename, so a sharded run seeds only its OWN ledger (no cross-shard
-        clobber -- each shard owns a disjoint set of ORFids)."""
+        clobber -- each shard owns a disjoint set of ids)."""
         if not self.s3 or os.path.exists(local_path):
             return False
         name = name or os.path.basename(local_path)
@@ -458,7 +472,7 @@ class Sink:
             f.write(obj["Body"].read())
         return True
 
-    def mirror_results(self, local_path, name=None):
+    def mirror_tracker(self, local_path, name=None):
         """Mirror the whole ledger to <prefix>/<basename> (interval + at exit, not per row).
         Per-shard basename keeps fleet workers from overwriting each other's ledger."""
         if not self.s3:
@@ -468,45 +482,46 @@ class Sink:
         with open(local_path, "rb") as f:
             self.s3.put_object(Bucket=self.bucket, Key=key, Body=f.read(), ContentType="text/csv")
 
-    def write(self, cid, fo: FoldOut):
+    def write(self, cid, cif_text, metrics):
+        """Write structures/<id>.cif + metrics/<id>.json to S3 and (unless --s3-only) locally too.
+        `metrics` is the per-protein dict from build_metrics(); it's serialised compactly. The S3
+        upload uses the in-memory text directly, so it does not depend on the local write."""
+        import json
         cif_name = f"{cid}.cif"
-        with open(os.path.join(self.struct_dir, cif_name), "w") as f:
-            f.write(fo.cif_text)
-        L = int(fo.plddt.shape[0])
-        arrays = dict(per_residue_plddt=fo.plddt.astype(np.float32),
-                      residue_index=np.arange(1, L + 1, dtype=np.int32))
-        if fo.pae is not None:
-            arrays["pae"] = fo.pae.astype(np.float32)
-        import io
-        buf = io.BytesIO(); np.savez_compressed(buf, **arrays); blob = buf.getvalue()
-        npz_name = f"{cid}.npz"
-        with open(os.path.join(self.array_dir, npz_name), "wb") as f:
-            f.write(blob)
+        json_name = f"{cid}.json"
+        json_text = json.dumps(metrics, separators=(",", ":"))
+        if self.write_local:
+            with open(os.path.join(self.struct_dir, cif_name), "w") as f:
+                f.write(cif_text)
+            with open(os.path.join(self.metrics_dir, json_name), "w") as f:
+                f.write(json_text)
         if self.s3:
-            self._put_s3("structures", cif_name, fo.cif_text, "chemical/x-mmcif")
-            self._put_s3("arrays", npz_name, blob, "application/octet-stream")
+            self._put_s3("structures", cif_name, cif_text, "chemical/x-mmcif")
+            self._put_s3("metrics", json_name, json_text, "application/json")
 
 
-def load_done(results_path):
-    """Set of centroid_ids already folded OK (single-backbone run -> keyed by id), for resume."""
+def load_done(tracker_path):
+    """Set of ids already folded OK (single-backbone run -> keyed by id), for resume."""
     import csv
     done = set()
-    if os.path.exists(results_path):
-        with open(results_path, newline="") as fh:
+    if os.path.exists(tracker_path):
+        with open(tracker_path, newline="") as fh:
             for row in csv.DictReader(fh):
                 if row.get("status") == "ok":
-                    done.add(row["centroid_id"])
+                    done.add(row["id"])
     return done
 
 
-RESULT_COLS = ["centroid_id", "run_label", "esmfold2", "esmc", "seq_len", "protein_hash",
-               "truncated", "wall_s_median", "residues_per_s", "mean_plddt", "ptm", "iptm",
-               "status", "error"]
+# tracker.csv columns: the scalar ledger (also the resume + benchmark table). The rich per-protein
+# record (per-residue pLDDT + PAE) lives in metrics/<id>.json, NOT here.
+TRACKER_COLS = ["id", "run_label", "esmfold2", "esmc", "seq_len", "protein_hash",
+                "truncated", "wall_s_median", "residues_per_s", "mean_plddt", "ptm", "iptm",
+                "status", "error"]
 
 
 @dataclass
 class Row:
-    centroid_id: str
+    id: str
     run_label: str
     esmfold2: str
     esmc: str
@@ -522,13 +537,40 @@ class Row:
     error: str = ""
 
     def as_dict(self):
-        return {k: getattr(self, k) for k in RESULT_COLS}
+        return {k: getattr(self, k) for k in TRACKER_COLS}
 
 
-def write_results(path, rows):
+def build_metrics(row: "Row", fo: "FoldOut", run_config):
+    """Assemble the per-protein metrics/<id>.json dict: run config + scalars + per-residue pLDDT +
+    PAE. Written only for successful folds (a failed fold has no structure/confidence -- its error
+    is captured in tracker.csv). Arrays are rounded to 2 dp to match cif B-factor precision and keep
+    the JSON small; PAE is null when the model didn't emit it."""
+    iptm = row.iptm if row.iptm not in ("", None) else None
+    return {
+        "id": row.id,
+        "run": run_config,
+        "seq_len": row.seq_len,
+        "protein_hash": row.protein_hash,
+        "truncated": bool(row.truncated),
+        "timing": {"wall_s_median": row.wall_s_median if row.wall_s_median != "" else None,
+                   "residues_per_s": row.residues_per_s if row.residues_per_s != "" else None},
+        "confidence": {
+            "mean_plddt": row.mean_plddt if row.mean_plddt != "" else None,
+            "ptm": row.ptm if row.ptm != "" else None,
+            "iptm": iptm,
+            "per_residue_plddt": [round(float(x), 2) for x in fo.plddt.tolist()],
+            "pae": ([[round(float(x), 2) for x in r] for r in fo.pae.tolist()]
+                    if fo.pae is not None else None),
+        },
+        "status": row.status,
+        "error": row.error,
+    }
+
+
+def write_tracker(path, rows):
     import csv
     with open(path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=RESULT_COLS)
+        w = csv.DictWriter(f, fieldnames=TRACKER_COLS)
         w.writeheader()
         for r in rows:
             w.writerow(r.as_dict())
@@ -544,8 +586,8 @@ def _coerce_num(v):
         return v
 
 
-def read_result_rows(path):
-    """Reconstruct Row objects from an existing results.csv (for the end-of-run summary on resume)."""
+def read_tracker_rows(path):
+    """Reconstruct Row objects from an existing tracker.csv (for the end-of-run summary on resume)."""
     import csv
     rows = []
     if not os.path.exists(path):
@@ -553,7 +595,7 @@ def read_result_rows(path):
     with open(path, newline="") as fh:
         for d in csv.DictReader(fh):
             rows.append(Row(
-                centroid_id=d.get("centroid_id", ""), run_label=d.get("run_label", ""),
+                id=d.get("id", ""), run_label=d.get("run_label", ""),
                 esmfold2=d.get("esmfold2", ""), esmc=d.get("esmc", ""),
                 seq_len=int(_coerce_num(d.get("seq_len")) or 0),
                 protein_hash=d.get("protein_hash", ""),
@@ -607,14 +649,16 @@ def score_against_reference(pred_cif_path, reference_dir, cid):
 # ===========================================================================
 # Per-run driver
 # ===========================================================================
-def fold_run(model, centroids, sink, results_path, done, label, variant, esmc,
+def fold_run(model, centroids, sink, tracker_path, done, run_config,
              device, params, seed, warmup, repeats):
-    """Fold centroids, writing one results.csv row per fold (crash-safe) and mirroring the
-    ledger to S3 on an interval + at exit, so a reclaimed spot VM resumes cleanly.
-    `done` = centroid_ids already folded OK (skipped). Returns this session's new rows."""
+    """Fold sequences, writing per protein: structures/<id>.cif + metrics/<id>.json + one scalar
+    tracker.csv row (crash-safe append), mirroring the tracker to S3 on an interval + at exit so a
+    reclaimed spot VM resumes cleanly. `done` = ids already folded OK (skipped). `run_config` is the
+    self-describing params block embedded in each metrics JSON. Returns this session's new rows."""
     import csv
+    label, variant, esmc = run_config["label"], run_config["esmfold2"], run_config["esmc"]
     todo = [(c, s) for c, s in centroids if c not in done]
-    print(f"\n--- folding {len(todo)} centroids ({len(done)} already done)  run='{label}'  "
+    print(f"\n--- folding {len(todo)} sequences ({len(done)} already done)  run='{label}'  "
           f"esmc={esmc}  (warmup={warmup}, repeats={repeats}, seed={seed}) ---")
     if not todo:
         return []
@@ -628,34 +672,34 @@ def fold_run(model, centroids, sink, results_path, done, label, variant, esmc,
             print(f"  warm-up failed ({type(e).__name__}: {e}) -- continuing.")
 
     rows = []
-    write_header = not os.path.exists(results_path) or os.path.getsize(results_path) == 0
+    write_header = not os.path.exists(tracker_path) or os.path.getsize(tracker_path) == 0
     last_mirror = time.time()
-    with open(results_path, "a", newline="") as mf:
-        writer = csv.DictWriter(mf, fieldnames=RESULT_COLS)
+    with open(tracker_path, "a", newline="") as mf:
+        writer = csv.DictWriter(mf, fieldnames=TRACKER_COLS)
         if write_header:
             writer.writeheader()
         for cid, seq in todo:
-            row = Row(centroid_id=cid, run_label=label, esmfold2=variant, esmc=esmc, seq_len=len(seq),
+            row = Row(id=cid, run_label=label, esmfold2=variant, esmc=esmc, seq_len=len(seq),
                       protein_hash=prot_hash(seq), truncated=int(warn_length(cid, seq)))
             try:
                 result, med = timed_fold(_make_fold_fn(model, seq, params, seed), device, repeats)
                 fo = extract_fold(result)
-                sink.write(cid, fo)
                 row.wall_s_median = round(med, 3)
                 row.residues_per_s = round(len(seq) / med, 2) if med > 0 else ""
                 row.mean_plddt = round(fo.mean_plddt, 3)
                 row.ptm = round(fo.ptm, 4)
                 row.iptm = round(fo.iptm, 4) if fo.iptm is not None else ""
                 row.status = "ok"
+                sink.write(cid, fo.cif_text, build_metrics(row, fo, run_config))
                 print(f"  {cid:<24} L={len(seq):<5} {med:7.2f}s  pLDDT={fo.mean_plddt:6.2f}  pTM={fo.ptm:.4f}")
             except Exception as e:                    # noqa: BLE001
                 row.error = f"{type(e).__name__}: {e}"
                 print(f"  FAIL {cid}: {row.error}")
-            writer.writerow(row.as_dict()); mf.flush()   # crash-safe: one row per fold
+            writer.writerow(row.as_dict()); mf.flush()   # crash-safe: one tracker row per fold
             rows.append(row)
             if sink.s3 and time.time() - last_mirror > MIRROR_EVERY_S:
-                sink.mirror_results(results_path); last_mirror = time.time()
-    sink.mirror_results(results_path)                 # durable off-box before we exit
+                sink.mirror_tracker(tracker_path); last_mirror = time.time()
+    sink.mirror_tracker(tracker_path)                 # durable off-box before we exit
     return rows
 
 
@@ -745,26 +789,36 @@ def run(args):
               "             measure download+load cost before committing to a full run.")
         return
 
-    sink = Sink(args.outdir, s3_dest=(args.s3 or None))
-    results_name = f"results{tag}.csv"                # per-shard ledger key -> no fleet clobber
-    results_path = os.path.join(args.outdir, results_name)
-    if sink.seed_results(results_path):               # cross-instance resume from S3 (own shard only)
-        print(f"resume ledger seeded from s3://{sink.bucket}/{sink.prefix}/{results_name}")
-    done = load_done(results_path)
+    # self-describing params block embedded in every metrics/<id>.json (great for the hyperparam grid)
+    run_config = {"label": label, "esmfold2": args.esmfold2, "esmc": esmc_repr,
+                  "num_loops": args.num_loops, "num_sampling_steps": args.num_sampling_steps,
+                  "num_diffusion_samples": args.num_diffusion_samples,
+                  "seed": args.seed, "dtype": args.dtype}
 
-    rows = fold_run(model, centroids, sink, results_path, done, label, args.esmfold2, esmc_repr,
+    if args.s3_only and not args.s3:
+        raise SystemExit("--s3-only uploads instead of writing local copies, so it needs a sink: pass "
+                         "--s3 s3://bucket/prefix/ (with no S3 there would be nowhere for structures/"
+                         "metrics to go).")
+    sink = Sink(args.outdir, s3_dest=(args.s3 or None), write_local=not args.s3_only)
+    tracker_name = f"tracker{tag}.csv"                # per-shard ledger key -> no fleet clobber
+    tracker_path = os.path.join(args.outdir, tracker_name)
+    if sink.seed_tracker(tracker_path):               # cross-instance resume from S3 (own shard only)
+        print(f"resume ledger seeded from s3://{sink.bucket}/{sink.prefix}/{tracker_name}")
+    done = load_done(tracker_path)
+
+    rows = fold_run(model, centroids, sink, tracker_path, done, run_config,
                     device, params, args.seed, args.warmup, args.repeats)
 
     if args.reference_dir:
         print(f"\nscoring vs references in {args.reference_dir} ...")
         for r in rows:
             if r.status == "ok":
-                score_against_reference(os.path.join(args.outdir, "structures", f"{r.centroid_id}.cif"),
-                                        args.reference_dir, r.centroid_id)
+                score_against_reference(os.path.join(args.outdir, "structures", f"{r.id}.cif"),
+                                        args.reference_dir, r.id)
 
-    dest = args.s3 if args.s3 else results_path
-    print(f"\nresults -> {results_path}   (structures/arrays/ledger -> {dest})")
-    print_summary(read_result_rows(results_path), args.esmfold2, label)
+    dest = args.s3 if args.s3 else args.outdir
+    print(f"\ntracker -> {tracker_path}   (structures/ + metrics/ + tracker -> {dest})")
+    print_summary(read_tracker_rows(tracker_path), args.esmfold2, label)
     print(f"\nNext: run the finetune later into a different --outdir, then\n"
           f"      python compare_runs.py {args.outdir} <finetune_outdir>")
 
@@ -810,11 +864,38 @@ def self_test():
 
     rows = [Row("c1", "baseline", "full", ESMC_6B_REPO, 300, "h", 0, 12.0, 25.0, 88.0, 0.85, "", "ok", "")]
     with tempfile.TemporaryDirectory() as td:
-        rp = os.path.join(td, "r.csv")
-        write_results(rp, rows)
+        rp = os.path.join(td, "tracker.csv")
+        write_tracker(rp, rows)
         assert os.path.exists(rp)
+        assert load_done(rp) == {"c1"}                          # ledger keyed by id, status ok
     print_summary(rows, "full", "baseline")
-    print("  [ok] results.csv + summary")
+    print("  [ok] tracker.csv (id column) + load_done + summary")
+
+    # metrics/<id>.json: build + serialise + round-trip; scalars in tracker, arrays in json
+    import json
+    L = 5
+    fo = FoldOut(cif_text="data\n", plddt=np.array([80, 90, 70, 95, 60], dtype=np.float32),
+                 ptm=0.88, iptm=None, pae=np.zeros((L, L), dtype=np.float32))
+    run_config = {"label": "baseline", "esmfold2": "full", "esmc": ESMC_6B_REPO,
+                  "num_loops": 20, "num_sampling_steps": 100, "num_diffusion_samples": 1,
+                  "seed": 0, "dtype": "fp32"}
+    r = Row("c1", "baseline", "full", ESMC_6B_REPO, L, "h", 0, 1.0, 5.0, 79.0, 0.88, "", "ok", "")
+    m = json.loads(json.dumps(build_metrics(r, fo, run_config)))   # must be JSON-serialisable
+    assert m["id"] == "c1" and m["run"]["num_sampling_steps"] == 100
+    assert len(m["confidence"]["per_residue_plddt"]) == L
+    assert len(m["confidence"]["pae"]) == L and len(m["confidence"]["pae"][0]) == L
+    assert m["confidence"]["ptm"] == 0.88 and m["confidence"]["iptm"] is None
+    assert m["truncated"] is False
+    print("  [ok] metrics/<id>.json: run block + per-residue pLDDT + PAE, JSON-serialisable")
+
+    # --s3-only: Sink(write_local=False) must not create local dirs or write any local cif/json
+    with tempfile.TemporaryDirectory() as td:
+        od = os.path.join(td, "s3only")
+        sk = Sink(od, s3_dest=None, write_local=False)
+        sk.write("c1", "data_x\n", {"id": "c1"})
+        assert not os.path.exists(os.path.join(od, "structures")), "s3-only wrote structures/ locally"
+        assert not os.path.exists(os.path.join(od, "metrics")), "s3-only wrote metrics/ locally"
+    print("  [ok] --s3-only: Sink(write_local=False) writes no cif/json to local disk")
     print("\nSELF-TEST PASSED")
     return 0
 
@@ -829,7 +910,7 @@ def main():
                     help="input format (default auto: '>' first line = fasta, else one-seq-per-line)")
     ap.add_argument("--outdir", default="out", help="output dir (default out/)")
     ap.add_argument("--label", default=None,
-                    help="run label recorded in results.csv (default: 'baseline' or the esmc basename)")
+                    help="run label recorded in tracker.csv + each metrics JSON (default: 'baseline' or the esmc basename)")
 
     ap.add_argument("--esmfold2", choices=["full", "fast"], default="full",
                     help="full=biohub/ESMFold2 (48 trunk layers); fast=ESMFold2-Fast (24)")
@@ -858,15 +939,20 @@ def main():
                          "fleet unchanged; sequences are sorted by length and split into N "
                          "contiguous bands (warms one/two padding buckets per worker). Falls back "
                          "to $ESMFOLD2_SHARD (e.g. from instance user-data). Each shard writes its "
-                         "own results.shardKofN.csv ledger, so workers never clobber each other.")
+                         "own tracker.shardKofN.csv ledger, so workers never clobber each other.")
     ap.add_argument("--hf-cache", default=None, metavar="DIR",
                     help="set HF_HOME/HF_HUB_CACHE to DIR before loading -- point at a persistent "
                          "EBS volume or a pre-warmed cache so a 6B checkpoint isn't re-downloaded "
                          "on every boot (or bake it into the AMI; see AWS_RUNBOOK.md)")
     ap.add_argument("--s3", dest="s3", default=S3_DEST, metavar="s3://bucket/prefix/",
-                    help=f"also upload structures/, arrays/ and results.csv here (default {S3_DEST}); "
+                    help=f"also upload structures/, metrics/ and tracker.csv here (default {S3_DEST}); "
                          f"the ledger is mirrored on an interval + at exit so a reclaimed spot VM "
                          f"resumes cleanly. Pass --s3 '' to keep output local-only.")
+    ap.add_argument("--s3-only", action="store_true",
+                    help="don't keep local copies of structures/<id>.cif or metrics/<id>.json on the "
+                         "box -- upload each straight to --s3 and skip the local write. Requires --s3. "
+                         "The small tracker.csv ledger still lives locally (crash-safe resume needs "
+                         "it); use this for fleet workers where per-worker CIFs would fill the disk.")
     ap.add_argument("--load-only", action="store_true",
                     help="load the model, report download+load wall time and peak VRAM, then exit "
                          "(no folding) -- confirm weights resolve + measure the dominant cost first")
