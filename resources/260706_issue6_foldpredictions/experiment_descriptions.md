@@ -2,6 +2,8 @@
 
 ## Alex Leonardos
 
+**Need to include the specific versions of software and the dates of db accession.**
+
 **Quick Background**: We have the ESMC6B base and will have a finetuned ESMC6B on the PETadex. We want to use ESMFold2, which takes 6B ESMC embeddings, and draw some conclusions about its use.
 
 ### Experiment Flow Diagram: Doesn't show any results, just a diagram of the movement of data and how things are analyzed
@@ -12,14 +14,14 @@
 
 ## *Letters in the following list represent Graphs and Charts:*
 
-- [ ] **A.** *What ESMFold2 Parameters should we use?*
+- [x] **A.** *What ESMFold2 Parameters should we use?*
 
 - We can't run the full centroid list on all parameter combinations, so run a *grid-search and see where the predicted quality metrics plateau on a subset*.
 - Could also graph the latency depending on the # of loops and sampling steps.
-- I'll compare some curves with the paper's defaults: *"We use N = 100 which reduces to 68 sampling steps; we observed no benefit of increased sampling steps for structural quality (Figure S13)"*, with specific focus on the *active site* to see if their defaults would be good or if more steps improves the active site specifically significantly
-- This test should be run over a small subset that is indicative of the complexity of the full dataset (not sure how to do this, random, stratified by difficulty?)
+- I'll compare some curves with the paper's defaults: *"We use N = 100 which reduces to 68 sampling steps; we observed no benefit of increased sampling steps for structural quality (Figure S13)"*.
+- This test is run over a subset of the data that has ground-truth PDB data.
   
-- [ ] ***FOR NOW: I'll do this analysis on the non-data leakage set from the current petadex version.***
+- [x] ***FOR NOW: I'll do this analysis on the non-data leakage set (with controls that have data leakage) from the current petadex version.***
 
 ### Group B: This set of figures compares Base vs Finetune (Does finetuning do anything? This should be run over the full centroids)
 

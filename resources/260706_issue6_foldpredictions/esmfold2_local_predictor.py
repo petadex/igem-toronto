@@ -649,6 +649,14 @@ def score_against_reference(pred_cif_path, reference_dir, cid):
 # ===========================================================================
 # Per-run driver
 # ===========================================================================
+def fmt_hms(s):
+    """seconds -> H:MM:SS (or M:SS under an hour) for progress/ETA lines."""
+    s = int(round(max(s, 0)))
+    h, r = divmod(s, 3600)
+    m, sec = divmod(r, 60)
+    return f"{h}:{m:02d}:{sec:02d}" if h else f"{m}:{sec:02d}"
+
+
 def fold_run(model, centroids, sink, tracker_path, done, run_config,
              device, params, seed, warmup, repeats):
     """Fold sequences, writing per protein: structures/<id>.cif + metrics/<id>.json + one scalar
@@ -672,13 +680,15 @@ def fold_run(model, centroids, sink, tracker_path, done, run_config,
             print(f"  warm-up failed ({type(e).__name__}: {e}) -- continuing.")
 
     rows = []
+    total = len(todo)
+    t_run0 = time.time()
     write_header = not os.path.exists(tracker_path) or os.path.getsize(tracker_path) == 0
     last_mirror = time.time()
     with open(tracker_path, "a", newline="") as mf:
         writer = csv.DictWriter(mf, fieldnames=TRACKER_COLS)
         if write_header:
             writer.writeheader()
-        for cid, seq in todo:
+        for i, (cid, seq) in enumerate(todo, 1):
             row = Row(id=cid, run_label=label, esmfold2=variant, esmc=esmc, seq_len=len(seq),
                       protein_hash=prot_hash(seq), truncated=int(warn_length(cid, seq)))
             try:
@@ -691,15 +701,23 @@ def fold_run(model, centroids, sink, tracker_path, done, run_config,
                 row.iptm = round(fo.iptm, 4) if fo.iptm is not None else ""
                 row.status = "ok"
                 sink.write(cid, fo.cif_text, build_metrics(row, fo, run_config))
-                print(f"  {cid:<24} L={len(seq):<5} {med:7.2f}s  pLDDT={fo.mean_plddt:6.2f}  pTM={fo.ptm:.4f}")
+                info = f"{med:6.2f}s  pLDDT={fo.mean_plddt:6.2f}  pTM={fo.ptm:.4f}"
             except Exception as e:                    # noqa: BLE001
                 row.error = f"{type(e).__name__}: {e}"
-                print(f"  FAIL {cid}: {row.error}")
+                info = f"FAIL {row.error}"
             writer.writerow(row.as_dict()); mf.flush()   # crash-safe: one tracker row per fold
             rows.append(row)
+            elapsed = time.time() - t_run0               # live progress + ETA (avg over this run)
+            eta = elapsed / i * (total - i)
+            print(f"  [{i:>4}/{total}] {cid:<20} L={len(seq):<5} {info}"
+                  f"  | {fmt_hms(elapsed)} elapsed, ~{fmt_hms(eta)} left")
             if sink.s3 and time.time() - last_mirror > MIRROR_EVERY_S:
                 sink.mirror_tracker(tracker_path); last_mirror = time.time()
     sink.mirror_tracker(tracker_path)                 # durable off-box before we exit
+    total_s = time.time() - t_run0
+    ok_n = sum(1 for r in rows if r.status == "ok")
+    print(f"--- folded {ok_n}/{total} ok in {fmt_hms(total_s)} "
+          f"({total_s / max(total, 1):.1f}s/protein avg) ---")
     return rows
 
 
@@ -732,6 +750,7 @@ def select_shard(centroids, k, n):
 
 def run(args):
     import torch
+    t_start = time.perf_counter()
 
     if args.hf_cache:                                 # point HF at a persistent/pre-warmed cache
         os.environ["HF_HOME"] = args.hf_cache
@@ -806,8 +825,10 @@ def run(args):
         print(f"resume ledger seeded from s3://{sink.bucket}/{sink.prefix}/{tracker_name}")
     done = load_done(tracker_path)
 
+    t_fold0 = time.perf_counter()
     rows = fold_run(model, centroids, sink, tracker_path, done, run_config,
                     device, params, args.seed, args.warmup, args.repeats)
+    fold_wall = time.perf_counter() - t_fold0
 
     if args.reference_dir:
         print(f"\nscoring vs references in {args.reference_dir} ...")
@@ -821,6 +842,9 @@ def run(args):
     print_summary(read_tracker_rows(tracker_path), args.esmfold2, label)
     print(f"\nNext: run the finetune later into a different --outdir, then\n"
           f"      python compare_runs.py {args.outdir} <finetune_outdir>")
+    total_wall = time.perf_counter() - t_start
+    print(f"\nTOTAL RUN TIME: {fmt_hms(total_wall)}   "
+          f"(model load {fmt_hms(load_s)}, folding {fmt_hms(fold_wall)})")
 
 
 # ===========================================================================
