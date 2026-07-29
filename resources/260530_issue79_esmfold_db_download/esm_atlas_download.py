@@ -15,23 +15,35 @@ Verified facts about s3://esm-protein-atlas (public, --no-sign-request):
 Install:  pip install pylance pyarrow msgpack numpy brotli zstandard boto3 tqdm
 
 Output model (content-addressed; one object per UNIQUE sequence keyed by protein_hash, so
-the input's heavy ORF redundancy collapses). Mirrors the ESMFold2 predictor's triple, so
-Atlas and freshly-folded structures are directly comparable:
+the input's heavy ORF redundancy collapses). Byte-for-byte the SAME LAYOUT that
+esmfold2_local_predictor.py writes (issue #6), so Atlas and freshly-folded structures are
+interchangeable downstream:
   - <outdir>/structures/<hash>.<fmt>   all-atom coords (atom37 -> mmCIF/PDB; pLDDT in B-factor)
-  - <outdir>/arrays/<hash>.npz         per_residue_plddt[L], pae[L,L], residue_index[L]
-  - <outdir>/metrics.csv               protein_hash, source_dataset, seq_len, mean_plddt,
-                                       ptm, has_pae   (resume ledger + ORF-join key; mirrored
-                                       to <s3-prefix>/metrics.csv every ~5 min + at exit and
+  - <outdir>/metrics/<hash>.json       run block + scalars + per_residue_plddt + pae, one file
+                                       per structure (scalars FIRST, so a Range-GET of the
+                                       first few KB reads them without the arrays)
+  - <outdir>/tracker.csv               the scalar LEDGER, columns identical to the predictor's
+                                       TRACKER_COLS (resume table + ORF-join key; mirrored to
+                                       <s3-prefix>/tracker.csv every ~5 min + at exit and
                                        seeded back from S3 on a fresh box)
   - --orf-map writes the full orf_id -> protein_hash index (every ORF record, streamed).
-  - "which ORFs have a structure?"  ==  orf_map rows whose protein_hash is in metrics.csv.
+  - "which ORFs have a structure?"  ==  orf_map rows whose protein_hash is in tracker.csv.
 
-pTM (global) and PAE ([L,L]) are read from the Atlas 'ptm'/'pae' columns and written to
-metrics.csv / arrays.npz -- earlier versions of this script kept only pLDDT (in the CIF
-B-factor) and discarded pTM/PAE. To backfill them for a pre-existing download, delete
-metrics.csv (and the old found_hashes.tsv) so the affected hashes are re-fetched.
+The id namespace is the protein_hash: the Atlas is content-addressed and has no notion of a
+PETadex ORFid, so `id` == `protein_hash` on every row. The predictor keys `id` by ORFid but
+carries the same `protein_hash` column, computed the same way (md5 of the uppercased sequence
+with the trailing '*' stripped) -- so joining the two sources on `protein_hash` works uniformly.
+
+Fields the Atlas cannot supply are null/empty rather than invented: `esmc` (no backbone id),
+`timing.*` (these were folded by Biohub, not by us), `iptm` (single chains). `run_label` carries
+which Lance dataset the row came from. There is no `has_pae` column any more (the predictor has
+none either) -- test `confidence.pae is not None` in the JSON.
+
+pTM (global) and PAE ([L,L]) are read from the Atlas 'ptm'/'pae' columns. Earlier versions of
+this script kept only pLDDT (in the CIF B-factor) and discarded pTM/PAE. To backfill them for a
+pre-existing download, delete tracker.csv so the affected hashes are re-fetched.
 """
-import os, io, csv, time, hashlib
+import os, io, csv, json, time, hashlib
 import numpy as np
 import zstandard as zstd
 # brotli, msgpack, lance and boto3 are imported lazily (inside the functions that use
@@ -167,16 +179,51 @@ def _coerce_pae(pae_val, nres):
             return None
     return arr if arr.ndim == 2 else None
 
-def build_npz_bytes(d, pae):
-    # per-residue pLDDT (0-100), residue_index, and PAE [L,L] if present -> a compressed
-    # .npz whose keys match the ESMFold2 predictor's arrays/<id>.npz, so the two structure
-    # sources are byte-comparable.
-    arrays = {"per_residue_plddt": d["plddt"].astype(np.float32),
-              "residue_index": np.asarray(d["resid"]).astype(np.int32)}
-    if pae is not None:
-        arrays["pae"] = pae.astype(np.float32)
-    buf = io.BytesIO(); np.savez_compressed(buf, **arrays)
-    return buf.getvalue()
+# tracker.csv columns -- IDENTICAL to TRACKER_COLS in esmfold2_local_predictor.py (that file is
+# the source of truth; duplicated here to keep this script single-file and import-free). The rich
+# per-structure record (per-residue pLDDT + PAE) lives in metrics/<hash>.json, NOT here.
+TRACKER_COLS = ["id", "run_label", "esmfold2", "esmc", "seq_len", "protein_hash",
+                "truncated", "wall_s_median", "residues_per_s", "mean_plddt", "ptm", "iptm",
+                "status", "error"]
+
+def build_metrics(h, src, d, pae, mean_plddt, ptm):
+    # The per-structure metrics/<hash>.json, shaped exactly like the predictor's build_metrics():
+    # scalars first, then the big per-residue/PAE arrays, so a Range-GET of the head reads the
+    # scalars alone. Arrays are rounded to 2 dp to match the cif B-factor precision and keep the
+    # JSON small. Atlas-unavailable fields are null rather than fabricated.
+    return {
+        "id": h,
+        # Same key names as the predictor's run_config, so run.label / run.esmfold2 /
+        # run.num_sampling_steps read uniformly across both sources. The Atlas does not publish
+        # the parameters these structures were folded with, so those are null rather than guessed.
+        "run": {"label": src, "esmfold2": "esm-atlas-v1", "esmc": None,
+                "num_loops": None, "num_sampling_steps": None, "num_diffusion_samples": None,
+                "seed": None, "dtype": None,
+                "source": "esm-atlas", "dataset": src,
+                "note": "precomputed by Biohub; fold parameters not published"},
+        "seq_len": d["nres"],
+        "protein_hash": h,
+        "truncated": False,
+        "timing": {"wall_s_median": None, "residues_per_s": None},
+        "confidence": {
+            "mean_plddt": mean_plddt,
+            "ptm": ptm,
+            "iptm": None,
+            "per_residue_plddt": [round(float(x), 2) for x in np.asarray(d["plddt"]).tolist()],
+            "pae": ([[round(float(x), 2) for x in r] for r in pae.tolist()]
+                    if pae is not None else None),
+        },
+        "status": "ok",
+        "error": "",
+    }
+
+def build_tracker_row(h, src, d, mean_plddt, ptm):
+    # One scalar ledger row, same columns/order as the predictor's Row.as_dict().
+    return {"id": h, "run_label": src, "esmfold2": "esm-atlas-v1", "esmc": "",
+            "seq_len": d["nres"], "protein_hash": h, "truncated": 0,
+            "wall_s_median": "", "residues_per_s": "",
+            "mean_plddt": mean_plddt, "ptm": (ptm if ptm is not None else ""), "iptm": "",
+            "status": "ok", "error": ""}
 
 # --- FASTA -> set of unique protein_hashes (+ optional full orf_id->hash index) ---
 def parse_fasta(path, orf_map_path=None):
@@ -348,7 +395,7 @@ def count_hits(hashes, dsets, workers=16):
     print(f"  {len(remaining):>9} not found in any dataset")
 
 def _s3_put_file(s3, bucket, key, path, ctype="text/csv"):
-    # Mirror a local file to s3://bucket/key. Used to keep metrics.csv (the resume ledger +
+    # Mirror a local file to s3://bucket/key. Used to keep tracker.csv (the resume ledger +
     # aggregate confidence table) durable off an ephemeral VM. Re-uploads the whole file, so
     # it is called on a time interval (not per batch) -- cheap relative to the structure data.
     with open(path, "rb") as fh:
@@ -366,33 +413,33 @@ def _s3_get_file(s3, bucket, key, path):
     return True
 
 def download(hashes, dsets, outdir=OUTDIR, s3_dest=None, fmt="cif", workers=16):
-    # Writes, per unique sequence (keyed by protein_hash), the SAME {structure, arrays,
-    # metrics} triple as the ESMFold2 predictor:
+    # Writes, per unique sequence (keyed by protein_hash), the SAME {structures/, metrics/,
+    # tracker.csv} set as esmfold2_local_predictor.py:
     #   <outdir>/structures/<hash>.<fmt>   all-atom coords (pLDDT in the B-factor)
-    #   <outdir>/arrays/<hash>.npz         per_residue_plddt[L], pae[L,L], residue_index[L]
-    #   <outdir>/metrics.csv               protein_hash,source_dataset,seq_len,mean_plddt,
-    #                                      ptm,has_pae   (also the resume ledger + ORF join key)
+    #   <outdir>/metrics/<hash>.json       run block + scalars + per_residue_plddt + pae
+    #   <outdir>/tracker.csv               TRACKER_COLS scalar ledger (also the resume table
+    #                                      + ORF join key, via its protein_hash column)
     # Atlas query + decode + upload run concurrently across `workers` threads (I/O-bound).
-    # metrics.csv is appended only from the main thread as batches complete -> no locking.
+    # tracker.csv is appended only from the main thread as batches complete -> no locking.
     ctype = {"cif": "chemical/x-mmcif", "pdb": "chemical/x-pdb"}[fmt]
-    metrics_path = os.path.join(outdir, "metrics.csv")
+    tracker_path = os.path.join(outdir, "tracker.csv")
     os.makedirs(outdir, exist_ok=True)
 
-    s3 = bucket = prefix = metrics_key = None
+    s3 = bucket = prefix = tracker_key = None
     if s3_dest:
         import boto3
         s3 = boto3.client("s3")                       # thread-safe put_object
         bucket, prefix = _parse_s3(s3_dest)
-        metrics_key = "/".join(p for p in (prefix, "metrics.csv") if p)
-        if not os.path.exists(metrics_path) and _s3_get_file(s3, bucket, metrics_key, metrics_path):
-            print(f"resume ledger seeded from s3://{bucket}/{metrics_key}")
+        tracker_key = "/".join(p for p in (prefix, "tracker.csv") if p)
+        if not os.path.exists(tracker_path) and _s3_get_file(s3, bucket, tracker_key, tracker_path):
+            print(f"resume ledger seeded from s3://{bucket}/{tracker_key}")
     else:
         os.makedirs(os.path.join(outdir, "structures"), exist_ok=True)
-        os.makedirs(os.path.join(outdir, "arrays"), exist_ok=True)
+        os.makedirs(os.path.join(outdir, "metrics"), exist_ok=True)
 
     done = set()
-    if os.path.exists(metrics_path):                  # resume: protein_hash is column 0
-        with open(metrics_path) as fh:
+    if os.path.exists(tracker_path):                  # resume: id (== protein_hash) is column 0
+        with open(tracker_path) as fh:
             next(fh, None)                            # skip header
             done = {line.split(",", 1)[0] for line in fh if line.strip()}
     n0 = len(hashes)
@@ -401,20 +448,21 @@ def download(hashes, dsets, outdir=OUTDIR, s3_dest=None, fmt="cif", workers=16):
     print(f"{n0} unique sequences | {len(done)} already done | "
           f"{len(remaining)} to fetch | {workers} workers")
 
+    ctypes = {"structures": ctype, "metrics": "application/json"}
+
     def write_out(subdir, name, data):
         if s3:
             key = "/".join(p for p in (prefix, subdir, name) if p)
             body = data.encode() if isinstance(data, str) else data
             s3.put_object(Bucket=bucket, Key=key, Body=body,
-                          ContentType=(ctype if subdir == "structures"
-                                       else "application/octet-stream"))
+                          ContentType=ctypes.get(subdir, "application/octet-stream"))
         else:
             with open(os.path.join(outdir, subdir, name),
                       "w" if isinstance(data, str) else "wb") as fh:
                 fh.write(data)
 
     def process_chunk(ds, chunk, src):
-        # one worker: query a batch, decode, write structure + arrays, return metric rows.
+        # one worker: query a batch, decode, write structure + metrics json, return ledger rows.
         # 'ptm' and 'pae' are pulled alongside the structure_blob (previously dropped).
         q = ",".join(f"'{h}'" for h in chunk)
         tbl = _scan_retry(ds, ["protein_hash", "structure_blob", "ptm", "pae"],
@@ -428,25 +476,25 @@ def download(hashes, dsets, outdir=OUTDIR, s3_dest=None, fmt="cif", workers=16):
                 d = _decode_blob(r["structure_blob"])
                 text = _cif_from_decoded(d, h) if fmt == "cif" else _pdb_from_decoded(d)
                 pae = _coerce_pae(r.get("pae"), d["nres"])
-                write_out("structures", f"{h}.{fmt}", text)
-                write_out("arrays", f"{h}.npz", build_npz_bytes(d, pae))
                 ptm = _as_float(r.get("ptm"))
-                rows.append({"protein_hash": h, "source_dataset": src, "seq_len": d["nres"],
-                             "mean_plddt": round(float(np.mean(d["plddt"])), 3),
-                             "ptm": (round(ptm, 4) if ptm is not None else ""),
-                             "has_pae": int(pae is not None)})
+                ptm = round(ptm, 4) if ptm is not None else None
+                mean_plddt = round(float(np.mean(d["plddt"])), 3)
+                write_out("structures", f"{h}.{fmt}", text)
+                write_out("metrics", f"{h}.json",
+                          json.dumps(build_metrics(h, src, d, pae, mean_plddt, ptm),
+                                     separators=(",", ":")))
+                rows.append(build_tracker_row(h, src, d, mean_plddt, ptm))
             except Exception as e:                    # a bad structure must not kill the batch
                 tqdm.write(f"  WARN {h}: {e}")
         return rows
 
     found = 0
     last_sync = time.time()
-    write_header = not os.path.exists(metrics_path)
-    with open(metrics_path, "a", newline="") as mf, ThreadPoolExecutor(max_workers=workers) as ex:
-        writer = csv.writer(mf)
+    write_header = not os.path.exists(tracker_path) or os.path.getsize(tracker_path) == 0
+    with open(tracker_path, "a", newline="") as mf, ThreadPoolExecutor(max_workers=workers) as ex:
+        writer = csv.DictWriter(mf, fieldnames=TRACKER_COLS)
         if write_header:
-            writer.writerow(["protein_hash", "source_dataset", "seq_len",
-                             "mean_plddt", "ptm", "has_pae"])
+            writer.writeheader()
         for u, ds in dsets:                           # try representative set first, then 1B
             if not remaining:
                 break
@@ -457,24 +505,23 @@ def download(hashes, dsets, outdir=OUTDIR, s3_dest=None, fmt="cif", workers=16):
                 for rows in _bounded(ex, lambda c, ds=ds, src=src: process_chunk(ds, c, src),
                                      _ibatch(pending, BATCH), workers * 2):
                     for row in rows:
-                        h = row["protein_hash"]
+                        h = row["id"]
                         if h in remaining:
-                            writer.writerow([h, row["source_dataset"], row["seq_len"],
-                                             row["mean_plddt"], row["ptm"], row["has_pae"]])
+                            writer.writerow(row)
                             remaining.discard(h); found += 1
                     mf.flush()                        # crash-safe: persist ledger per batch
-                    if metrics_key and time.time() - last_sync > 300:   # mirror to S3 ~every 5 min
-                        _s3_put_file(s3, bucket, metrics_key, metrics_path)
+                    if tracker_key and time.time() - last_sync > 300:   # mirror to S3 ~every 5 min
+                        _s3_put_file(s3, bucket, tracker_key, tracker_path)
                         last_sync = time.time()
                     pbar.update(1)
                     pbar.set_postfix(found=found, unmatched=len(remaining))
-    if metrics_key:                                   # final mirror so the ledger is durable off-box
-        _s3_put_file(s3, bucket, metrics_key, metrics_path)
+    if tracker_key:                                   # final mirror so the ledger is durable off-box
+        _s3_put_file(s3, bucket, tracker_key, tracker_path)
     dest = s3_dest if s3_dest else outdir
-    print(f"\nDone: {found} structures (+ arrays) written to {dest} ; "
+    print(f"\nDone: {found} structures (+ metrics JSONs) written to {dest} ; "
           f"{len(remaining)} sequences not in the atlas.")
-    where = f"s3://{bucket}/{metrics_key}" if metrics_key else metrics_path
-    print(f"Metrics + resume ledger: {metrics_path}" + (f" (mirrored to {where})" if metrics_key else ""))
+    where = f"s3://{bucket}/{tracker_key}" if tracker_key else tracker_path
+    print(f"Tracker + resume ledger: {tracker_path}" + (f" (mirrored to {where})" if tracker_key else ""))
 
 def main(fasta, count_only=False, sample=None, seed=0,
          orf_map=None, s3_dest=None, outdir=OUTDIR, fmt="cif", workers=16,
@@ -516,13 +563,15 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=0, help="random seed for --sample")
     ap.add_argument("--orf-map", default=None, metavar="PATH",
                     help="write the full orf_id->protein_hash index here (.tsv or .tsv.zst); "
-                         "join against found_hashes.tsv to see which ORFs have a structure")
+                         "join it against tracker.csv's protein_hash column to see which ORFs "
+                         "have a structure")
     ap.add_argument("--s3", dest="s3_dest", default=S3_DEST, metavar="s3://bucket/prefix/",
-                    help=f"upload structures/ + arrays/ here (default {S3_DEST}); "
-                         f"pass --s3 '' to write locally instead (metrics.csv is always written "
-                         f"locally and, when uploading, mirrored to <prefix>/metrics.csv)")
+                    help=f"upload structures/ + metrics/ here (default {S3_DEST}); "
+                         f"pass --s3 '' to write locally instead (tracker.csv is always written "
+                         f"locally and, when uploading, mirrored to <prefix>/tracker.csv)")
     ap.add_argument("--outdir", default=OUTDIR,
-                    help=f"local output dir for structures + found_hashes.tsv (default {OUTDIR})")
+                    help=f"local output dir for structures/ + metrics/ + tracker.csv "
+                         f"(default {OUTDIR})")
     ap.add_argument("--format", dest="fmt", choices=["cif", "pdb"], default="cif",
                     help="structure file format (default cif)")
     ap.add_argument("--workers", type=int, default=16,
