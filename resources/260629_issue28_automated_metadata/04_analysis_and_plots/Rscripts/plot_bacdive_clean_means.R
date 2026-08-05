@@ -1,4 +1,4 @@
-# plot_bacdive_clean.R
+# plot_bacdive_clean_means.R
 
 options(scipen = 999)
 
@@ -7,7 +7,7 @@ library(data.table)
 library(scales)
 
 # Define paths
-data_file <- "data/bacdive_clean.csv"
+data_file <- "resources/260629_issue28_automated_metadata/data/bacdive_clean.csv"
 output_dir <- "plots"
 
 if (!dir.exists(output_dir)) {
@@ -20,7 +20,7 @@ cols_to_load <- c("taxon_id", "organism", "temp_optimum", "temp_min", "temp_max"
 df <- fread(data_file, select = cols_to_load)
 total_organisms <- nrow(df)
 
-# Function to generate and save histogram with median line & label and NA counts
+# Function to generate and save histogram with MEAN line & label and NA counts
 create_plot <- function(data, column_name, title_name, unit, file_name, bin_width) {
     message(paste("Processing", column_name, "..."))
     
@@ -36,27 +36,27 @@ create_plot <- function(data, column_name, title_name, unit, file_name, bin_widt
     # Exclude NAs introduced by coercion if any
     sub_df <- sub_df[!is.na(sub_df$val), , drop = FALSE]
     
-    # Calculate median
-    med_val <- median(sub_df$val, na.rm = TRUE)
-    med_text <- paste0("Median: ", round(med_val, 2), " ", unit)
+    # Calculate mean
+    mean_val <- mean(sub_df$val, na.rm = TRUE)
+    mean_text <- paste0("Mean: ", round(mean_val, 2), " ", unit)
     
     # Subtitle text
     sub_text <- paste0("Total Organisms: ", comma(total_organisms), 
                        " | Valid Results: ", comma(count_valid), 
                        " | Missing/NULL: ", comma(count_na),
-                       "\n", med_text)
+                       "\n", mean_text)
     
     p <- ggplot(sub_df, aes(x = val)) + 
         geom_histogram(binwidth = bin_width, fill = "steelblue", color = "black") + 
-        geom_vline(xintercept = med_val, color = "red", linetype = "dashed", linewidth = 1) +
+        geom_vline(xintercept = mean_val, color = "blue", linetype = "dashed", linewidth = 1) +
         annotate(
             "label", 
-            x = med_val, 
+            x = mean_val, 
             y = Inf, 
-            label = med_text, 
+            label = mean_text, 
             vjust = 1.5, 
             hjust = -0.1, 
-            color = "red", 
+            color = "blue", 
             fontface = "bold", 
             fill = "white",
             size = 4
@@ -76,14 +76,15 @@ create_plot <- function(data, column_name, title_name, unit, file_name, bin_widt
     ggsave(out_path, plot = p, width = 9, height = 6, dpi = 300)
 }
 
-# Generate plots for temperatures
-create_plot(df, "temp_optimum", "Temperature Optimum", "°C", "bacdive_temp_optimum_histogram.png", bin_width = 1)
-create_plot(df, "temp_min", "Minimum Temperature", "°C", "bacdive_temp_min_histogram.png", bin_width = 1)
-create_plot(df, "temp_max", "Maximum Temperature", "°C", "bacdive_temp_max_histogram.png", bin_width = 1)
+# Generate plots for temperatures with mean annotation
+create_plot(df, "temp_optimum", "Temperature Optimum", "°C", "bacdive_temp_optimum_mean_histogram.png", bin_width = 1)
+create_plot(df, "temp_min", "Minimum Temperature", "°C", "bacdive_temp_min_mean_histogram.png", bin_width = 1)
+create_plot(df, "temp_max", "Maximum Temperature", "°C", "bacdive_temp_max_mean_histogram.png", bin_width = 1)
 
-# Generate plots for pH
-create_plot(df, "ph_optimum", "pH Optimum", "pH", "bacdive_ph_optimum_histogram.png", bin_width = 0.2)
-create_plot(df, "ph_min", "Minimum pH", "pH", "bacdive_ph_min_histogram.png", bin_width = 0.2)
-create_plot(df, "ph_max", "Maximum pH", "pH", "bacdive_ph_max_histogram.png", bin_width = 0.2)
+# Generate plots for pH with mean annotation
+create_plot(df, "ph_optimum", "pH Optimum", "pH", "bacdive_ph_optimum_mean_histogram.png", bin_width = 0.2)
+create_plot(df, "ph_min", "Minimum pH", "pH", "bacdive_ph_min_mean_histogram.png", bin_width = 0.2)
+create_plot(df, "ph_max", "Maximum pH", "pH", "bacdive_ph_max_mean_histogram.png", bin_width = 0.2)
 
-message("Done generating all BacDive plots.")
+message("Done generating all BacDive mean plots.")
+
