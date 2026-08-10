@@ -1,0 +1,13 @@
+# Issue 72 Run 2 (AF DB download, PETadex v260701 nr significant hits).
+# Versions pinned to those used for the run.
+#
+# Run 1 shipped af_db_env.yml, a win-64 explicit conda env for a Windows notebook kernel; it is
+# not usable on the Linux VM this run executes on, so it is not carried over. Only these three
+# packages are imported by the Run 2 scripts.
+#
+# External CLI tools, not pip-installable: aws (S3), gcloud (AlphaFold DB on GCS -- must be
+# authenticated, the bucket denies anonymous reads).
+
+polars==1.40.1      # local_accession_mapping.py: streaming scan of idmapping_selected.tab.gz
+pyarrow==24.0.0     # polars streaming engine backend
+zstandard==0.25.0   # build_unfolded_fasta.py: writing unfolded.fa.zst
