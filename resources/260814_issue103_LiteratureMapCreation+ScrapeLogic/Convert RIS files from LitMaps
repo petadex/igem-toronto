@@ -1,0 +1,75 @@
+import pandas as pd
+import os
+import math
+
+INPUT_CSV = r"C:\Users\somna\Downloads\Untitled spreadsheet - Sheet1 (12).csv"
+OUTPUT_DIR = r"C:\Users\somna\Downloads\Zotero_Batches_New1"
+BATCH_SIZE = 1000
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+def write_ris_batch(dataframe, batch_number):
+    """Converts a pandas DataFrame chunk into a standard RIS file."""
+    output_filepath = os.path.join(OUTPUT_DIR, f"Zotero_Batch_{batch_number}.ris")
+    
+    with open(output_filepath, 'w', encoding='utf-8') as f:
+        for _, row in dataframe.iterrows():
+            f.write("TY  - JOUR\n")
+            
+            if pd.notna(row.get('Title')):
+                f.write(f"TI  - {row['Title']}\n")
+                
+            if pd.notna(row.get('DOI')):
+                f.write(f"DO  - {row['DOI']}\n")
+                
+            if pd.notna(row.get('Journal')):
+                f.write(f"JO  - {row['Journal']}\n")
+                
+            if pd.notna(row.get('Year')):
+                year_val = str(row['Year']).strip()
+                try:
+                    # Drop the decimal if pandas turned 2025 into 2025.0
+                    year_clean = int(float(year_val))
+                    f.write(f"PY  - {year_clean}/\n")
+                except ValueError:
+                    # Fallback if the year is a string like "2024-05-12"
+                    # Grab the first 4 characters assuming it starts with the year
+                    year_clean = year_val[:4]
+                    f.write(f"PY  - {year_clean}/\n")
+                
+            # Handle multiple authors separated by semicolons
+            if pd.notna(row.get('Authors')):
+                authors = str(row['Authors']).split(';')
+                for author in authors:
+                    f.write(f"AU  - {author.strip()}\n")
+                    
+            f.write("ER  - \n\n")
+            
+    print(f"Generated {output_filepath} with {len(dataframe)} papers.")
+
+if __name__ == "__main__":
+    print("Loading Master CSV...")
+    df = pd.read_csv(INPUT_CSV)
+    
+    # Isolate papers where the abstract is "N/A" or completely blank
+    missing_mask = df['Abstract'].isna() | (df['Abstract'].astype(str).str.strip().str.upper() == 'N/A')
+    df_missing = df[missing_mask].copy()
+    
+    total_missing = len(df_missing)
+    print(f"Found {total_missing} papers missing abstracts.")
+    
+    if total_missing == 0:
+        print("No missing abstracts to process.")
+    else:
+        # Calculate how many batches we need
+        total_batches = math.ceil(total_missing / BATCH_SIZE)
+        print(f"Splitting into {total_batches} batches of {BATCH_SIZE} papers each...\n")
+        
+        for i in range(total_batches):
+            start_idx = i * BATCH_SIZE
+            end_idx = start_idx + BATCH_SIZE
+            batch_df = df_missing.iloc[start_idx:end_idx]
+            
+            write_ris_batch(batch_df, i + 1)
+            
+        print("\nBatch generation complete. Ready for Zotero import.")
