@@ -1,0 +1,190 @@
+import os
+import re
+import json
+import glob
+import pandas as pd
+
+
+# Configuration Paths
+
+main_dir = r"C:\Users\somna\Downloads\Plastic_Degradation_Yes_Classified"
+type_dir = r"C:\Users\somna\Downloads\primary_or_review"
+out_dir = r"C:\Users\somna\Downloads\updated_jsons_output"
+output_csv = r"C:\Users\somna\Downloads\supplementary_materials_report.csv"
+
+
+# Regex Patterns & Helper Functions
+
+supp_pattern = re.compile(
+    r'(supplementary\s+(?:materials?|information|data|file|info)|'
+    r'supporting\s+(?:information|materials?|data|file|info)|'
+    r'associated\s+content)',
+    re.IGNORECASE
+)
+
+def is_doi_missing_or_unsure(doi_val):
+    """Check if the DOI is missing, empty, or marked as 'Unsure'."""
+    if not doi_val or not isinstance(doi_val, str):
+        return True
+    cleaned = doi_val.strip().lower()
+    return cleaned in ["", "unsure", "not specified", "null", "none", "n/a"]
+
+def extract_cleaned_urls_near_supp(text):
+    """
+    Finds URLs mentioned within 1000 characters of a Supplementary/Supporting mention
+    and removes inappropriate whitespace artifacts.
+    """
+    supp_matches = list(supp_pattern.finditer(text))
+    if not supp_matches:
+        return []
+    
+    found_urls = set()
+    for match in supp_matches:
+        start = max(0, match.start() - 50)
+        end = min(len(text), match.end() + 200)
+        window = text[start:end]
+        
+        # Match URL-like patterns including potential OCR space glitches
+        raw_urls = re.findall(
+            r'https?://[a-zA-Z0-9\.\-\/\%\?\=\&\_\~\s]+?'
+            r'(?=[,\s\)\}\]"\'\>]*(?:\s+[A-Z]|[\.\,\;\:]\s|\s*$))', 
+            window
+        )
+        for u in raw_urls:
+            cleaned = re.sub(r'\s+', '', u)
+            # Basic validation that it looks like a real web address
+            if len(cleaned) > 12 and '.' in cleaned:
+                found_urls.add(cleaned)
+                
+    return list(found_urls)
+
+
+# Main Processing Logic
+
+def process_and_analyze_papers():
+    os.makedirs(out_dir, exist_ok=True)
+    
+    # Track tallies
+    total_papers = 0
+    total_missing_doi = 0
+    total_with_supp_mentions = 0
+    total_supp_with_links = 0
+    total_supp_without_links = 0
+    
+    primary_no_supp = 0
+    review_no_supp = 0
+    unknown_type_no_supp = 0
+    
+    report_rows = []
+    
+    json_files = glob.glob(os.path.join(main_dir, "*.json"))
+    print(f"Scanning {len(json_files)} JSON files...")
+    
+    for file_path in json_files:
+        filename = os.path.basename(file_path)
+        type_filepath = os.path.join(type_dir, filename)
+        out_filepath = os.path.join(out_dir, filename)
+        
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                main_data = json.load(f)
+        except json.JSONDecodeError:
+            print(f"Warning: Could not parse JSON in {filename}")
+            continue
+            
+        # 1. Extract paper type from the secondary folder
+        paper_type_str = "Unknown"
+        if os.path.exists(type_filepath):
+            try:
+                with open(type_filepath, 'r', encoding='utf-8') as f:
+                    type_data = json.load(f)
+                    p_type = type_data.get("Paper_Type", [])
+                    if isinstance(p_type, list) and len(p_type) > 0:
+                        paper_type_str = p_type[0]
+                    elif isinstance(p_type, str):
+                        paper_type_str = p_type
+            except Exception as e:
+                print(f"Warning: Could not read type file for {filename}: {e}")
+                
+        # 2. Reconstruct JSON with Paper_Type at the top
+        merged_data = {"Paper_Type": paper_type_str}
+        merged_data.update(main_data)
+        total_papers += 1
+        
+        # 3. Save the newly merged JSON to the output folder
+        try:
+            with open(out_filepath, 'w', encoding='utf-8') as f:
+                json.dump(merged_data, f, indent=4)
+        except Exception as e:
+            print(f"Error saving {filename}: {e}")
+        
+        # Extract fields for analysis
+        title = merged_data.get("title", "")
+        doi = merged_data.get("doi", "")
+        full_text = json.dumps(merged_data)
+        
+        # 4. Check DOI status
+        missing_doi = is_doi_missing_or_unsure(doi)
+        if missing_doi:
+            total_missing_doi += 1
+            
+        # 5. Check for Supplementary/Supporting mentions
+        has_supp = bool(supp_pattern.search(full_text))
+        urls_found = []
+        
+        if has_supp:
+            total_with_supp_mentions += 1
+            urls_found = extract_cleaned_urls_near_supp(full_text)
+            if urls_found:
+                total_supp_with_links += 1
+            else:
+                total_supp_without_links += 1
+        else:
+            # 6. Tally papers missing supplementary info based on their paper type
+            type_lower = paper_type_str.lower()
+            if "primary" in type_lower or "research" in type_lower:
+                primary_no_supp += 1
+            elif "review" in type_lower:
+                review_no_supp += 1
+            else:
+                unknown_type_no_supp += 1
+                
+        # Append row to CSV report
+        report_rows.append({
+            "File_Name": filename,
+            "Title": title,
+            "DOI": doi,
+            "Paper_Type": paper_type_str,
+            "Missing_DOI": missing_doi,
+            "Has_Supplementary_Mention": has_supp,
+            "Has_Link": bool(urls_found),
+            "Cleaned_URLs": " | ".join(urls_found)
+        })
+        
+    # Calculate final missing totals (thank you ChatGPT for the print statement formatting)
+    total_no_supp = total_papers - total_with_supp_mentions
+    
+    # Print the combined summary report
+    print("\n" + "="*60)
+    print("             SUMMARY TALLY REPORT             ")
+    print("="*60)
+    print(f"Total Papers Scanned                   : {total_papers}")
+    print(f"Papers Missing/Unsure DOI              : {total_missing_doi} ({total_missing_doi/max(1,total_papers)*100:.1f}%)")
+    print("-" * 60)
+    print(f"Papers with Supp/Supporting Mentions   : {total_with_supp_mentions} ({total_with_supp_mentions/max(1,total_papers)*100:.1f}%)")
+    print(f"  ??? Mentions WITH an HTTP Link       : {total_supp_with_links} ({total_supp_with_links/max(1,total_with_supp_mentions)*100:.1f}% of supps)")
+    print(f"  ??? Mentions WITHOUT Link            : {total_supp_without_links} ({total_supp_without_links/max(1,total_with_supp_mentions)*100:.1f}% of supps)")
+    print("-" * 60)
+    print(f"Papers missing Supplementary Info      : {total_no_supp}")
+    print(f"  ??? Primary/Research papers missing  : {primary_no_supp}")
+    print(f"  ??? Review papers missing            : {review_no_supp}")
+    print(f"  ??? Unclassified/Unknown missing     : {unknown_type_no_supp}")
+    print("="*60)
+
+    # Save detailed report to CSV
+    df_report = pd.DataFrame(report_rows)
+    df_report.to_csv(output_csv, index=False)
+    print(f"\nDetailed CSV report saved to: {output_csv}")
+
+if __name__ == "__main__":
+    process_and_analyze_papers()
