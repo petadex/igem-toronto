@@ -1,0 +1,500 @@
+# Research Rabbit database does not hold enough space for me to traverse through several pages of articles related to other articles making this method unusable...
+import os
+import time
+import random
+import re
+import pyautogui
+import undetected_chromedriver as uc
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+
+# --- Configuration & Variables ---
+BASE_DOWNLOAD_DIR = r"C:\Users\somna\Downloads\literature map"
+LOG_FILE = os.path.join(BASE_DOWNLOAD_DIR, "processed_dois.txt")
+CAPPED_LOG_FILE = os.path.join(BASE_DOWNLOAD_DIR, "capped_dois.txt")
+
+MAX_ITEMS_CAP = 800 # Hard limit for papers processed per column
+
+# 1. LOGIN SELECTORS
+LOGIN_URL = "https://www.researchrabbitapp.com/login" 
+USER_INPUT_SEL = "input[type='email']"
+PASS_INPUT_SEL = "input[type='password']"
+SUBMIT_BTN_SEL = "button[type='submit']"
+
+# 2. NAVIGATION SELECTORS
+PAZY_COLLECTION_XPATH = "//button[.//label[text()='PAZy']]"
+LIBRARY_BTN_CSS = "a[class*='Navigation__LinkContainer']" 
+PARENT_ARTICLE_SEL = "button[class*='ListItemArticleDetails__Container']" # Reverted to CSS
+NEXT_PAGE_PARENT_XPATH = "(//button[.//path[starts-with(@d, 'm14.03')]])[1]"
+
+# 3. PARENT PANEL SELECTORS 
+REFS_BTN_XPATH = "(//button[.//span[text()='Refs']])[last()]" 
+CITED_BY_BTN_XPATH = "(//button[.//span[text()='Cited By']])[last()]"
+
+# 4. CHILD PANEL SELECTORS
+# Finds the last article on the screen, goes to its container wrapper, and grabs all sibling buttons
+CHILD_ARTICLE_XPATH = "(//div[contains(@class, 'ListItemContainer')])[last()]/..//button[contains(@class, 'ListItemArticleDetails__Container')]"
+NEXT_PAGE_CHILD_XPATH = "(//button[.//path[starts-with(@d, 'm14.03')]])[last()]"
+
+# 5. DATA EXTRACTION SELECTORS
+# Finds the 'Abstract' header, drops into the div below it, and grabs the paragraph
+ABSTRACT_TEXT_XPATH = "((//h5[text()='Abstract']/following-sibling::div//p) | (//p[contains(@class, 'ArticleDetailsDisplay__AbstractParagraph')]))"
+PDF_BTN_XPATH = "(//a[text()='PDF'])[last()]" 
+
+# 6. BIBTEX SELECTORS
+THREE_DOTS_XPATH = "(//button[@aria-haspopup='menu'])[last()]"
+CITE_MENU_OPT_XPATH = "//div[@role='menuitem' and contains(., 'Cite')]"
+FORMAT_COMBOBOX_XPATH = "//button[@role='combobox']"
+BIBTEX_CONTAINER_XPATH = "(//div[contains(@class, 'CopyContainer__Preview')])[last()]" 
+DONE_BTN_XPATH = "(//button[text()='Done'])[last()]"
+
+if not os.path.exists(BASE_DOWNLOAD_DIR):
+    os.makedirs(BASE_DOWNLOAD_DIR)
+
+processed_dois = set()
+if os.path.exists(LOG_FILE):
+    with open(LOG_FILE, "r", encoding="utf-8") as f:
+        processed_dois = set(line.strip() for line in f if line.strip())
+
+prefs = {
+    "download.default_directory": os.path.abspath(BASE_DOWNLOAD_DIR),
+    "download.prompt_for_download": False,
+    "plugins.always_open_pdf_externally": True,
+    "profile.default_content_setting_values.popups": 1 
+}
+
+options = uc.ChromeOptions()
+options.add_experimental_option("prefs", prefs)
+driver = uc.Chrome(options=options)
+
+def set_cdp_download_directory(driver, target_dir):
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir)
+    driver.execute_cdp_cmd("Page.setDownloadBehavior", {
+        "behavior": "allow",
+        "downloadPath": os.path.abspath(target_dir)
+    })
+
+def sanitize_filename(name):
+    if not name:
+        return "Unknown"
+    return re.sub(r'[\\/*?:"<>|]', "_", name)[:100]
+
+def parse_bibtex(bibtex_str):
+    data = {"title": "N/A", "doi": "N/A", "author": "N/A", "journal": "N/A", "year": "N/A"}
+    
+    title_match = re.search(r'title\s*=\s*[{"](.*?)[}"]', bibtex_str, re.IGNORECASE | re.DOTALL)
+    doi_match = re.search(r'doi\s*=\s*[{"](.*?)[}"]', bibtex_str, re.IGNORECASE)
+    author_match = re.search(r'author\s*=\s*[{"](.*?)[}"]', bibtex_str, re.IGNORECASE | re.DOTALL)
+    journal_match = re.search(r'journal\s*=\s*[{"](.*?)[}"]', bibtex_str, re.IGNORECASE)
+    year_match = re.search(r'year\s*=\s*[{"](.*?)[}"]', bibtex_str, re.IGNORECASE)
+    
+    if title_match: data["title"] = title_match.group(1).strip()
+    if doi_match: data["doi"] = doi_match.group(1).strip()
+    if author_match: data["author"] = author_match.group(1).replace("\n", " ").strip()
+    if journal_match: data["journal"] = journal_match.group(1).strip()
+    if year_match: data["year"] = year_match.group(1).strip()
+        
+    return data
+
+def safe_scroll_into_view(driver, element):
+    """
+    Scrolls just enough to make the element visible 
+    without forcing it to the center or end.
+    """
+    driver.execute_script("""
+        var element = arguments[0];
+        var rect = element.getBoundingClientRect();
+        // Check if the element is already in view
+        if (rect.top >= 0 && rect.bottom <= (window.innerHeight || document.documentElement.clientHeight)) {
+            return; // Already visible, no need to scroll
+        }
+        // Otherwise, scroll the parent container just enough
+        element.scrollIntoView({behavior: 'smooth', block: 'nearest', inline: 'nearest'});
+    """, element)
+
+def get_current_files(directory):
+    if not os.path.exists(directory): return set()
+    return set(os.listdir(directory))
+
+def wait_for_new_download(directory, before_files, timeout=30):
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        current_files = get_current_files(directory)
+        new_files = current_files - before_files
+        valid_files = [f for f in new_files if not f.endswith('.crdownload') and not f.endswith('.tmp')]
+        if valid_files: return valid_files[0]
+        time.sleep(1)
+    return None
+
+def safe_js_click(driver, element):
+    """
+    Force-clicks an element using JavaScript.
+    'block: end' ensures the element is at the bottom of the container,
+    preventing it from being pushed off-screen by over-scrolling.
+    """
+    # block: 'end' aligns the element to the bottom of the visible area
+    driver.execute_script("arguments[0].scrollIntoView({block: 'end', inline: 'nearest'});", element)
+    time.sleep(0.5)
+    driver.execute_script("arguments[0].click();", element)
+
+def fetch_bibtex_data(driver):
+    bibtex_str = ""
+    print("[DEBUG] Initiating BibTeX fetch...")
+    
+    for attempt in range(3):
+        try:
+            print(f"[DEBUG] --- Attempt {attempt + 1} of 3 ---")
+            #time.sleep(1)
+            print("[DEBUG] Attempting to click 3-dots...")
+            three_dots = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, THREE_DOTS_XPATH))).click()
+            
+            #time.sleep(0.5)
+            
+            print("[DEBUG] Attempting to click Cite...")
+            cite_opt = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, CITE_MENU_OPT_XPATH)))
+            safe_js_click(driver, cite_opt)
+            #time.sleep(1.5)
+            
+            print("[DEBUG] Checking style box...")
+            style_box = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, FORMAT_COMBOBOX_XPATH)))
+            if not "BibTeX" in style_box.text:
+                time.sleep(0.5)
+                style_box = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, FORMAT_COMBOBOX_XPATH)))
+                if not "BibTeX" in style_box.text:
+                    print("\n[!] nonBibTeX FORMAT DETECTED [!]")
+                    input("Please manually change the dropdown to BibTeX, check 'Always use this style', then press Enter here to resume...")
+            
+            print("[DEBUG] Locating BibTeX container...")
+            bibtex_container = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, BIBTEX_CONTAINER_XPATH)))
+            
+            # Verbose Capture Attempts
+            print("[DEBUG] Attempting textContent capture...")
+            bibtex_str = driver.execute_script("return arguments[0].textContent;", bibtex_container)
+            
+            if not bibtex_str or bibtex_str.strip() == "":
+                print("[DEBUG] textContent was empty. Trying innerHTML as Plan B...")
+                # Plan B: Get raw HTML and regex-strip the tags manually
+                raw_html = driver.execute_script("return arguments[0].innerHTML;", bibtex_container)
+                bibtex_str = re.sub('<[^<]+?>', '', raw_html)
+                
+            print(f"[DEBUG] Raw text captured length: {len(bibtex_str)}")
+            print(f"[DEBUG] Printing captured text: {bibtex_str}")
+            
+            print("[DEBUG] Clicking Done...")
+            done_btn = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, DONE_BTN_XPATH)))
+            safe_js_click(driver, done_btn)
+            #time.sleep(1)
+            
+            break # Success! Exit the retry loop.
+            
+        except Exception as e:
+            print(f"[ERROR] fetch_bibtex_data attempt {attempt + 1} failed: {type(e).__name__} - {e}")
+            time.sleep(2) # Buffer before retry
+            if attempt == 2:
+                # On final failure, return empty to let the main script gracefully log it as N/A
+                return parse_bibtex("")
+                
+    return parse_bibtex(bibtex_str)
+def check_button_count(driver, xpath_selector):
+    try:
+        btn = driver.find_element(By.XPATH, xpath_selector)
+        text = btn.text 
+        match = re.search(r'\d+', text)
+        if match: return int(match.group()), btn
+    except NoSuchElementException:
+        pass
+    return 0, None
+
+def process_child_list(driver, current_download_dir, column_type, parent_doi, main_window):
+    processed_count = 0
+    cap_reached = False
+    current_page = 1
+
+    while True:
+        print(f"\n--- Scanning Page {current_page} of {column_type} ---")
+        try:
+            WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, CHILD_ARTICLE_XPATH)))
+            child_elements = driver.find_elements(By.XPATH, CHILD_ARTICLE_XPATH)
+            items_on_page = len(child_elements)
+        except TimeoutException:
+            print("Child column failed to load or is empty.")
+            break
+
+        print(f"Found {items_on_page} items on this page.")
+        
+        for i in range(items_on_page):
+            if processed_count >= MAX_ITEMS_CAP:
+                print(f"HARD CAP REACHED ({MAX_ITEMS_CAP} items). Aborting further extraction for {column_type}.")
+                cap_reached = True
+                break
+                
+            try:
+                children = driver.find_elements(By.XPATH, CHILD_ARTICLE_XPATH)
+                current_child = children[i]
+                safe_scroll_into_view(driver, current_child)
+                time.sleep(0.5) # Give it a tiny moment to settle                
+                current_child.click()
+                time.sleep(1) 
+                
+                
+                # --- DEBUGGED ABSTRACT EXTRACTION ---
+                # --- NEW COUNT-BASED ABSTRACT EXTRACTION ---
+                print("[DEBUG] Analyzing Abstract container structure...")
+                abstract = "Abstract not found."
+
+                # Look specifically for the elements you identified
+                details_paragraphs = driver.find_elements(By.CSS_SELECTOR, "p.ArticleDetailsDisplay__AbstractParagraph-sc-13r1ql8-3")
+                visible_details = [el for el in details_paragraphs if el.is_displayed()]
+
+                if len(visible_details) == 2:
+                    # RULE: If there are 2, it's [DOI + Placeholder], so NO abstract
+                    abstract = "No abstract"
+                    print("[DEBUG] 2 elements found (DOI+Placeholder detected). Skipping abstract extraction.")
+                
+                elif len(visible_details) == 1:
+                    # RULE: If there is 1, capture it using your specified class
+                    abs_element = driver.find_elements(By.CSS_SELECTOR, "p.ArticleAbstract__AbstractParagraph-sc-1cuf14n-0")
+                    if abs_element and abs_element[0].is_displayed():
+                        abstract = driver.execute_script("return arguments[0].innerText;", abs_element[0])
+                        print(f"[DEBUG] 1 element found. Abstract captured ({len(abstract)} chars).")
+                    else:
+                        print("[DEBUG] 1 element found, but specific abstract class not found.")
+                
+                else:
+                    print(f"[DEBUG] {len(visible_details)} elements found. No action taken.")
+                meta = fetch_bibtex_data(driver)
+                
+                # --- PDF HANDLING LOGIC ---
+                pdf_status = "no"
+                pdf_filename = "N/A"
+                
+                #try:
+                #    # Locate the PDF button
+                #    pdf_btn = driver.find_element(By.XPATH, PDF_BTN_XPATH)
+                #    print("PDF asset button found. Initiating click...")
+                #    
+                #    files_before = get_current_files(current_download_dir)
+                #    main_window = driver.current_window_handle
+                #    
+                #    # Click the button
+                #    pdf_btn.click()
+                #    time.sleep(4) # Wait to see if a new tab pops up
+                #    
+                #    # Check if a new tab was opened
+                #    all_windows = driver.window_handles
+                #    if len(all_windows) > 1:
+                #        print("New tab detected (likely publisher site). Closing tab...")
+                #        # Switch to the new tab and close it
+                #        for window in all_windows:
+                #            if window != main_window:
+                #                driver.switch_to.window(window)
+                #                driver.close()
+                #        # Return focus to the main app
+                #        driver.switch_to.window(main_window)
+                #    else:
+                #        # No new tab, assume it triggered an internal download
+                #        downloaded_file = wait_for_new_download(current_download_dir, files_before, timeout=10)
+                #        if downloaded_file:
+                #            pdf_status = "yes"
+                #            pdf_filename = downloaded_file
+                #            print(f"Internal PDF download confirmed: {pdf_filename}")
+
+                #except NoSuchElementException:
+                #    print("No PDF button present for this article.")
+
+                # Compile Output
+                doc_title = sanitize_filename(meta['title'])
+                if doc_title == "Unknown": doc_title = f"Unknown_Article_Page{current_page}_{i}"
+                    
+                filepath = os.path.join(current_download_dir, f"{doc_title}.txt")
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write(f"Title: {meta['title']}\nDOI: {meta['doi']}\nAuthors: {meta['author']}\n")
+                    f.write(f"Journal: {meta['journal']}\nYear: {meta['year']}\n")
+                    f.write(f"PDF Found: {pdf_status}\nPDF Name: {pdf_filename}\n")
+                    f.write(f"-" * 40 + "\nAbstract: ")
+                    f.write(abstract)
+                    
+                processed_count += 1
+                print(f"Saved record [{processed_count}/{MAX_ITEMS_CAP}]: {doc_title}")
+                
+            except Exception as e:
+                print(f"Failed to process item {i}: {e}")
+
+        if cap_reached: break
+
+        # Child Pagination
+        try:
+            next_btn = driver.findElement(By.xpath("//div[@class='sc-kAyceB boGjIO']//button[2]//*[name()='svg']"))
+           # next_btn = driver.find_element(By.XPATH, NEXT_PAGE_CHILD_XPATH)
+            if next_btn.get_attribute("disabled") or "disabled" in next_btn.get_attribute("class"):
+                print("Next button disabled. Reached end of list.")
+                break
+                
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", next_btn)
+            time.sleep(1)
+            
+            old_elements = driver.find_elements(By.XPATH, CHILD_ARTICLE_XPATH)
+            old_ref = old_elements[0] if old_elements else None
+            
+            next_btn.click()
+            current_page += 1
+            
+            if old_ref:
+                try: WebDriverWait(driver, 10).until(EC.staleness_of(old_ref))
+                except: pass
+            time.sleep(2) 
+            
+        except NoSuchElementException:
+            print("No 'Next' button found. Reached end of list.")
+            break
+
+    if cap_reached:
+        flag_file = os.path.join(current_download_dir, "!_INCOMPLETE_CAP_REACHED.txt")
+        with open(flag_file, "w", encoding="utf-8") as f:
+            f.write(f"WARNING: The maximum extraction limit of {MAX_ITEMS_CAP} items was reached for {column_type}.\n")
+        with open(CAPPED_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{parent_doi} - {column_type} capped at {MAX_ITEMS_CAP}\n")
+
+
+
+
+
+
+
+
+
+
+# --- Initial Boot & Login ---
+print("Waking ResearchRabbit engine...")
+driver.get(LOGIN_URL)
+
+try:
+    print("Injecting credentials...")
+    WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, USER_INPUT_SEL)))
+    driver.find_element(By.CSS_SELECTOR, USER_INPUT_SEL).send_keys("somedudebro063@gmail.com")
+    driver.find_element(By.CSS_SELECTOR, PASS_INPUT_SEL).send_keys("Incorrect@6")
+    driver.find_element(By.CSS_SELECTOR, SUBMIT_BTN_SEL).click()
+    
+    print("Awaiting collection dashboard load...")
+    WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, PAZY_COLLECTION_XPATH)))
+    driver.find_element(By.XPATH, PAZY_COLLECTION_XPATH).click()
+    time.sleep(3)
+except Exception as e:
+    print(f"Login failed: {e}")
+    driver.quit()
+    exit()
+
+main_window = driver.current_window_handle
+parent_page = 1
+
+# --- Master Scraper Loop (Handles PAZy Pagination) ---
+while True:
+    print(f"\n===== SCANNING PAZY MASTER LIST: PAGE {parent_page} =====")
+    try:
+        # Changed to CSS_SELECTOR
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, PARENT_ARTICLE_SEL)))
+        parents = driver.find_elements(By.CSS_SELECTOR, PARENT_ARTICLE_SEL)
+        total_parents = len(parents)
+        print(f"Identified {total_parents} articles on this page.")
+    except Exception as e:
+        print("Could not locate parent articles. Exiting.")
+        break
+
+    for idx in range(total_parents):
+        print(f"\nEvaluating Core PAZy Article {idx + 1}/{total_parents} (Page {parent_page})...")
+        try:
+            # Changed to CSS_SELECTOR
+            parents = driver.find_elements(By.CSS_SELECTOR, PARENT_ARTICLE_SEL)
+            current_parent = parents[idx]
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", current_parent)
+            time.sleep(1)
+            current_parent.click()
+            time.sleep(2.5)
+            
+            parent_meta = fetch_bibtex_data(driver)
+            parent_doi = parent_meta.get('doi', 'Unknown_DOI')
+            parent_doi_safe = sanitize_filename(parent_doi)
+            
+            if parent_doi_safe in ["Unknown", "N_A", ""]: parent_doi_safe = sanitize_filename(parent_meta['title'])
+                
+            if parent_doi in processed_dois:
+                print(f"Skipping DOI (Already indexed): {parent_doi}")
+                continue
+                
+            root_dir = os.path.join(BASE_DOWNLOAD_DIR, parent_doi_safe)
+            refs_dir = os.path.join(root_dir, "refs")
+            cited_dir = os.path.join(root_dir, "cited by")
+            
+            # --- Phase 1: References ---
+            print("\n[Phase 1] Processing References...")
+            refs_count, refs_btn = check_button_count(driver, REFS_BTN_XPATH)
+            if refs_count > 0 and refs_btn:
+                print(f"Scanning {refs_count} References...")
+                set_cdp_download_directory(driver, refs_dir)
+                refs_btn.click()
+                time.sleep(2.5)
+                
+                process_child_list(driver, refs_dir, "References", parent_doi, main_window)
+                
+                # --- HARD RESET ---
+                print("Resetting UI state via Library button...")
+                driver.find_element(By.CSS_SELECTOR, LIBRARY_BTN_CSS).click()
+                time.sleep(2.5) # Allow UI to snap back to the PAZy list
+                
+                # Re-find the parent articles on the DOM and click the current one
+                parents = driver.find_elements(By.XPATH, PARENT_ARTICLE_SEL)
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", parents[idx])
+                time.sleep(1)
+                parents[idx].click()
+                time.sleep(2)
+            else:
+                print("No references documented for this entity.")
+
+            # --- Phase 2: Cited By ---
+            print("\n[Phase 2] Processing Cited By...")
+            cited_count, cited_btn = check_button_count(driver, CITED_BY_BTN_XPATH)
+            if cited_count > 0 and cited_btn:
+                print(f"Scanning {cited_count} 'Cited By' metrics...")
+                set_cdp_download_directory(driver, cited_dir)
+                cited_btn.click()
+                time.sleep(2.5)
+                
+                process_child_list(driver, cited_dir, "Cited By", parent_doi, main_window)
+                
+                # --- HARD RESET ---
+                print("Resetting UI state via Library button...")
+                driver.find_element(By.CSS_SELECTOR, LIBRARY_BTN_CSS).click()
+                time.sleep(2.5) 
+            else:
+                print("No incoming citations documented for this entity.")
+                
+            with open(LOG_FILE, "a", encoding="utf-8") as log:
+                log.write(f"{parent_doi}\n")
+                log.flush()
+            processed_dois.add(parent_doi)
+            print(f"Successfully processed item node: {parent_doi}")
+                
+        except Exception as e:
+            print(f"Critical error on parent loop iteration {idx}: {e}")
+
+    # Check PAZy Master List Pagination
+    try:
+        next_btn = driver.find_element(By.XPATH, NEXT_PAGE_PARENT_XPATH)
+        if next_btn.get_attribute("disabled") or "disabled" in next_btn.get_attribute("class"):
+            print("Master Next button disabled. Reached end of PAZy collection.")
+            break
+            
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", next_btn)
+        time.sleep(1)
+        next_btn.click()
+        parent_page += 1
+        time.sleep(3) # Wait for master list to render next batch
+    except NoSuchElementException:
+        print("No Master 'Next' button found. Reached end of PAZy collection.")
+        break
+
+print("\nResearchRabbit scraping sequence finalized safely.")
+driver.quit()
