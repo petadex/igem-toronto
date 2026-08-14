@@ -1,0 +1,429 @@
+# this is inefficient and bloats costs, probably better to have part 1 map out relations as well so the 2d grid and all possible combinations aren't checked
+import os
+import json
+import base64
+import sys
+import boto3
+
+
+# BATCH CONFIGURATION
+
+MODEL_ID = "us.anthropic.claude-sonnet-4-6" 
+REGION_NAME = "us-east-1"
+BUCKET_NAME = "batch-extraction-217113048582-us-east-1-an"
+ROLE_ARN = "arn:aws:iam::217113048582:role/igem-bio-extraction-bedrock-batch-role"
+
+# BUDGET SAFEGUARD CONFIGURATION
+MAX_BUDGET_USD = 500.00
+ESTIMATED_INPUT_COST_PER_1M = 1.50   
+ESTIMATED_OUTPUT_COST_PER_1M = 7.50  
+
+# AWS CREDENTIALS 
+AWS_ACCESS_KEY = "Thats What She Said"
+AWS_SECRET_KEY = "No, no, no, no, no, no, no, no DON'T DO THAT. I THOUGHT WE WERE HAVING A NICE DATE"
+AWS_SESSION_TOKEN = "Life is like a box of chocolates. You never know what you're gonna get." 
+
+# DIRECTORIES AND FILES
+PASS1_OUT_FILE = r"C:\Users\somna\Downloads\batch_pass_1_1785723771.jsonl.out"
+INPUT_DIR = r"C:\Users\somna\Downloads\Plastic_Degradation_Yes_Classified"
+BASE_OUTPUT_DIR = r"C:\Users\somna\Downloads\extracted_metadata_V2_schema_CSVs_Evidence"
+LOCAL_BATCH_JSONL = os.path.join(BASE_OUTPUT_DIR, "pass2_chunked_input.jsonl")
+
+os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
+
+
+# AWS CLIENTS
+
+# Kept STS for initial validation; S3 and Bedrock removed as they are unused here.
+sts_client = boto3.client(
+    "sts",
+    region_name=REGION_NAME,
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    aws_session_token=AWS_SESSION_TOKEN
+)
+
+
+# HELPER FUNCTIONS
+
+def filter_references_from_json(obj):
+    if isinstance(obj, list):
+        filtered_list = []
+        for item in obj:
+            if isinstance(item, dict):
+                sec = str(item.get("section", "")).lower()
+                if "reference" in sec or "bibliography" in sec:
+                    continue
+            filtered_item = filter_references_from_json(item)
+            if filtered_item is not None:
+                filtered_list.append(filtered_item)
+        return filtered_list
+    elif isinstance(obj, dict):
+        sec = str(obj.get("section", "")).lower()
+        if "reference" in sec or "bibliography" in sec:
+            return None
+        
+        new_dict = {}
+        for k, v in obj.items():
+            val = filter_references_from_json(v)
+            if val is not None:
+                new_dict[k] = val
+        return new_dict
+    return obj
+
+def get_paper_text(record_id, input_dir):
+    cleaned_id = ''.join(e for e in record_id if e.isalnum()).lower()
+    
+    for filename in os.listdir(input_dir):
+        file_base = os.path.splitext(filename)[0]
+        cleaned_file_base = ''.join(e for e in file_base if e.isalnum()).lower()
+        
+        if cleaned_id in cleaned_file_base or cleaned_file_base in cleaned_id:
+            full_path = os.path.join(input_dir, filename)
+            try:
+                with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    file_content = f.read()
+                
+                try:
+                    paper_data = json.loads(file_content)
+                    filtered_data = filter_references_from_json(paper_data)
+                    return json.dumps(filtered_data)
+                except json.JSONDecodeError:
+                    lower_content = file_content.lower()
+                    ref_idx = lower_content.rfind("\nreferences\n")
+                    if ref_idx == -1:
+                        ref_idx = lower_content.rfind("\nbibliography\n")
+                    
+                    if ref_idx != -1 and ref_idx > (len(file_content) / 2):
+                        return file_content[:ref_idx]
+                        
+                    return file_content
+                    
+            except Exception as e:
+                print(f"Warning: Failed to read file {full_path}: {e}")
+                return ""
+    return ""
+
+def estimate_and_verify_cost(total_chunks, estimated_input_tokens, estimated_output_tokens):
+    input_cost = (estimated_input_tokens / 1000000) * ESTIMATED_INPUT_COST_PER_1M
+    output_cost = (estimated_output_tokens / 1000000) * ESTIMATED_OUTPUT_COST_PER_1M
+    total_cost = input_cost + output_cost
+    
+    print("\n" + "="*60)
+    print("PRE-RUN COST ESTIMATE (ALL MAPPED PAPERS)")
+    print("="*60)
+    print(f"Total Target Chunks to Process: {total_chunks}")
+    print(f"Estimated Total Input Tokens:   {estimated_input_tokens:,}")
+    print(f"Estimated Total Output Tokens:  {estimated_output_tokens:,}")
+    print("*" * 60)
+    print(f"Estimated Input Cost:           ${input_cost:.2f}")
+    print(f"Estimated Output Cost:          ${output_cost:.2f}")
+    print(f"ESTIMATED TOTAL AWS COST:       ${total_cost:.2f}")
+    print(f"MAX ALLOWED BUDGET:             ${MAX_BUDGET_USD:.2f}")
+    print("="*60 + "\n")
+    
+    if total_cost > MAX_BUDGET_USD:
+        print(f"ERROR: Estimated cost (${total_cost:.2f}) exceeds max budget (${MAX_BUDGET_USD:.2f}). Aborting.")
+        sys.exit(1)
+        
+    response = input("Do you want to proceed with generating the local file? (y/n): ")
+    if response.lower() != 'y':
+        print("Aborting run.")
+        sys.exit(0)
+
+
+# MAIN PIPELINE EXECUTION
+
+def run_pass2_batch_pipeline(chunk_size=4):
+    try:
+        caller = sts_client.get_caller_identity()
+        print(f"Authenticated as AWS Account: {caller['Account']}")
+    except Exception as e:
+        print(f"Authentication failed: {e}")
+        sys.exit(1)
+
+    raw_records = []
+    
+    stats = {
+        "total_lines": 0,
+        "api_errors": 0,
+        "missing_output": 0,
+        "no_text": 0,
+        "no_json": 0,
+        "malformed_json": 0,
+        "missing_arrays": 0,
+        "success": 0
+    }
+    
+    print(f"Reading Pass 1 results from {PASS1_OUT_FILE}...")
+    with open(PASS1_OUT_FILE, 'r', encoding='utf-8') as f:
+        for line_num, line in enumerate(f, 1):
+            if not line.strip():
+                continue
+                
+            stats["total_lines"] += 1
+                
+            try:
+                record = json.loads(line)
+                record_id = record.get("recordId", f"UnknownLine_{line_num}")
+                
+                if "error" in record:
+                    stats["api_errors"] += 1
+                    continue
+
+                model_out = record.get("modelOutput")
+                if not model_out:
+                    stats["missing_output"] += 1
+                    continue
+                    
+                content_text = ""
+                
+                if "message" in model_out and "content" in model_out["message"]:
+                    for block in model_out["message"]["content"]:
+                        if block.get("type") == "text":
+                            content_text += block.get("text", "")
+                elif "content" in model_out and isinstance(model_out["content"], list):
+                    for block in model_out["content"]:
+                        if block.get("type") == "text":
+                            content_text += block.get("text", "")
+                            
+                elif "invokeModelResult" in model_out:
+                    body_data = model_out["invokeModelResult"].get("body", "")
+                    if isinstance(body_data, str) and not body_data.strip().startswith('{'):
+                        try:
+                            body_data = base64.b64decode(body_data).decode('utf-8')
+                        except Exception:
+                            pass
+                    try:
+                        body_json = json.loads(body_data) if isinstance(body_data, str) else body_data
+                        if isinstance(body_json, dict) and "content" in body_json:
+                            content_text = body_json["content"][0].get("text", "")
+                        else:
+                            content_text = str(body_json)
+                    except Exception:
+                        pass
+
+                if not content_text:
+                    stats["no_text"] += 1
+                    continue
+                
+                start_idx = content_text.find('{')
+                end_idx = content_text.rfind('}')
+                
+                if start_idx == -1 or end_idx == -1 or end_idx < start_idx:
+                    stats["no_json"] += 1
+                    continue
+                    
+                json_str = content_text[start_idx:end_idx+1]
+                    
+                try:
+                    pass1_data = json.loads(json_str)
+                except Exception as e:
+                    stats["malformed_json"] += 1
+                    continue
+                
+                proteins = pass1_data.get("proteins", [])
+                plasmids = pass1_data.get("plasmids", [])
+                experiments = pass1_data.get("experiments", [])
+
+                if not proteins or not experiments:
+                    stats["missing_arrays"] += 1
+                    continue
+                    
+                raw_records.append({
+                    "record_id": record_id,
+                    "proteins": proteins,
+                    "plasmids": plasmids,
+                    "experiments": experiments
+                })
+                stats["success"] += 1
+                
+            except Exception as e:
+                print(f"[Line {line_num}] SKIPPED: Unhandled script error: {e}")
+                continue
+
+    print("\n" + "="*40)
+    print("PASS 1 PARSING METRICS")
+    print("="*40)
+    print(f"Total Lines Processed:  {stats['total_lines']}")
+    print(f"API Errors:             {stats['api_errors']}")
+    print(f"Missing Output Data:    {stats['missing_output']}")
+    print(f"No Text Extracted:      {stats['no_text']}")
+    print(f"No JSON Block Found:    {stats['no_json']}")
+    print(f"Malformed JSON Payload: {stats['malformed_json']}")
+    print(f"Empty Data Arrays:      {stats['missing_arrays']}")
+    print(f"SUCCESSFULLY MAPPED:    {stats['success']}")
+    print("="*40 + "\n")
+
+    if not raw_records:
+        print("No mapped records found to process. Exiting.")
+        sys.exit(0)
+
+    requests = []
+    total_input_token_est = 0
+    total_output_token_est = 0
+    
+    print("Building 2D Grid chunked batch prompts and matching full paper texts...")
+    for rec in raw_records:
+        record_id = rec["record_id"]
+        proteins = rec["proteins"]
+        plasmids = rec["plasmids"]
+        experiments = rec["experiments"]
+        
+        paper_text = get_paper_text(record_id, INPUT_DIR)
+        if not paper_text:
+            print(f"Warning: Could not find original text for record {record_id}. Skipping chunk generation.")
+            continue
+            
+        paper_token_est = len(paper_text.split()) * 1.3
+        
+        protein_chunks = [proteins[i:i + chunk_size] for i in range(0, len(proteins), chunk_size)]
+        experiment_chunks = [experiments[i:i + chunk_size] for i in range(0, len(experiments), chunk_size)]
+        
+        for p_idx, p_chunk in enumerate(protein_chunks):
+            for e_idx, e_chunk in enumerate(experiment_chunks):
+                
+                chunk_id = f"{record_id}_P{p_idx+1}_E{e_idx+1}"
+                
+                detailed_prompt = (
+                    f"You are an expert biological data extractor. I will provide you with sections of a research paper.\n"
+                    f"Your job is to extract metadata about plastic and rubber-degrading enzymes into a strict JSON format that mirrors a relational database schema.\n\n"
+                    f"CRITICAL INSTRUCTIONS FOR PASS 2 (TARGETED EXTRACTION):\n"
+                    f"You are processing a targeted chunk of a larger dataset to avoid context limits.\n"
+                    f"YOUR SOLE TASK is to check if the specific proteins in <target_proteins> were tested under the specific experimental conditions in <target_experiments>.\n"
+                    f"If they were, extract the variables and activity data linking them. If they were NOT tested together, leave the arrays empty.\n\n"
+                    f"1. EXTRACT ENTITIES AS RELATIONAL TABLES: Link the target proteins to their specific conditions using the exact primary/foreign keys provided in the arrays. Treat multiple enzyme variants, whole-cell engineered strains and microbial consortia as unique proteins.\n"
+                    f"2. ABSOLUTE RELATIONAL ACCURACY: Papers test multiple protein variants across multiple conditions. You MUST NOT mix and match data.\n"
+                    f"   * If \"Variant A\" was tested at pH 7 and \"Variant B\" was tested at pH 9, they MUST be assigned to different assays and different variable IDs.\n"
+                    f"   * Do not assign the activity of a mutant to the wild-type protein.\n"
+                    f"   * Track the exact textual relationship. If a paragraph discusses PROT_1 and ASSAY_1, ensure the activity data matches those exact foreign keys.\n\n"
+                    f"<paper>\n{paper_text}\n</paper>\n\n"
+                    f"<master_plasmids>\n{json.dumps(plasmids)}\n</master_plasmids>\n\n"
+                    f"<target_experiments>\n{json.dumps(e_chunk)}\n</target_experiments>\n\n"
+                    f"<target_proteins>\n{json.dumps(p_chunk)}\n</target_proteins>\n\n"
+                    f"[DATABASE TABLES AND FIELDS]\n"
+                    f"Map the extracted information into the arrays below. Do not map data for proteins or experiments not listed in the target arrays.\n\n"
+                    f"1. experiments: Output the exact JSON objects from <target_experiments> ONLY if they apply to the proteins in <target_proteins>.\n"
+                    f"2. plasmids: Output the exact JSON objects from <master_plasmids> ONLY if they apply to the proteins in <target_proteins>.\n"
+                    f"3. proteins: Output the exact JSON objects from <target_proteins> ONLY if they apply to the experiments in <target_experiments>.\n"
+                    f"4. assay_variables: Describes the conditions used for a set of assays. Output a separate object for EACH variable identified.\n"
+                    f"   - variables_id: Unique identifier (e.g. \"VAR_1\").\n"
+                    f"   - experiment_id: Foreign key to experiments.\n"
+                    f"   - variable: The name of the parameter (e.g. \"temperature\", \"pH\", \"reaction vessel\", \"reaction mixing?\", \"buffer components\").\n"
+                    f"   - value: The actual value extracted.\n"
+                    f"   - unit: The unit of measurement (if applicable, otherwise \"NOT_FOUND\").\n"
+                    f"   - evidence_sentence: The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste.\n\n"
+                    f"5. assays_main:\n"
+                    f"   - assay_id: Unique identifier (e.g. \"ASSAY_1\").\n"
+                    f"   - experiment_id: Foreign key to experiments.\n"
+                    f"   - variables_id: Foreign key to assay_variables.\n"
+                    f"   - independent_variable_value: If this specific assay varies a specific parameter from the base variables (like testing a new pH in a curve), state the value here. Otherwise use \"NOT_FOUND\".\n"
+                    f"   - evidence_sentence: The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste.\n\n"
+                    f"6. activity:\n"
+                    f"   - assay_id: Foreign key to assays_main.\n"
+                    f"   - protein_id: Foreign key to proteins.\n"
+                    f"   - activity_type: The metric measured (e.g. Degradation rate, Weight loss, Product yield).\n"
+                    f"   - activity_value: The numerical value.\n"
+                    f"   - activity_units: The physical units associated with the value.\n"
+                    f"   - evidence_sentence: The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste.\n\n"
+                    f"CRITICAL: Output ONLY valid JSON. The response must start with '{{' and end with '}}'.\n\n"
+                )
+                
+                json_schema_template = """{
+    "Has_Plastic_Degrading_Enzyme": "Yes",
+    "Reasoning_Summary": "Targeted Pass 2 Grid Run.",
+    "experiments": [
+        {
+            "experiment_id": "EXP_1",
+            "summary": "value or NOT_FOUND",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ],
+    "plasmids": [
+        {
+            "plasmid_name": "value or NOT_FOUND",
+            "Fragment_Order": 1,
+            "Fragment_Name": "value or NOT_FOUND",
+            "Fragment_Amino_Acid_Sequence": "value or NOT_FOUND",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ],
+    "proteins": [
+        {
+            "protein_id": "PROT_1",
+            "plasmid_name": "value or NOT_FOUND",
+            "is_mutant": false,
+            "novel_to_paper": false,
+            "genbank_id": "value or NOT_FOUND",
+            "unmutated_aa_seq": "value or NOT_FOUND",
+            "mutated_aa_seq": "value or NOT_FOUND",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ],
+    "assay_variables": [
+        {
+            "variables_id": "VAR_1",
+            "experiment_id": "EXP_1",
+            "variable": "temperature",
+            "value": "30",
+            "unit": "C",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ],
+    "assays_main": [
+        {
+            "assay_id": "ASSAY_1",
+            "experiment_id": "EXP_1",
+            "variables_id": "VAR_1",
+            "independent_variable_value": "value or NOT_FOUND",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ],
+    "activity": [
+        {
+            "assay_id": "ASSAY_1",
+            "protein_id": "PROT_1",
+            "activity_type": "value or NOT_FOUND",
+            "activity_value": "value or NOT_FOUND",
+            "activity_units": "value or NOT_FOUND",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ]
+}"""
+
+                full_prompt = detailed_prompt + json_schema_template
+                
+                total_input_token_est += paper_token_est + 1500
+                total_output_token_est += 2000
+                
+                bedrock_request = {
+                    "recordId": chunk_id,
+                    "modelInput": {
+                        "anthropic_version": "bedrock-2023-05-31",
+                        "max_tokens": 8192,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": full_prompt
+                            }
+                        ]
+                    }
+                }
+                requests.append(bedrock_request)
+
+    estimate_and_verify_cost(len(requests), int(total_input_token_est), int(total_output_token_est))
+    
+    print(f"Writing {len(requests)} chunked records to local file: {LOCAL_BATCH_JSONL}")
+    with open(LOCAL_BATCH_JSONL, 'w', encoding='utf-8') as out_f:
+        for req in requests:
+            out_f.write(json.dumps(req) + "\n")
+
+    print("\n" + "="*60)
+    print("SUCCESS: Local file generated successfully!")
+    print("="*60)
+    print(f"File Path: {LOCAL_BATCH_JSONL}")
+    print("Please inspect the file before uploading it via your secondary script.")
+    print("="*60 + "\n")
+
+if __name__ == "__main__":
+    run_pass2_batch_pipeline()
