@@ -1,0 +1,168 @@
+import pandas as pd
+import requests
+import time
+import numpy as np
+import re
+
+# --- CONFIGURATION & AUTHENTICATION ---
+# 1. Fill this out to use the Crossref "Polite Pool" 
+YOUR_EMAIL = "Aditya.ghosh@mail.utoronto.ca"
+
+# 2. Get a free OpenAlex API key from https://openalex.org
+OPENALEX_API_KEY = "s3upT342T7r5S0Q144rcEp"
+
+# File paths
+INPUT_FILE = r"C:\Users\somna\Downloads\Litmaps_Exports\Master_Unique_Papers.csv"
+OUTPUT_FILE = r"C:\Users\somna\Downloads\Litmaps_Exports\Master_Papers_With_Abstracts.csv"
+
+# --- UNDER-THE-HOOD UTILITIES ---
+# Setup headers
+crossref_headers = {
+    "User-Agent": f"AbstractScraper/1.0 (mailto:{YOUR_EMAIL})"
+}
+
+openalex_headers = {
+    "User-Agent": f"AbstractScraper/1.0 (mailto:{YOUR_EMAIL})"
+}
+
+if OPENALEX_API_KEY and OPENALEX_API_KEY != "your_free_openalex_api_key_here":
+    openalex_headers["api_key"] = OPENALEX_API_KEY
+
+def clean_xml_tags(text):
+    """Cleans standard metadata publisher formatting strings using regex."""
+    if not text:
+        return None
+    # Strips any text captured between < and >
+    cleaned = re.sub(r'<[^>]+>', '', text)
+    return cleaned.strip()
+
+def reconstruct_openalex_abstract(inverted_index):
+    """
+    OpenAlex stores abstracts as an inverted index (dictionary of word: [positions]).
+    This function pieces the index chronologically back into a normal string paragraph.
+    """
+    if not inverted_index:
+        return None
+    try:
+        word_index = []
+        for word, positions in inverted_index.items():
+            for pos in positions:
+                word_index.append((word, pos))
+        # Sort based on numerical word positioning
+        word_index = sorted(word_index, key=lambda x: x[1])
+        abstract_string = " ".join([item[0] for item in word_index])
+        return abstract_string
+    except Exception:
+        return None
+
+
+# --- PRIMARY SCRAPING ENGINES ---
+def fetch_from_crossref(doi):
+    """Attempts to pull abstract string from Crossref API."""
+    # Ensure DOI doesn't have a leading slash
+    clean_doi = doi.lstrip('/')
+    url = f"https://api.crossref.org/works/{clean_doi}"
+    
+    try:
+        response = requests.get(url, headers=crossref_headers, timeout=8)
+        if response.status_code == 200:
+            data = response.json()
+            abstract = data.get("message", {}).get("abstract", None)
+            if abstract:
+                return clean_xml_tags(abstract)
+    except Exception:
+        pass
+    return None
+
+def fetch_from_openalex(doi):
+    """Backup: Attempts to pull and decrypt abstract metadata from OpenAlex API."""
+    clean_doi = doi.lstrip('/')
+    url = f"https://api.openalex.org/works/https://doi.org/{clean_doi}"
+    
+    try:
+        response = requests.get(url, headers=openalex_headers, timeout=8)
+        if response.status_code == 200:
+            data = response.json()
+            inv_index = data.get("abstract_inverted_index", None)
+            if inv_index:
+                raw_abstract = reconstruct_openalex_abstract(inv_index)
+                return clean_xml_tags(raw_abstract)
+    except Exception:
+        pass
+    return None
+
+
+# --- MAIN PIPELINE EXECUTIVE ---
+if __name__ == "__main__":
+    print(f"Reading file: {INPUT_FILE}...")
+    
+    # Read CSV, preserving formatting but ensuring 'N/A' string is parsed as NaN
+    df = pd.read_csv(INPUT_FILE, na_values=["N/A", "nan", ""])
+    
+    # Secure abstract column object state mapping
+    if 'Abstract' not in df.columns:
+        df['Abstract'] = np.nan
+    df['Abstract'] = df['Abstract'].astype(object)
+    
+    mask_missing = df['Abstract'].isna()
+    missing_count = mask_missing.sum()
+    
+    print(f"Total Papers Matrix: {len(df)}")
+    print(f"Missing Targets Remaining: {missing_count}\n" + "="*40)
+    
+    success_crossref = 0
+    success_openalex = 0
+    counter = 0
+    
+    # Process only targets labeled N/A
+    for index, row in df[mask_missing].iterrows():
+        doi = str(row['DOI']).strip()
+        counter += 1
+        
+        if pd.isna(row['DOI']) or doi == "" or doi.lower() == "nan":
+            continue
+            
+        print(f"[{counter}/{missing_count}] Target DOI: {doi}")
+        abstract_found = None
+        
+        # Phase 1: Try Crossref
+        abstract_found = fetch_from_crossref(doi)
+        if abstract_found:
+            success_crossref += 1
+            print(f"  -> SUCCESS via Crossref (Length: {len(abstract_found)} chars)")
+        else:
+            # Phase 2: Fallback onto OpenAlex
+            print("  -> Crossref empty. Diverting to OpenAlex backup pool...")
+            abstract_found = fetch_from_openalex(doi)
+            if abstract_found:
+                success_openalex += 1
+                print(f"  -> SUCCESS via OpenAlex Recovery Engine (Length: {len(abstract_found)} chars)")
+            else:
+                print("  -> Failure: Abstract dark on all open public indices.")
+        
+        # Apply the abstract text to the row if found
+        if abstract_found:
+            df.at[index, 'Abstract'] = abstract_found
+            
+        # Polite network pacing protocol (protects your IP)
+        time.sleep(0.15)
+        
+        # Intermediate cache save state loop every 50 loops
+        if counter % 50 == 0:
+            # Swap real NaNs back to string text format "N/A" for final structure matching
+            df_save = df.copy()
+            df_save['Abstract'] = df_save['Abstract'].fillna("N/A")
+            df_save.to_csv(OUTPUT_FILE, index=False)
+            print(f"\n--- Intermediate state backup committed to disk ---")
+            print(f"--- Captured so far: Crossref: {success_crossref} | OpenAlex: {success_openalex} ---\n")
+
+    # Final Output Processing 
+    df['Abstract'] = df['Abstract'].fillna("N/A")
+    df.to_csv(OUTPUT_FILE, index=False)
+    
+    print("\n" + "="*40)
+    print("PIPELINE PROCESSING COMPLETE.")
+    print(f"Final File Output: {OUTPUT_FILE}")
+    print(f"Total Recovered: {success_crossref + success_openalex} / {missing_count}")
+    print(f"  -> Crossref Core Yield: {success_crossref}")
+    print(f"  -> OpenAlex Backup Yield: {success_openalex}")
