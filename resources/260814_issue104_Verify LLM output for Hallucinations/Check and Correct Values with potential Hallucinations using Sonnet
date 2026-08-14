@@ -1,0 +1,199 @@
+import os
+import json
+import math
+import sys
+import time
+import pandas as pd
+import boto3
+
+
+# BATCH CONFIGURATION
+
+MODEL_ID = "us.anthropic.claude-sonnet-4-6" 
+REGION_NAME = "us-east-1"
+BUCKET_NAME = "batch-extraction-217113048582-us-east-1-an"
+ROLE_ARN = "arn:aws:iam::217113048582:role/bedrock-s3-write"
+
+# BUDGET SAFEGUARD CONFIGURATION
+MAX_BUDGET_USD = 50.00
+ESTIMATED_INPUT_COST_PER_1M = 3.00   
+ESTIMATED_OUTPUT_COST_PER_1M = 15.00  
+
+# AWS CREDENTIALS (Hardcoded for temporary session)
+AWS_ACCESS_KEY = "Thats What She Said"
+AWS_SECRET_KEY = "No, no, no, no, no, no, no, no DON'T DO THAT. I THOUGHT WE WERE HAVING A NICE DATE"
+AWS_SESSION_TOKEN = "Life is like a box of chocolates. You never know what you're gonna get." 
+
+# DIRECTORIES AND FILES
+INPUT_CSV = r"C:\Users\somna\Downloads\verified_csvs\verified_assay_variables.csv"
+BASE_OUTPUT_DIR = r"C:\Users\somna\Downloads\verified_csvs\repair_jobs"
+LOCAL_BATCH_JSONL = os.path.join(BASE_OUTPUT_DIR, f"full_verification_input_{int(time.time())}.jsonl")
+
+os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
+
+
+# AWS CLIENTS
+
+s3_client = boto3.client("s3", region_name=REGION_NAME, aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, aws_session_token=AWS_SESSION_TOKEN)
+bedrock_client = boto3.client("bedrock", region_name=REGION_NAME, aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, aws_session_token=AWS_SESSION_TOKEN)
+sts_client = boto3.client("sts", region_name=REGION_NAME, aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, aws_session_token=AWS_SESSION_TOKEN)
+
+
+# HELPER FUNCTIONS
+
+def estimate_and_verify_cost(total_rows, estimated_input_tokens, estimated_output_tokens):
+    input_cost = (estimated_input_tokens / 1000000) * ESTIMATED_INPUT_COST_PER_1M
+    output_cost = (estimated_output_tokens / 1000000) * ESTIMATED_OUTPUT_COST_PER_1M
+    total_cost = input_cost + output_cost
+    
+    print("\n" + "="*60)
+    print("?? PRE-RUN COST ESTIMATE (FULL VERIFICATION JOB)")
+    print("="*60)
+    print(f"Total Values to Process:        {total_rows}")
+    print(f"Estimated Total Input Tokens:   {estimated_input_tokens:,}")
+    print(f"Estimated Total Output Tokens:  {estimated_output_tokens:,}")
+    print("*" * 60)
+    print(f"Estimated Input Cost:           ${input_cost:.4f}")
+    print(f"Estimated Output Cost:          ${output_cost:.4f}")
+    print(f"ESTIMATED TOTAL AWS COST:       ${total_cost:.4f}")
+    print(f"MAX ALLOWED BUDGET:             ${MAX_BUDGET_USD:.2f}")
+    print("="*60 + "\n")
+    
+    if total_cost > MAX_BUDGET_USD:
+        print(f"ERROR: Estimated cost (${total_cost:.2f}) exceeds max budget (${MAX_BUDGET_USD:.2f}). Aborting.")
+        sys.exit(1)
+        
+    response = input("Do you want to proceed with S3 upload and AWS Batch Submission? (y/n): ")
+    if response.lower() != 'y':
+        print("Aborting run.")
+        sys.exit(0)
+
+
+# MAIN PIPELINE EXECUTION
+
+def run_verification_pipeline():
+    try:
+        caller = sts_client.get_caller_identity()
+        print(f"Authenticated as AWS Account: {caller['Account']}")
+    except Exception as e:
+        print(f"Authentication failed: {e}")
+        sys.exit(1)
+
+    if not os.path.exists(INPUT_CSV):
+        print(f"Error: Could not find input CSV at {INPUT_CSV}")
+        sys.exit(1)
+
+    print(f"Loading data from {INPUT_CSV}...")
+    df = pd.read_csv(INPUT_CSV)
+    
+    # Filter: Process EVERYTHING where Evidence_In_Source is True (Ignore pure hallucinations)
+    verify_df = df[df['Evidence_In_Source'] == True]
+    
+    if verify_df.empty:
+        print("No valid rows available for verification based on source evidence. Exiting.")
+        sys.exit(0)
+        
+    print(f"Found {len(verify_df)} rows for secondary LLM verification.")
+
+    requests = []
+    total_input_token_est = 0
+    total_output_token_est = 0
+    
+    base_prompt_tokens = 220 
+    
+    for index, row in verify_df.iterrows():
+        record_id = row.get('source_record_id', f"ROW_{index}")
+        variable_name = str(row.get('variable', 'UNKNOWN_VARIABLE'))
+        extracted_value = str(row.get('value', ''))
+        evidence_sentence = str(row.get('evidence_sentence', ''))
+        
+        # Determine the status flagged by your local script
+        is_lexical_match = bool(row.get('Value_In_Evidence', False))
+        match_status_text = "Matched" if is_lexical_match else "Mismatched"
+        
+        chunk_id = f"REPAIR_{index}_{record_id}"
+        
+        prompt = (
+            f"You are a strict data correction and verification assistant. A previous extraction attempt pulled a value for a variable.\n\n"
+            f"Target Variable: {variable_name}\n"
+            f"Initially Extracted Value: {extracted_value}\n"
+            f"Local Script Match Status: {match_status_text}\n\n"
+            f"Source Sentence:\n\"{evidence_sentence}\"\n\n"
+            f"Your task is to read the Source Sentence and extract the true, complete, and correct value for the '{variable_name}'.\n"
+            f"If the Local Script Match Status is 'Mismatched', the initially extracted value is likely incorrect, truncated, or missing. Extract the proper value.\n"
+            f"If the status is 'Matched', the value exists in the sentence, but you must verify it is the MOST accurate and complete representation. Refine it if necessary.\n"
+            f"Do not include any words that are not present in the Source Sentence. If the sentence does not actually contain a valid value for this variable, output 'NOT_FOUND'.\n\n"
+            f"Output ONLY valid JSON in the following format:\n"
+            f"{{\n"
+            f"  \"corrected_value\": \"the actual value here\"\n"
+            f"}}"
+        )
+        
+        dynamic_text = f"{variable_name} {extracted_value} {evidence_sentence} {match_status_text}"
+        input_tokens = base_prompt_tokens + int(len(dynamic_text.split()) * 1.3)
+        total_input_token_est += input_tokens
+        
+        extracted_value_tokens = int(len(extracted_value.split()) * 1.3)
+        output_tokens = max(25, extracted_value_tokens * 2) 
+        total_output_token_est += output_tokens
+        
+        bedrock_request = {
+            "recordId": chunk_id,
+            "modelInput": {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 200, 
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            }
+        }
+        requests.append(bedrock_request)
+
+    estimate_and_verify_cost(len(requests), total_input_token_est, total_output_token_est)
+    
+    print(f"Writing {len(requests)} verification prompts to local file: {LOCAL_BATCH_JSONL}")
+    with open(LOCAL_BATCH_JSONL, 'w', encoding='utf-8') as out_f:
+        for req in requests:
+            out_f.write(json.dumps(req) + "\n")
+
+    s3_key = f"input/repair_jobs/full_verification_input_{int(time.time())}.jsonl"
+    print(f"Uploading file to S3 bucket '{BUCKET_NAME}' as '{s3_key}'...")
+    s3_client.upload_file(LOCAL_BATCH_JSONL, BUCKET_NAME, s3_key)
+    
+    s3_input_uri = f"s3://{BUCKET_NAME}/{s3_key}"
+    s3_output_uri = f"s3://{BUCKET_NAME}/output/full_verification_results_{int(time.time())}/"
+    
+    job_name = f"full-verification-job-{int(time.time())}"
+    print(f"Submitting Batch Model Invocation Job '{job_name}' to Bedrock...")
+    
+    response = bedrock_client.create_model_invocation_job(
+        jobName=job_name,
+        roleArn=ROLE_ARN,
+        modelId=MODEL_ID,
+        inputDataConfig={
+            "s3InputDataConfig": {
+                "s3Uri": s3_input_uri
+            }
+        },
+        outputDataConfig={
+            "s3OutputDataConfig": {
+                "s3Uri": s3_output_uri
+            }
+        }
+    )
+    
+    job_arn = response.get("jobArn")
+    print("\n" + "="*60)
+    print("SUCCESS: AWS Bedrock Full Verification Job Successfully Submitted!")
+    print("="*60)
+    print(f"Job Name:   {job_name}")
+    print(f"Job ARN:    {job_arn}")
+    print(f"Input S3:   {s3_input_uri}")
+    print(f"Output S3:  {s3_output_uri}")
+    print("="*60 + "\n")
+
+if __name__ == "__main__":
+    run_verification_pipeline()
