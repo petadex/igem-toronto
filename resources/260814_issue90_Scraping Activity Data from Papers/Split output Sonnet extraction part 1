@@ -1,0 +1,362 @@
+import os
+import json
+import boto3
+import time
+import re
+import pandas as pd
+from datetime import datetime
+from botocore.exceptions import ClientError
+
+# BATCH CONFIGURATION
+MODEL_ID = "us.anthropic.claude-sonnet-4-6" 
+REGION_NAME = "us-east-1"
+BUCKET_NAME = "batch-extraction-217113048582-us-east-1-an"
+ROLE_ARN = "arn:aws:iam::217113048582:role/bedrock-s3-write"
+
+# BUDGET SAFEGUARD CONFIGURATION
+MAX_BUDGET_USD = 500.00
+ESTIMATED_INPUT_COST_PER_1M = 3.00   
+ESTIMATED_OUTPUT_COST_PER_1M = 5.00  
+
+# AWS CREDENTIALS 
+AWS_ACCESS_KEY = "Thats What She Said"
+AWS_SECRET_KEY = "No, no, no, no, no, no, no, no DON'T DO THAT. I THOUGHT WE WERE HAVING A NICE DATE"
+AWS_SESSION_TOKEN = "Life is like a box of chocolates. You never know what you're gonna get." 
+
+# DIRECTORIES
+INPUT_DIR = r"C:\Users\somna\Downloads\Plastic_Degradation_Yes_Classified"
+BASE_OUTPUT_DIR = r"C:\Users\somna\Downloads\extracted_metadata_V2_schema_CSVs_Evidence"
+FAILED_IDS_TXT = r"C:\Users\somna\Downloads\failed_papers_list.txt" 
+os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
+
+# Clients configured to use explicitly provided credentials
+s3_client = boto3.client(
+    "s3", 
+    region_name=REGION_NAME,
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    aws_session_token=AWS_SESSION_TOKEN
+)
+
+bedrock_client = boto3.client(
+    "bedrock", 
+    region_name=REGION_NAME,
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    aws_session_token=AWS_SESSION_TOKEN
+)
+
+sts_client = boto3.client(
+    "sts",
+    region_name=REGION_NAME,
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    aws_session_token=AWS_SESSION_TOKEN
+)
+
+# SYSTEM PROMPTS SPLIT INTO THREE PASSES
+BASE_INSTRUCTIONS = """
+You are an expert biological data extractor. I will provide you with sections of a research paper. 
+Your job is to extract metadata about plastic and rubber-degrading enzymes into a strict JSON format that mirrors a relational database schema.
+
+CRITICAL INSTRUCTIONS:
+1. THE DEGRADATION SHORT-CIRCUIT: You must first determine if the paper actually tests enzymes for the DEGRADATION of the following target polymers (or their related monomers) or any other synthetic or NATURAL plastics/rubbers not included here: 
+   * Fossil fuel-based: Polyamide (PA), Polycarbonate (PC), Polyethylene (PE), Polyethylene terephthalate (PET), Polypropylene (PP), Polystyrene (PS), Polyurethane (PUR), Polyvinylchloride (PVC).
+   * Renewable resource-based: Natural rubber (NR), Polybutylene adipate terephthalate (PBAT), Polybutylene succinate (PBS), Polyethylene furanoate (PEF), Polyhydroxyalkanoates (PHA), Polylactic acid (PLA).
+   If the paper is about general medical enzymes, industrial enzymes OR the BIOSYNTHESIS/ACCUMULATION of bioplastics, it does not count. If there is no plastic degrading enzyme found, output ONLY "Has_Plastic_Degrading_Enzyme": "No" and "Reasoning_Summary" explaining why. Leave all other arrays empty.
+2. EXTRACT ENTITIES AS RELATIONAL TABLES: Link the entities using generated primary/foreign keys (e.g. "EXP_1", "PROT_1", "VAR_1", "ASSAY_1"). Treat multiple enzyme variants, whole-cell engineered strains and microbial consortia as unique proteins.
+3. ABSOLUTE RELATIONAL ACCURACY: Papers test multiple protein variants across multiple conditions. You MUST NOT mix and match data. 
+   * If "Variant A" was tested at pH 7 and "Variant B" was tested at pH 9, they MUST be assigned to different assays and different variable IDs.
+   * Do not assign the activity of a mutant to the wild-type protein.
+   * Track the exact textual relationship. If a paragraph discusses PROT_1 and ASSAY_1, ensure the activity data matches those exact foreign keys.
+"""
+
+PROMPT_PASS_1 = BASE_INSTRUCTIONS + """
+[DATABASE TABLES AND FIELDS]
+Map the extracted information into the following arrays ONLY. Do not generate any other tables.
+
+1. experiments:
+   * experiment_id: Unique identifier (e.g. "EXP_1").
+   * summary: Brief description of the experiment objective.
+   * evidence_sentence: The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste.
+
+2. plasmids:
+   * plasmid_name: The name of the vector/plasmid (e.g. "pET-21b(+)").
+   * Fragment_Order: Integer representing insertion order.
+   * Fragment_Name: Name of the specific gene/fragment inserted.
+   * Fragment_Amino_Acid_Sequence: Sequence of the fragment if provided (otherwise "NOT_FOUND").
+   * evidence_sentence: The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste.
+
+3. proteins:
+   * protein_id: Unique identifier (e.g. "PROT_1").
+   * plasmid_name: Foreign key matching a plasmid_name from the plasmids array.
+   * is_mutant: true or false.
+   * novel_to_paper: true or false.
+   * genbank_id: Accession number if provided.
+   * unmutated_aa_seq: Amino acid sequence of the wild-type.
+   * mutated_aa_seq: Amino acid sequence of the mutant.
+   * evidence_sentence: The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste.
+
+CRITICAL: Output ONLY valid JSON. The response must start with '{' and end with '}'.
+
+{w
+    "Has_Plastic_Degrading_Enzyme": "Yes or No",
+    "Reasoning_Summary": "Briefly list the core findings here.",
+    "experiments": [
+        {
+            "experiment_id": "EXP_1",
+            "summary": "value or NOT_FOUND",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ],
+    "plasmids": [
+        {
+            "plasmid_name": "value or NOT_FOUND",
+            "Fragment_Order": 1,
+            "Fragment_Name": "value or NOT_FOUND",
+            "Fragment_Amino_Acid_Sequence": "value or NOT_FOUND",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ],
+    "proteins": [
+        {
+            "protein_id": "PROT_1",
+            "plasmid_name": "value or NOT_FOUND",
+            "is_mutant": false,
+            "novel_to_paper": false,
+            "genbank_id": "value or NOT_FOUND",
+            "unmutated_aa_seq": "value or NOT_FOUND",
+            "mutated_aa_seq": "value or NOT_FOUND",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ]
+}
+"""
+
+
+def verify_credentials():
+    try:
+        identity = sts_client.get_caller_identity()
+        print(f"Credentials Verified. Authenticated as: {identity.get('Arn')}")
+    except ClientError as e:
+        print("\n[CREDENTIAL ERROR] Your AWS credentials are invalid or expired.")
+        exit(1)
+
+def load_failed_ids():
+    failed_ids = set()
+    if os.path.exists(FAILED_IDS_TXT):
+        with open(FAILED_IDS_TXT, 'r', encoding='utf-8') as f:
+            failed_ids = {line.strip() for line in f if line.strip()}
+        print(f"Loaded {len(failed_ids)} target paper IDs to process.")
+    else:
+        print(f"WARNING: Filter file {FAILED_IDS_TXT} not found. Processing ALL papers in directory.")
+    return failed_ids
+
+def calculate_and_enforce_budget(total_input_chars, record_count):
+    # Tripling the metrics to account for the three separate passes
+    est_input_tokens = (total_input_chars / 4) * 3
+    max_output_tokens = record_count * 8000 * 3
+
+    est_input_cost = (est_input_tokens / 1_000_000) * ESTIMATED_INPUT_COST_PER_1M
+    max_output_cost = (max_output_tokens / 1_000_000) * ESTIMATED_OUTPUT_COST_PER_1M
+    worst_case_total = est_input_cost + max_output_cost
+
+    print(f"\n COST AND BUDGET CHECK (MULTI PASS) ")
+    print(f"Total Papers in Batch: {record_count} (x3 Passes = {record_count * 3} Requests)")
+    print(f"Est. Input Tokens: {est_input_tokens:,.0f} (~${est_input_cost:.2f})")
+    print(f"Max Potential Output Tokens: {max_output_tokens:,.0f} (~${max_output_cost:.2f})")
+    print(f"Worst Case Max Cost: ${worst_case_total:.2f}")
+
+    if worst_case_total > MAX_BUDGET_USD:
+        raise ValueError(
+            f"ABORTED: Estimated worst case cost (${worst_case_total:.2f}) exceeds budget (${MAX_BUDGET_USD:.2f})."
+        )
+    
+    print("Budget check passed! Proceeding...\n")
+
+def prepare_and_upload_jsonl(run_output_dir):
+    failed_ids = load_failed_ids()
+    files = [f for f in os.listdir(INPUT_DIR) if f.endswith('.json')]
+    target_tags = ["body_text", "front_matter", "abstract", "introduction", "methods", "methodology", "results", "discussion"]
+    
+    MAX_CHAR_LIMIT = 500000  
+    valid_records = 0
+    total_chars_across_batch = 0
+
+    timestamp = int(time.time())
+    file_pass_1 = os.path.join(run_output_dir, f"batch_pass_1_{timestamp}.jsonl")
+
+    with open(file_pass_1, 'w', encoding='utf-8') as f1:
+
+        for filename in files:
+            paper_id = os.path.splitext(filename)[0]
+            
+            if failed_ids and paper_id not in failed_ids:
+                continue
+
+            input_path = os.path.join(INPUT_DIR, filename)
+            with open(input_path, 'r', encoding='utf-8') as f:
+                try:
+                    paper_data = json.load(f)
+                except json.JSONDecodeError:
+                    continue
+
+            extracted_sections = []
+            if "content" in paper_data:
+                for block in paper_data["content"]:
+                    section_name = block.get("section", "").lower()
+                    if any(tag in section_name for tag in target_tags):
+                        text_content = block.get("text", "")
+                        if text_content:
+                            extracted_sections.append(f"[{section_name.upper()}]\n{text_content}")
+
+            paper_text = "\n\n".join(extracted_sections)
+            
+            if not paper_text.strip():
+                continue
+
+            if len(paper_text) > MAX_CHAR_LIMIT:
+                paper_text = paper_text[:MAX_CHAR_LIMIT] + "\n\n--- [SYSTEM NOTE: TEXT TRUNCATED] ---"
+
+            total_chars_across_batch += len(paper_text)
+
+            def create_record(sys_prompt):
+                return {
+                    "recordId": paper_id,
+                    "modelInput": {
+                        "anthropic_version": "bedrock-2023-05-31",
+                        "max_tokens": 8000,
+                        "temperature": 0.1,
+                        "system": sys_prompt,
+                        "messages": [
+                            {"role": "user", "content": [{"type": "text", "text": paper_text}]}
+                        ]
+                    }
+                }
+
+            f1.write(json.dumps(create_record(PROMPT_PASS_1)) + "\n")
+            
+            valid_records += 1
+
+    print(f"Prepared {valid_records} papers across 3 JSONL files.")
+    calculate_and_enforce_budget(total_chars_across_batch, valid_records)
+    
+    s3_keys = []
+    for local_path in [file_pass_1]:
+        file_name = os.path.basename(local_path)
+        s3_key = f"batch-jobs/inputs/{file_name}"
+        s3_client.upload_file(local_path, BUCKET_NAME, s3_key)
+        s3_keys.append(s3_key)
+        
+    return s3_keys, [os.path.basename(f) for f in [file_pass_1]
+
+
+def run_batch_inference():
+    verify_credentials()
+
+    run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_output_dir = os.path.join(BASE_OUTPUT_DIR, f"run_multipass_{run_timestamp}")
+    os.makedirs(run_output_dir, exist_ok=True)
+    
+    s3_keys, jsonl_filenames = prepare_and_upload_jsonl(run_output_dir)
+    
+    jobs = []
+    for idx, s3_key in enumerate(s3_keys, start=1):
+        job_name = f"bio-extract-pass-{idx}-{int(time.time())}"
+        s3_input_uri = f"s3://{BUCKET_NAME}/{s3_key}"
+        s3_output_uri = f"s3://{BUCKET_NAME}/batch-jobs/outputs/{job_name}/"
+        
+        print(f"Starting Bedrock Batch Job (Pass {idx}): {job_name}")
+        
+        response = bedrock_client.create_model_invocation_job(
+            jobName=job_name,
+            roleArn=ROLE_ARN,
+            modelId=MODEL_ID,
+            inputDataConfig={"s3InputDataConfig": {"s3InputFormat": "JSONL", "s3Uri": s3_input_uri}},
+            outputDataConfig={"s3OutputDataConfig": {"s3Uri": s3_output_uri}}
+        )
+        jobs.append({"job_name": job_name, "arn": response["jobArn"], "filename": jsonl_filenames[idx-1]})
+    
+    print("\nAll 3 jobs submitted. Monitoring status...")
+    
+    completed_jobs = 0
+    while completed_jobs < 3:
+        completed_jobs = 0
+        for job in jobs:
+            status_response = bedrock_client.get_model_invocation_job(jobIdentifier=job["arn"])
+            job["status"] = status_response["status"]
+            if job["status"] in ["Completed", "Failed", "Stopped"]:
+                completed_jobs += 1
+                
+        status_string = " | ".join([f"Pass {i+1}: {j['status']}" for i, j in enumerate(jobs)])
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] {status_string}")
+        
+        if completed_jobs < 3:
+            time.sleep(60)
+            
+    print("\nAll jobs finished execution.")
+    process_batch_results(jobs, run_output_dir)
+
+def process_batch_results(jobs, run_output_dir):
+    print("\n Downloading and Merging Results ")
+    master_paper_data = {}
+
+    for job in jobs:
+        if job["status"] != "Completed":
+            print(f"Skipping download for {job['job_name']} due to status: {job['status']}")
+            continue
+            
+        output_s3_key = f"batch-jobs/outputs/{job['job_name']}/{job['filename']}.out"
+        local_out_path = os.path.join(run_output_dir, f"{job['job_name']}_results.jsonl")
+        
+        s3_client.download_file(BUCKET_NAME, output_s3_key, local_out_path)
+        
+        with open(local_out_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                record = json.loads(line)
+                paper_id = record.get("recordId")
+                
+                if paper_id not in master_paper_data:
+                    master_paper_data[paper_id] = {}
+                    
+                output_content = record.get("modelOutput", {}).get("content", [])
+                if not output_content:
+                    continue
+                    
+                response_text = output_content[0].get("text", "")
+                match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                
+                if match:
+                    try:
+                        extracted_json = json.loads(match.group(0))
+                        master_paper_data[paper_id].update(extracted_json)
+                    except json.JSONDecodeError:
+                        print(f"Failed to parse JSON for paper {paper_id} in {job['job_name']}")
+
+    print("\n Building CSVs from Merged JSON Data ")
+    master_tables = {
+        "experiments": [], "plasmids": [], "proteins": [],
+        "assay_variables": [], "assays_main": [], "activity": []
+    }
+    
+    for paper_id, paper_json in master_paper_data.items():
+        json_output_path = os.path.join(run_output_dir, f"{paper_id}_merged.json")
+        with open(json_output_path, 'w', encoding='utf-8') as json_out_f:
+            json.dump(paper_json, json_out_f, indent=4, ensure_ascii=False)
+            
+        for table_name in master_tables.keys():
+            if table_name in paper_json and isinstance(paper_json[table_name], list):
+                for row in paper_json[table_name]:
+                    new_row = {"paper_id": paper_id}
+                    new_row.update(row)
+                    master_tables[table_name].append(new_row)
+
+    for table_name, rows in master_tables.items():
+        if rows:
+            df = pd.DataFrame(rows)
+            csv_path = os.path.join(run_output_dir, f"{table_name}.csv")
+            df.to_csv(csv_path, index=False)
+            print(f"Saved {len(rows)} rows to {csv_path}")
+
+if __name__ == "__main__":
+    run_batch_inference()
