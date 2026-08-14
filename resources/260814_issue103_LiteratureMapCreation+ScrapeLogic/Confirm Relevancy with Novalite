@@ -1,0 +1,179 @@
+import os
+import json
+import time
+import boto3
+import re
+import pandas as pd
+import numpy as np
+from botocore.config import Config
+
+
+MODEL_ID = "amazon.nova-lite-v1:0"
+INPUT_CSV = r"C:\Users\somna\Downloads\Litmaps_Exports\Master_Papers_With_Abstracts.csv"
+OUTPUT_DIR = r"C:\Users\somna\Downloads\Litmaps_Exports\NovaLite_Abstract_Triage"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# Custom SDK config optimized for fast local failover
+custom_config = Config(
+    read_timeout=300,
+    connect_timeout=60,
+    retries={"max_attempts": 2}
+)
+
+# COST ESTIMATION VARIABLES (Price per 1 Million Tokens)
+# Amazon Nova Lite
+INPUT_PRICE_PER_M = 0.06
+OUTPUT_PRICE_PER_M = 0.24
+
+# Initializing AWS Bedrock Runtime Client
+bedrock_client = boto3.client(
+    "bedrock-runtime", 
+    region_name="us-east-1",
+    config=custom_config,
+    aws_access_key_id="Thats What She Said",
+    aws_secret_access_key="No, no, no, no, no, no, no, no DON'T DO THAT. I THOUGHT WE WERE HAVING A NICE DATE",
+    aws_session_token="Life is like a box of chocolates. You never know what you're gonna get."
+)
+
+# HELPER FUNCTION 
+def sanitize_filename(name):
+    """Removes invalid characters from a string to make it a safe filename."""
+    return re.sub(r'[\\/*?:"<>|]', '_', str(name))
+
+# SYSTEM PROMPT 
+SYSTEM_PROMPT = """You are an expert biological data extractor. 
+Analyze the provided research paper Title and Abstract to determine if the paper tests enzymes, engineered variants, whole-cell strains, or microbial consortia for the DEGRADATION of synthetic or natural plastics/rubbers.
+
+CRITICAL INSTRUCTIONS:
+1. CATEGORY DEFINITIONS:
+   - "Definitely Yes": Explicitly mentions degrading/depolymerizing target polymers (PA, PC, PE, PET, PP, PS, PUR, PVC, NR, PBAT, PBS, PEF, PHA, PLA) via biological means (enzymes, microbes).
+   - "Definitely No": Clearly about a different topic (e.g., human medicine, industrial synthesis, non-biological degradation like UV/thermal, or the BIOSYNTHESIS/ACCUMULATION of bioplastics).
+   - "Unsure": Mentions plastic and biology, but it is ambiguous if enzymatic/microbial degradation of the polymer backbone is actually tested (e.g., broad reviews, environmental sampling without confirmed degradation, or abstracts lacking specific methodological details).
+2. MULTIPLE VARIANTS & CONSORTIA: Treat whole-cell engineered strains or microbial consortia (e.g., bacterial mixtures) as valid variants if they degrade the target polymers.
+
+You must output strictly a raw JSON object with exactly two fields. Do not include markdown backticks or conversational filler.
+
+Required JSON Structure:
+{
+    "Classification": "Definitely Yes, Definitely No, or Unsure",
+    "Reasoning_Summary": "A 1-2 sentence explanation of your decision, summarizing the abstract's methodology or why it was short-circuited."
+}"""
+
+def process_test_batch():
+    total_batch_cost = 0.0
+    MAX_BUDGET_LIMIT = 50.00 
+    
+    print(f"Loading Master CSV: {INPUT_CSV}")
+    df = pd.read_csv(INPUT_CSV)
+    
+    # Optional: Limit for testing
+    TEST_LIMIT = len(df) # Change to a smaller number like 50 for a test run
+    df_test = df.head(TEST_LIMIT)
+    
+    print(f"Running triage on {len(df_test)} papers.")
+
+    for index, row in df_test.iterrows():
+        raw_doi = str(row.get('DOI', f'Unknown_DOI_{index}'))
+        if raw_doi.lower() == 'nan':
+            raw_doi = f'Unknown_DOI_{index}'
+            
+        safe_doi = sanitize_filename(raw_doi)
+        output_path = os.path.join(OUTPUT_DIR, f"{safe_doi}.json")
+
+        if os.path.exists(output_path):
+            print(f"Skipping {safe_doi} (Already exists in output)")
+            continue
+
+        title = str(row.get('Title', 'No Title Provided'))
+        abstract = str(row.get('Abstract', 'No Abstract Provided'))
+        
+        # Skip if there is absolutely no data to evaluate
+        if title.lower() == 'nan' and (abstract.lower() == 'nan' or abstract.strip().upper() == 'N/A'):
+            print(f"Skipping {safe_doi}: No Title or Abstract found.")
+            continue
+
+        paper_text = f"TITLE:\n{title}\n\nABSTRACT:\n{abstract}"
+
+        print(f"Processing {safe_doi}... (Extracted {len(paper_text)} characters)")
+        
+        # Set up local retry loop for the current paper
+        max_retries = 10
+        attempts = 0
+        success = False
+        budget_exceeded = False
+
+        while attempts < max_retries and not success:
+            if attempts > 0:
+                print(f"Retry attempt #{attempts} for {safe_doi}")
+            try:
+                # Nova Lite Converse API Call
+                response = bedrock_client.converse(
+                    modelId=MODEL_ID,
+                    system=[{"text": SYSTEM_PROMPT}],
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [{"text": paper_text}]
+                        }
+                    ],
+                    inferenceConfig={
+                        "temperature": 0.1,
+                        "maxTokens": 300  # Strict cutoff to prevent long output charges
+                    }
+                )
+            
+                usage = response.get('usage', {})
+                input_tokens = usage.get('inputTokens', 0)
+                output_tokens = usage.get('outputTokens', 0)
+            
+                # Budget tracking calculation
+                file_cost = ((input_tokens / 1_000_000) * INPUT_PRICE_PER_M) + ((output_tokens / 1_000_000) * OUTPUT_PRICE_PER_M)
+                total_batch_cost += file_cost
+                
+                # Only print budget every 50 files to reduce console spam, or if it's getting close
+                if index % 50 == 0 or total_batch_cost > (MAX_BUDGET_LIMIT - 1.00):
+                    print(f"--- Cumulative Batch Cost: ${total_batch_cost:.4f} / ${MAX_BUDGET_LIMIT:.2f} ---")
+            
+                if total_batch_cost >= MAX_BUDGET_LIMIT:
+                    print(f"\n[BUDGET EXCEEDED] Hitting limit of ${MAX_BUDGET_LIMIT:.2f}. Halting execution safely.")
+                    budget_exceeded = True
+                    break
+
+                response_text = response['output']['message']['content'][0]['text']
+                match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            
+                if match:
+                    clean_json_string = match.group(0)
+                    extracted_json = json.loads(clean_json_string)
+                
+                    with open(output_path, 'w', encoding='utf-8') as f:
+                        json.dump(extracted_json, f, indent=4, ensure_ascii=False)
+                    
+                    print(f"Success -> {safe_doi} | Result: {extracted_json.get('Classification')}")
+                    success = True  
+                else:
+                    print(f"Error processing {safe_doi}: Model did not return a valid JSON object.")
+                    break  
+                
+                time.sleep(0.5) 
+
+            except Exception as e:
+                if "ThrottlingException" in str(e) or "429" in str(e):
+                    attempts += 1 
+                    # Exponential backoff: 2s, 4s, 8s, 16s, 32s
+                    wait_time = 2 ** attempts  
+                    print(f"Throttled! (Attempt {attempts}/{max_retries}). Waiting {wait_time} seconds before retrying...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"Error {safe_doi}: {e}")
+                    time.sleep(5)
+                    break
+
+        if budget_exceeded:
+            break
+
+        if not success and not budget_exceeded:
+            print(f"Gave up on {safe_doi} after {max_retries} throttling attempts.")
+
+if __name__ == "__main__":
+    process_test_batch()
