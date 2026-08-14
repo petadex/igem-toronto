@@ -1,0 +1,37 @@
+import json
+import os
+
+
+ORIGINAL_RESULTS_FILE = r"C:\Users\somna\source\repos\metadata feature extraction\Download batch inference output\final_results\batch_input_1785696820.jsonl.out"
+OUTPUT_TXT_FILE = r"C:\Users\somna\Downloads\failed_papers_list.txt"
+
+def extract_truncated_papers(results_path, output_path):
+    failed_count = 0
+    
+    print(f"Scanning {results_path} for truncated outputs...")
+    
+    with open(results_path, 'r', encoding='utf-8') as f, open(output_path, 'w', encoding='utf-8') as out_f:
+        for line in f:
+            if not line.strip():
+                continue
+                
+            record = json.loads(line)
+            paper_id = record.get("recordId")
+            
+            # Navigate to the model output metadata
+            model_output = record.get("modelOutput", {})
+            stop_reason = model_output.get("stop_reason")
+            
+            # "max_tokens" means it hit the 8000 limit and truncated
+            if stop_reason == "max_tokens":
+                out_f.write(f"{paper_id}\n")
+                failed_count += 1
+                
+    print(f"Successfully identified {failed_count} truncated papers.")
+    print(f"Saved the list to: {output_path}")
+
+if __name__ == "__main__":
+    if os.path.exists(ORIGINAL_RESULTS_FILE):
+        extract_truncated_papers(ORIGINAL_RESULTS_FILE, OUTPUT_TXT_FILE)
+    else:
+        print("Error: Could not find the original results file. Please double check the ORIGINAL_RESULTS_FILE path.")
