@@ -1,7 +1,5 @@
 # PETadex: Construction and Analysis of a Multi-Source Reference Index of Plastic-Degrading Microorganisms
 
-**Project:** PetaBite Dry Lab, iGEM Toronto 2026
-**Document type:** Methods and Results
 **Scope:** Data acquisition, curation, metadata enrichment, statistical analysis, scoring model derivation, and knowledge interface design for the PETadex Organism Atlas.
 
 ---
