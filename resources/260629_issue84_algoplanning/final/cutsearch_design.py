@@ -101,7 +101,20 @@ IUPAC = {"A": "A", "C": "C", "G": "G", "T": "T",
 
 
 
-# Relative synonymous codon usage, E. coli K-12 (Kazusa).  Used ONLY as a
+# Relative synonymous codon usage, E. coli K-12.  VERIFIED 2026-08-27 against
+# the Kazusa table for E. coli W3110 (a K-12 derivative; 4,332 CDS / 1,372,057
+# codons, coding GC 51.93%):
+#   https://www.kazusa.or.jp/codon/cgi-bin/showcodon.cgi?species=316407
+# Max deviation 0.007, mean 0.002, no codon crosses USAGE_OK, and the codon
+# selected for every one of the 20 amino acids is identical under either table.
+# Expression host is plain BL21(DE3) (confirmed with wet lab 2026-08-26), which
+# carries NO rare-codon tRNA supplements -- Rosetta and CodonPlus-RIL are the
+# derivatives that add argU/ileY/leuW/proL -- so this avoidance is required, not
+# insurance.  These are ALL-GENES frequencies, deliberately not the
+# highly-expressed-gene set that CAI is built on: the clamp needs a FLOOR
+# ("which codons does E. coli translate badly"), and the highly-expressed set is
+# far more biased and GC-skewed, which is what drove 50-nt windows to 84% GC
+# when an earlier version maximised usage instead of clamping it.  Used ONLY as a
 # tie-break: the primary keys (amino acids produced, then degenerate bases) are
 # untouched, so coverage, junk and library size are unaffected -- this changes
 # only WHICH synonymous codon spells a choice that was already made.
