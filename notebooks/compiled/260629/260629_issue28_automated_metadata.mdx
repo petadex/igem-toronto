@@ -1,0 +1,218 @@
+---
+    title: 260629_issue28_automated_metadata
+    section: "Dry Lab"
+    path: "/dry-lab/issue/28"
+    navTitle: "Issue 28"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+---
+project_title: petadex.automated_metadata
+experiment_name: 260629_issue28_automated_metadata
+author: Amar / Dennis
+type: experiment
+date_created: 2026-06-29
+progress: Current
+date_finished: 
+---
+## Automated Metadata Propagation & BacDive Integration
+
+Lead     : `Amar / @AmDeep` and `Dennis / @UofTDriv`
+
+Issue    : [Github Issue #28](https://github.com/petadex/igem-toronto/issues/28) — _Automated Metadata_
+
+Start    : `2026-06-29`
+
+Complete : `2026-06-29`
+
+Files    : `~/igem-toronto/files/260629_issue28_automated_metadata/` — local working directory (active analysis, intermediate outputs)
+
+S3 files : `s3://petadex/automated_metadata/` — remote archive (final outputs, shared with team)
+
+---
+
+### Data Accessed: 2026-06-29
+```bash
+# commands used to pull input data
+aws s3 cp s3://petadex/sra/petadex_biosamples.csv ./resources/260629_issue28_automated_metadata/data/
+aws s3 cp s3://petadex/accessions/accessions_sequences.csv ./resources/260629_issue28_automated_metadata/data/
+```
+
+## Introduction
+
+The PETadex database compiles millions of Logan sequence candidates (predominantly PETase-like enzymes) identified in environmental metagenomic datasets. However, these sequences lack critical ecological context—such as the temperature, pH, and growth media of the source environments. Downstream machine learning tasks, such as Dennis's protein thermostability predictor, depend heavily on these environmental labels.
+
+To address this characterization gap, we propagate metadata from NCBI SRA libraries and BioSamples. Using BioSample accessions, we map sequencing runs to detected TaxIDs using NCBI SRAstat/Athena tables. We then query the BacDive API to fetch physiological and culture traits for these organisms. Finally, by joining the taxa relative abundances with BacDive traits, we perform statistical inference to calculate abundance-weighted environmental conditions (pH, temperature, salinity, etc.) for each sample, which are subsequently mapped back to the candidate sequences.
+
+## Objectives
+
+1. **SRA-to-Taxonomy Mapping**: Link the 6.8 million BioSamples from `petadex_biosamples.csv` to their corresponding SRA runs and the taxonomic IDs of detected organisms via AWS Athena queries on the SRA Metadata and SRA STAT tables.
+2. **Organism Table & Web Integration**: Build a normalized `organism` database table in the SQL dump and create an Organism tab/page on the PETadex website linking to BacDive.
+3. **BacDive Trait Harvesting**: Extract physiological and growth conditions (temperature, pH, growth media) from the BacDive database for all unique TaxIDs using deduplicated queries to the BacDive API.
+4. **Weighted Metadata Inference**: Compute statistical abundance-weighted temperature and pH ranges/means for each BioSample to fill in blank metadata fields, enabling environmental annotation of PETase sequences.
+
+---
+
+## Materials and Methods
+
+### System Initialization
+
+- Compute environment: AWS Cloud EC2 instance, remote PostgreSQL read replica (`serratus-aurora` for Logan metadata).
+- Software: R (v4.2.0) and Python (v3.11.0) with `pandas`, `duckdb` (v0.8.1), and `requests` libraries.
+- Setup document: [AWS setup guide](https://github.com/orgs/petadex/projects/4) / Dry Lab AWS thread.
+
+### Data Initialization
+
+The input files are obtained from local resources extracted from the S3 bucket:
+
+```bash
+# Accessed: 2026-06-29
+# Input datasets:
+# - petadex_biosamples.csv: List of 6.81M unique BioSample SAMN IDs linked to PETadex runs.
+# - accessions_sequences.csv: GenBank accession IDs and amino acid sequences for candidate enzymes.
+```
+
+### Processing Steps
+
+The execution workflow is structured as follows:
+
+```bash
+# Step 1: Extract unique BioSample accessions and query SRA/SRAstat tables on Athena
+# to join SAMN -> SRS -> SRR -> TaxID and counts (abundances).
+Rscript scripts/extract_unique_samns.R petadex_biosamples.csv athena_input_runs.csv
+
+# Step 2: Extract unique TaxIDs from the SRA mapping results to deduplicate BacDive API requests.
+python scripts/extract_unique_taxids.py athena_output_taxa.csv unique_taxa.csv
+
+# Step 3: Fetch physiological traits (temperature, pH, growth media) from BacDive API
+# for all unique taxa, saving to a local cache.
+python scripts/query_bacdive_api.py unique_taxa.csv local_bacdive_cache.csv
+
+# Step 4: Left join taxonomic abundances per BioSample with BacDive trait data,
+# and compute abundance-weighted mean, median, and IQR boundaries for temperature and pH.
+Rscript scripts/calculate_weighted_traits.R athena_output_taxa.csv local_bacdive_cache.csv biosample_environmental_report.csv
+
+# Step 5: Join the computed environmental metadata back to PETase sequences via run mappings
+# and load into SQL database as 'organism' and 'biosample_metadata' tables.
+psql -h petadex.ccz9y6yshbls.us-east-1.rds.amazonaws.com -U user -d petadex -f sql/load_metadata_tables.sql
+```
+
+All intermediate data and scripts are archived in S3.
+
+```bash
+# Uploaded: 2026-06-29
+aws s3 cp biosample_environmental_report.csv s3://petadex/automated_metadata/
+aws s3 cp local_bacdive_cache.csv s3://petadex/automated_metadata/
+```
+
+## Results & Discussion
+
+**Key metric**: Target is to resolve metadata for over **95%** of the 6.8 million BioSamples linked to PETase sequences.
+
+**Breakdown by category (Expected)**:
+- BioSamples with direct NCBI metadata (lat/lon, country): 3.8M (approx 55%)
+- BioSamples with BacDive-propagated environmental metadata: ~2.8M additional samples
+- BioSamples unresolvable (lacking taxonomy or BacDive coverage): <5%
+
+**Observations**:
+- Preliminary testing indicates environmental propagation via metagenomic taxonomy (e.g. ocean water) matches known site conditions closely, whereas host-associated samples (e.g. gut metagenomes) yield narrow, constant ranges (37°C, pH ~7).
+- Restricting BacDive queries to deduplicated unique taxa prevents rate-limiting blocks and minimizes API latency.
+- Statistical inference using abundance-weighted IQR and trimmed means reduces the influence of noisy taxa detections and transient species.
+
+**Follow-up questions**:
+- How should we resolve edge cases where a metagenomic sample contains equal proportions of thermophilic and mesophilic species?
+- Should we incorporate auxiliary physical databases (e.g. World Ocean Atlas, soil databases) for BioSamples that have coordinates but lack taxonomy/BacDive entries?
+- How do we map predicted environmental temperatures directly to the downstream ESM-C thermostability model's input features?
+
+## Methodology Refinement: IQR vs Optimum
+
+You've touched on a very common point of confusion in statistics: the difference between an **absolute value** (like a mean or maximum) and a **range width/spread** (like the IQR).
+
+Here is the explanation of why the IQR values are smaller than the optimums, and what each column represents:
+
+### 1. What is the IQR?
+An Interquartile Range (IQR) is **not** an absolute maximum value. It is a measure of the **spread or variability** of a trait within a sample (calculated as $Q_3 - Q_1$, the width of the middle 50% of the distribution).
+
+*   For example, if a sample contains a mixture of organisms where:
+    *   The 25th percentile ($Q_1$) of their `ph_max` is **`8.0`**
+    *   The 75th percentile ($Q_3$) of their `ph_max` is **`8.5`**
+*   The `ph_max_weighted_iqr` is $8.5 - 8.0 =$ **`0.5`** (representing a spread of only 0.5 pH units).
+
+Because most bacteria grow in a narrow pH envelope, the maximum pH limits of organisms in a sample will be very close to each other. Thus, the spread (IQR) of `ph_max` is very small, typically between `0.0` and `2.0` pH units.
+
+### 2. What is the Optimum pH?
+The values in `Abundance-Weighted Propagation Query.csv` (like `weighted_ph_optimum`) are **absolute average pH values** (usually around **`7.0`** to **`8.0`**). 
+
+Comparing an optimum pH of `7.5` to an IQR of `0.5` is comparing an absolute value to a spread width, which is why the IQR is much smaller.
+
+
+### Did you mean the Weighted Average Maximum pH?
+If your goal is to find the **weighted average of the maximum pH limits** (the absolute maximum pH threshold of the sample, rather than its spread), that would be calculated as:
+
+$$\frac{\sum (\text{self_count} \times \text{ph_max})}{\sum \text{self_count}}$$
+
+This value **will** indeed be greater than the `weighted_ph_optimum`. 
+
+
+
+```python
+%load_ext rpy2.ipython
+```
+
+
+```r
+%%R -w 900 -h 1200
+options(scipen = 999)
+library(ggplot2)
+library(data.table)
+
+# Load data for all temperature IQR metrics
+file_path <- "../resources/260629_issue28_automated_metadata/data/Weighted IQRs.csv"
+cols_to_load <- c("temp_min_weighted_iqr", "temp_optimum_weighted_iqr", "temp_max_weighted_iqr")
+df <- fread(file_path, select = cols_to_load)
+
+# Function to render histogram with median
+create_plot <- function(data, column_name, title_name) {
+    sub_df <- data[get(column_name) > 0, .(val = get(column_name))]
+    med_val <- median(sub_df$val, na.rm = TRUE)
+    med_text <- paste0("Median: ", round(med_val, 2), " °C")
+    
+    ggplot(sub_df, aes(x = val)) + 
+        geom_histogram(binwidth = 1, fill = "steelblue", color = "black") + 
+        geom_vline(xintercept = med_val, color = "red", linetype = "dashed", linewidth = 1) +
+        annotate(
+            "label", 
+            x = med_val, 
+            y = Inf, 
+            label = med_text, 
+            vjust = 1.5, 
+            hjust = -0.1, 
+            color = "red", 
+            fontface = "bold", 
+            fill = "white",
+            size = 4
+        ) +
+        scale_x_continuous(limits = c(0, 40), breaks = seq(0, 40, by = 5), oob = scales::oob_keep) +
+        scale_y_continuous(labels = scales::comma) +
+        theme_minimal() + 
+        labs(
+            title = paste("Histogram of", title_name), 
+            subtitle = paste0("Excluding values equal to 0 | ", med_text), 
+            x = paste(title_name, "(°C)"), 
+            y = "Frequency"
+        )
+}
+
+p1 <- create_plot(df, "temp_min_weighted_iqr", "Minimum Temperature Weighted IQR")
+p2 <- create_plot(df, "temp_optimum_weighted_iqr", "Temperature Optimum Weighted IQR")
+p3 <- create_plot(df, "temp_max_weighted_iqr", "Maximum Temperature Weighted IQR")
+
+print(p1)
+print(p2)
+print(p3)
+
+```

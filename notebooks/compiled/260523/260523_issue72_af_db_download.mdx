@@ -1,0 +1,1986 @@
+---
+    title: 260523_issue72_af_db_download
+    section: "Dry Lab"
+    path: "/dry-lab/issue/72"
+    navTitle: "Issue 72"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+# AF DB Structure Download
+
+Lead : AlexLeonardos
+
+Issue : Github Issue 72 — Download Prefolded AlphaFold Structures NR Sequences
+
+Start : 2026-05-16
+
+Complete : 2026-05-22 - NOTE: still needs to be rerun on PETadex V2.
+
+S3 Output : `s3://petadex-protein-structures/af_db/`
+
+## Objective
+
+Many folded structures for Uniprot accessions are found on Google Cloud Storage: https://console.cloud.google.com/storage/browser/public-datasets-deepmind-alphafold-v4;tab=objects?prefix=&forceOnObjectsSortingFiltering=false
+
+The purpose of these downloads is to avoid rerunning folding experiments on sequences that have already been folded.
+
+## 0. Deps
+
+**Python Packages**: Found in the cell below.
+
+**External CLI tools** (not pip-installable — used from WSL / a VM shell, not this kernel):
+`zstd`, `awk`, `sed`, `grep`, `dos2unix`, `aws` (S3 input), and `gcloud storage` (AlphaFold DB
+downloads; the older `gsutil` is deprecated).
+
+**Script layout + working directory.** All three helper scripts live in
+`resources/260523_issue72_af_db_download/scripts/`. They resolve their inputs (`accessions/`,
+`idmapping_selected.tab.gz`) *relative to the current directory*, and those files live at the **repo
+root** — so every command below is run from the repo root, referencing the script by path.
+
+
+```python
+# Install the required packages with the versions used for the analysis.
+import sys, subprocess
+
+PACKAGES = [
+    # local_accession_mapping.py -- the idmapping_selected.tab.gz lookup (Step 3)
+    "polars==1.40.1",
+    "pyarrow==24.0.0",
+    # accession_mapping.py (UniProt ID-mapping API, Step 2) + the PDB download in Step 8
+    "requests==2.34.2",
+    # reading/writing the .fa.zst cores file (Step 7B)
+    "zstandard==0.25.0",
+]
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", *PACKAGES], check=True)
+print("installed:", ", ".join(PACKAGES))
+```
+
+## Step 0: Inspect the input file
+
+Fasta File Location:
+aws s3 cp s3://petadex/logan/petadex.complete_catalytic_cores.v1.1.fa.zst . - Downloaded May 16th 2026
+
+Note that none of the commands in Step 0 need to be rerun for reproducing these results.
+
+
+```python
+# Inspect the first few lines of the file to understand its structure (WSL command):
+zstd -dc petadex.complete_catalytic_cores.v1.1.fa.zst | grep "^>" | head -10
+```
+
+Accessions found second:
+
+```
+>1|WP_054022242.1|||||/65-261
+>2|7NEI|||||/41-230
+>3|7QJM|||||/95-371
+>4|A0A1W6L588|||||/63-258
+>5|ACY95991.1|||||/71-260
+>6|ACY96861.1|||||/69-258
+>7|ADK73612.1|||||/77-271
+>8|ADM47605.1|||||/41-230
+>9|ADV66860.1|||||/95-284
+>10|ADV92525.1|||||/41-230
+```
+
+
+```python
+# Inspect how many header lines are in the file (WSL command):
+zstd -dc petadex.complete_catalytic_cores.v1.1.fa.zst | grep "^>" | wc -l
+```
+
+307155746
+
+
+```python
+# Inspect how many are actually valid accessions:
+
+grep -c "." accessions.csv
+```
+
+4723339
+
+
+```python
+`awk 'NF' accessions.csv > clean_accessions.csv` # store all of them without blanks
+```
+
+# Step 1: Make a csv of just the accessions
+
+
+```python
+# Extract the accession numbers from the file and save them to a new file (WSL command):
+zstd -dc petadex.complete_catalytic_cores.v1.1.fa.zst | grep "^>" | sed 's/^>//' | awk -F'[ |]' '{print $2}' > accessions.csv
+```
+
+
+```python
+# Clean the accessions to remove any blank lines (WSL command):
+awk 'NF' accessions.csv > clean_accessions.csv
+```
+
+
+```python
+# Clean the accessions to remove any version numbers (WSL command):
+awk -F'.' '{print $1}' clean_accessions.csv > clean_accessions_no_version.csv
+```
+
+## Step 2: Convert the accessions to Uniprot, if possible using the Uniprot API
+
+Now the accessions have a bunch of different types of accessions. We want to convert them into Uniprot format as that is how they are stored in AlphaFoldDB
+
+Currently they include Uniprot (E9LVH8), GenBank (MBV9193613.1), NCBI RefSeq (WP_041846030.1), and PDB (2ZPQ_A).
+
+`split_accession_types.py` splits these into different csvs, with extras included if they don't fit any regex pattern.
+
+Run from the **repo root** (writes the four split CSVs into the current directory):
+
+```bash
+python resources/260523_issue72_af_db_download/scripts/split_accession_types.py \
+    clean_accessions_no_version.csv
+```
+
+```
+Processing Completed Successfully!
+Time Taken: 6.13 seconds
+----------------------------------------
+Total Rows Parsed:     4,723,339
+├── UniProt IDs:       552 -> written to 'uniprot_accessions.csv'
+├── RefSeq IDs:        2,605,429 -> written to 'refseq_accessions.csv'
+├── GenBank IDs:       2,115,910 -> written to 'genbank_accessions.csv'
+└── Unclassified/Other: 1,448 -> written to 'other_accessions.csv'
+----------------------------------------
+```
+
+After inspection, the Other accessions are all PDB. Many of them are tagged _A, which was stripped as we care about the folding of the individual chains.
+
+Code for converting the accessions to UniProtKB using the UniProt ID mapping API is in
+`resources/260523_issue72_af_db_download/scripts/accession_mapping.py`.
+
+```
+Usage: python accession_mapping.py [input_csv] [from_db] [output_tsv] [batch_size]
+Defaults:  accessions/clean_pdb_only.csv  PDB  accessions/pdb_to_uniprot.tsv  50000
+```
+
+All four arguments are optional, but the defaults are PDB-specific, so pass them explicitly for
+anything else. Run from the **repo root** (the default paths are relative to it):
+
+```bash
+# PDB -- finished effectively instantly (1,448 accessions)
+python resources/260523_issue72_af_db_download/scripts/accession_mapping.py \
+    accessions/clean_pdb_only.csv PDB accessions/mappings/pdb_to_uniprot.tsv
+
+# RefSeq -- this is the one that was too slow
+python resources/260523_issue72_af_db_download/scripts/accession_mapping.py \
+    accessions/refseq_accessions.csv RefSeq_Protein accessions/mappings/refseq_to_uniprot.tsv 100000
+```
+
+Each run drops a `mapping_run_<timestamp>.log` in the working directory.
+
+Benchmark Speed:
+- Instant for PDB (1448)
+- Took 53 Minutes for a batch of 100,000 RefSeq (2,605,429)
+
+This was deemed to be too slow, so for step 3 I swapped to a local accession table lookup method.
+
+## Step 3: Local Accession Table Lookup
+
+Downloading the master mapping and analyzing it locally using polars is much faster than the ~ 25 hours it would take to run the API script.
+
+Code is found in `resources/260523_issue72_af_db_download/scripts/local_accession_mapping.py`.
+
+Make sure to download `idmapping_selected.tab.gz` from the Uniprot Mapping https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/idmapping/ — the script looks for it under that exact name in the **current directory**, so put it in the repo root and run from there.
+
+```bash
+SCRIPT=resources/260523_issue72_af_db_download/scripts/local_accession_mapping.py
+
+python $SCRIPT accessions/refseq_accessions.csv  accessions/mappings/refseq_to_uniprot.tsv
+python $SCRIPT accessions/genbank_accessions.csv accessions/mappings/genbank_to_uniprot.tsv
+python $SCRIPT accessions/clean_pdb_only.csv     accessions/mappings/pdb_to_uniprot.tsv
+```
+
+Both arguments are required — input accessions csv, then output tsv. Note that the script picks which column of the master table to join on by reading the **input filename**: `refseq` → col 3, `genbank` → col 17, anything else falls through to PDB (col 5), so don't rename the inputs.
+
+# Step 4: Create the Manifest File
+
+This is all of the file names that should exist if they are on AlphaFoldDB.
+
+
+```python
+accessions = []
+with open("accessions/mappings/pdb_to_uniprot_test.tsv", "r") as f:
+    for line in f:
+        # only take the second column which is the uniprot accession, and strip whitespace
+        accession = line.strip().split("\t")[1]
+
+        if accession and accession != "Entry":
+            accessions.append(accession)
+```
+
+
+```python
+print(len(accessions))
+print(accessions[:10])
+```
+
+    1502
+    ['A4Y035', 'A0A075B5G4', 'P01267', 'A0A4W2CHS8', 'Q14703', 'Q9H741', 'Q14703', 'E5WZQ7', 'Q869C3', 'Q8NBP7']
+
+
+
+```python
+with open("accessions/manifests/from_pdb_cif_manifest.txt", "w") as f:
+    for uid in accessions:
+        f.write(f"gs://public-datasets-deepmind-alphafold-v4/AF-{uid}-F1-model_v4.cif\n")
+```
+
+
+```python
+# Also make sure to clean up the newlines in the file, I was using WSL
+dos2unix accessions/manifests/from_genbank_cif_manifest.txt
+dos2unix accessions/manifests/uniprot_cif_manifest.txt
+dos2unix accessions/manifests/from_refseq_cif_manifest.txt
+dos2unix accessions/manifests/from_pdb_cif_manifest.txt
+```
+
+# Step 5: Run Gcloud to download existing predictions
+
+
+```python
+# Now use the terminal to run the download command with the manifest file:
+cat alphafold_cif_manifest.txt | gsutil -m cp -I af_db/ # this is old, use the new gcloud storage command instead
+
+gcloud storage cp -c -I af_db_refseq/ < accessions/manifests/from_refseq_cif_manifest.txt
+```
+
+Note: This was run on an Azure VM for the space required ~ 169GB.
+
+
+```python
+import os
+
+# Combined list of all expected accessions
+all_expected = set(accessions)  # Assuming 'accessions' is the list of expected accessions from the previous step
+
+# Get all filenames in af_db/ and extract accessions
+downloaded_files = os.listdir("af_db_pdb/")
+downloaded_accessions = set(
+    filename.split("-")[1]  # Extract accession from 'AF-<ACCESSION>-F1-model_v4.cif'
+    for filename in downloaded_files
+    if filename.endswith(".cif")
+)
+
+# Find accessions that are missing
+missing_accessions = sorted(all_expected - downloaded_accessions)
+
+print(f"Expected: {len(all_expected)}")
+print(f"Downloaded: {len(downloaded_accessions)}")
+print(f"Missing: {len(missing_accessions)}")
+
+# Save to file
+with open("results/missing_pdb_af_accessions.txt", "w") as f:
+    for acc in missing_accessions:
+        f.write(f"{acc}\n")
+```
+
+    Expected: 593
+    Downloaded: 526
+    Missing: 67
+
+
+# Step 6: Upload structures to Azure
+
+**Results (Separated by the Original Accession Type in the Input File):**
+
+*Uniprot:*
+
+Expected: 548
+
+Downloaded: 540
+
+Missing: 8
+
+These are saved in `protein-structures/af_db/genbankrefseq/af_structures` in Azure blob storage. 
+
+*RefSeq + GenBank: (Ran on VM)*
+
+Expected: 830217
+
+Downloaded: 458174
+
+Missing: 372043
+
+These are saved in `protein-structures/af_db/genbankrefseq/af_structures` in Azure blob storage. 
+
+*PDB*
+
+Expected: 593 Note: this is much smaller than 1503 since many different PDB map to the same uniprot ID.
+
+Downloaded: 526
+
+Missing: 67
+
+These are saved in `protein-structures/af_db/pdb/` in Azure blob storage. 
+
+
+
+# Step 7: Figure out what's missing
+
+#### 7A: Identify the Uniprot Accessions that didn't have a fold on af_db.
+
+These are held in the `af_misses` on Azure. They were generated using the code in this notebook.
+
+The files with `true` in the name indicate that these uniprot accessions have been reverse mapped back to their representation in the original FASTA file.
+
+
+
+```python
+# Reverse mapping from uniprot to pdb
+uniprot_mapping = {}
+with open("accessions/mappings/_to_uniprot_test.tsv", "r") as f:
+    for line in f:
+        parts = line.strip().split("\t")
+        if len(parts) >= 2:
+            pdb_id = parts[0]
+            uniprot_id = parts[1]
+            uniprot_mapping[uniprot_id] = pdb_id
+
+# missing accessions
+with open("af_misses/missing_pdb_af_accessions.txt", "r") as f:
+    missing_accessions = [line.strip() for line in f]
+
+# Save the missing PDB IDs to a new file
+with open("af_misses/true_pdb_af_misses.txt", "w") as f:
+    for uniprot_id in missing_accessions:
+        pdb_id = uniprot_mapping.get(uniprot_id)
+        if pdb_id:
+            f.write(f"{pdb_id}\n")
+```
+
+
+```python
+# Reverse mapping from uniprot to genbank/refseq
+uniprot_mapping = {}
+with open("accessions/mappings/refseq_to_uniprot.tsv", "r") as f:
+    for line in f:
+        parts = line.strip().split("\t")
+        if len(parts) >= 2:
+            refseq_id = parts[0]
+            uniprot_id = parts[1]
+            uniprot_mapping[uniprot_id] = refseq_id
+
+with open("accessions/mappings/genbank_to_uniprot.tsv", "r") as f:
+    for line in f:
+        parts = line.strip().split("\t")
+        if len(parts) >= 2:
+            genbank_id = parts[0]
+            uniprot_id = parts[1]
+            uniprot_mapping[uniprot_id] = genbank_id
+
+# missing accessions
+with open("af_misses/missing_genbankrefseq_af_accessions.txt", "r") as f:
+    missing_accessions = [line.strip() for line in f]
+
+# Save the missing PDB IDs to a new file
+with open("af_misses/true_genbankrefseq_af_misses.txt", "w") as f:
+    for uniprot_id in missing_accessions:
+        id = uniprot_mapping.get(uniprot_id)
+        if id:
+            f.write(f"{id}\n")
+```
+
+
+#### 7B: Create a new FASTA with only unfolded proteins.
+
+Iterate through the rows of the original file. 
+
+We only want to disclude rows that let to an AF structure, that is, rows with a Uniprot match and that are not in the af_misses.
+
+set(unfolded) = set(accessions) - set(accessions with a uniprot mapping) + set(af_misses).
+
+
+```python
+import zstandard as zstd
+import re
+
+def normalize_accession(acc):
+    acc = acc.strip()
+    acc = acc.split(".")[0]  # strip version suffix
+    acc = re.sub(r"_[A-Za-z]$", "", acc)  # only strip single letter chain suffix e.g. 5VLP_A
+    return acc
+
+# 1. Load all accessions that have a UniProt mapping
+mapped_accessions = set()
+mapping_files = [
+    "accessions/mappings/refseq_to_uniprot.tsv",
+    "accessions/mappings/genbank_to_uniprot.tsv",
+    "accessions/mappings/pdb_to_uniprot_test.tsv"
+]
+
+for f_path in mapping_files:
+    with open(f_path, "r") as f:
+        for line in f:
+            token = normalize_accession(line.strip().split("\t")[0])
+            if token and token != "From":
+                mapped_accessions.add(token)
+
+with open("accessions/uniprot_accessions.csv", "r") as f:
+    for line in f:
+        token = normalize_accession(line.strip())
+        if token:
+            mapped_accessions.add(token)
+
+# 2. Load precomputed af_miss_accessions
+af_miss_accessions = set()
+with open("af_misses/true_genbankrefseq_af_misses.txt", "r") as f:
+    for line in f:
+        token = normalize_accession(line.strip())
+        if token:
+            af_miss_accessions.add(token)
+with open("af_misses/true_pdb_af_misses.txt", "r") as f:
+    for line in f:
+        token = normalize_accession(line.strip())
+        if token:
+            af_miss_accessions.add(token)
+with open("af_misses/missing_uniprot_af_accessions.txt", "r") as f:
+    for line in f:
+        token = normalize_accession(line.strip())
+        if token:
+            af_miss_accessions.add(token)
+
+# 3. Write output FASTA
+dctx = zstd.ZstdDecompressor()
+cctx = zstd.ZstdCompressor()
+
+with open("petadex.complete_catalytic_cores.v1.1.fa.zst", "rb") as fin, \
+     open("unfolded.fa.zst", "wb") as fout:
+    with cctx.stream_writer(fout) as writer:
+        buffer = ""
+        write = False
+        for chunk in dctx.read_to_iter(fin):
+            buffer += chunk.decode("utf-8")
+            lines = buffer.split("\n")
+            # Keep last incomplete line in buffer
+            buffer = lines[-1]
+            for line in lines[:-1]:
+                line = line + "\n"
+                if line.startswith(">"):
+                    current_accession = normalize_accession(line.split("|")[1])
+                    in_mapped = current_accession in mapped_accessions
+                    in_af_miss = current_accession in af_miss_accessions
+                    write = (not in_mapped) or in_af_miss
+                if write:
+                    writer.write(line.encode("utf-8"))
+        # Handle last line
+        if buffer:
+            if buffer.startswith(">"):
+                current_accession = normalize_accession(buffer.split("|")[1])
+                in_mapped = current_accession in mapped_accessions
+                in_af_miss = current_accession in af_miss_accessions
+                write = (not in_mapped) or in_af_miss
+            if write:
+                writer.write(buffer.encode("utf-8"))
+```
+
+`unfolded.fa.zst` is also found on S3 (`s3://petadex-protein-structures/af_db/`)
+
+# Step 8: Download the existing structures on the PDB for proteins with a PDB Number
+
+
+```python
+import requests
+import os
+
+pdb_ids = []
+
+# get the pdb ids
+with open("../accessions/clean_pdb_only.csv", "r") as f:
+    for line in f:
+        pdb_id = line.strip()
+        if pdb_id:
+            pdb_ids.append(pdb_id)
+
+os.makedirs("pdb_structures", exist_ok=True)
+
+# download their structures
+count_success = 0
+count_fail = 0
+for pdb_id in pdb_ids:
+    url = f"https://files.rcsb.org/download/{pdb_id}.cif"
+    response = requests.get(url)
+    if response.status_code == 200:
+        with open(f"pdb_structures/{pdb_id}.cif", "wb") as f:
+            f.write(response.content)
+        count_success += 1
+        print(f"Downloaded {pdb_id}")
+    else:
+        count_fail += 1
+        print(f"Failed {pdb_id}: {response.status_code}")
+
+print(f"Successfully downloaded: {count_success}")
+print(f"Failed downloads: {count_fail}")
+```
+
+    Downloaded 7NEI
+    Downloaded 7QJM
+    Downloaded 2FX5
+    Downloaded 4OYY
+    Downloaded 7QTQ
+    Downloaded 7N4Y
+    Downloaded 8UW8
+    Downloaded 8UWC
+    Downloaded 6MLY
+    Downloaded 5YDJ
+    Downloaded 6U26
+    Downloaded 5VLP
+    Downloaded 6U2F
+    Downloaded 8WT1
+    Downloaded 1R6V
+    Downloaded 7CEE
+    Downloaded 8QKE
+    Downloaded 8E7F
+    Downloaded 2Z8X
+    Downloaded 2Z8Z
+    Downloaded 2ZJ6
+    Downloaded 2ZJ7
+    Downloaded 2QUA
+    Downloaded 3HJR
+    Downloaded 3WQB
+    Downloaded 2WQZ
+    Downloaded 1DX4
+    Downloaded 3VKF
+    Downloaded 5OJK
+    Downloaded 1F8U
+    Downloaded 2X8B
+    Downloaded 4BDT
+    Downloaded 5V5V
+    Downloaded 6XYS
+    Downloaded 1Q83
+    Downloaded 3BL8
+    Downloaded 1AKN
+    Downloaded 2BCE
+    Downloaded 7CEG
+    Downloaded 3B3Q
+    Downloaded 5CH3
+    Downloaded 5IVK
+    Downloaded 5TYJ
+    Downloaded 5TYM
+    Downloaded 5XEQ
+    Downloaded 5YDH
+    Downloaded 5OJ6
+    Downloaded 2PM8
+    Downloaded 3BIW
+    Downloaded 3O9M
+    Downloaded 6EUC
+    Downloaded 4FNG
+    Downloaded 5C8V
+    Downloaded 4FNM
+    Downloaded 6G1U
+    Downloaded 3WK4
+    Downloaded 6QAA
+    Downloaded 7MP4
+    Downloaded 5X61
+    Downloaded 7D9O
+    Downloaded 2FJ0
+    Downloaded 6O4W
+    Downloaded 6O66
+    Downloaded 1KU6
+    Downloaded 3DL7
+    Downloaded 5AHX
+    Downloaded 5HQ3
+    Downloaded 1MX1
+    Downloaded 2C0P
+    Downloaded 2JEZ
+    Downloaded 2WHP
+    Downloaded 4B84
+    Downloaded 4K8R
+    Downloaded 5HQ3
+    Downloaded 5VL7
+    Downloaded 6FSD
+    Downloaded 1MAA
+    Downloaded 6H0T
+    Downloaded 6H0V
+    Downloaded 2QTW
+    Downloaded 3M0C
+    Downloaded 4A16
+    Downloaded 4BE4
+    Downloaded 4UPD
+    Downloaded 5DTI
+    Downloaded 5DTJ
+    Downloaded 1THG
+    Downloaded 2XUF
+    Downloaded 4XII
+    Downloaded 5FV4
+    Downloaded 1DX6
+    Downloaded 1J06
+    Downloaded 2HA4
+    Downloaded 2XUD
+    Downloaded 3ZLT
+    Downloaded 4PQE
+    Downloaded 5HCU
+    Downloaded 8AEV
+    Downloaded 2DQY
+    Downloaded 4EY4
+    Downloaded 4QWW
+    Downloaded 5FPQ
+    Downloaded 6ARX
+    Downloaded 6ARY
+    Downloaded 6O69
+    Downloaded 1N5M
+    Downloaded 1C2B
+    Downloaded 2PMW
+    Downloaded 3BPS
+    Downloaded 3H42
+    Downloaded 3LII
+    Downloaded 3P5B
+    Downloaded 1B41
+    Downloaded 1C2O
+    Downloaded 3AFG
+    Downloaded 1ACJ
+    Downloaded 1AMN
+    Downloaded 2C58
+    Downloaded 2CEK
+    Downloaded 1CLE
+    Downloaded 1CRL
+    Downloaded 1EEA
+    Downloaded 1GZ7
+    Downloaded 1K4Y
+    Downloaded 1LLF
+    Downloaded 2DFP
+    Downloaded 3I6M
+    Downloaded 1F6W
+    Downloaded 5THM
+    Downloaded 6EUE
+    Downloaded 1AQL
+    Downloaded 1GQR
+    Downloaded 1YA4
+    Downloaded 3GEL
+    Downloaded 5A7G
+    Downloaded 6EMI
+    Downloaded 4AQD
+    Downloaded 5A7H
+    Downloaded 5DYT
+    Downloaded 5DYW
+    Downloaded 8FPQ
+    Downloaded 1P0I
+    Downloaded 1XLU
+    Downloaded 2J4C
+    Downloaded 2WID
+    Downloaded 2WIF
+    Downloaded 2WIL
+    Downloaded 2XMB
+    Downloaded 2Y1K
+    Downloaded 3DJY
+    Downloaded 3K9B
+    Downloaded 4B0O
+    Downloaded 5K5E
+    Downloaded 6EUL
+    Downloaded 2XQF
+    Downloaded 4AXB
+    Downloaded 6EYF
+    Downloaded 8WDM
+    Downloaded 6R6V
+    Downloaded 1JMY
+    Downloaded 1UKC
+    Downloaded 5A2G
+    Downloaded 7X8L
+    Downloaded 8YZO
+    Downloaded 8JJ7
+    Downloaded 2OGS
+    Downloaded 7W1I
+    Downloaded 7LCU
+    Downloaded 1C7I
+    Downloaded 1C7J
+    Downloaded 4MZD
+    Downloaded 4OMC
+    Downloaded 6YD3
+    Downloaded 1P8J
+    Downloaded 3T41
+    Downloaded 4Z2A
+    Downloaded 5AH1
+    Downloaded 5VLA
+    Downloaded 3VDX
+    Downloaded 4IQ4
+    Downloaded 4QES
+    Downloaded 8S9J
+    Downloaded 3QFH
+    Downloaded 6IDY
+    Downloaded 1WMD
+    Downloaded 1WMF
+    Downloaded 5FAX
+    Downloaded 2HIH
+    Downloaded 7V6D
+    Downloaded 5XPX
+    Downloaded 4J94
+    Downloaded 4KB5
+    Downloaded 6KSI
+    Downloaded 6KSL
+    Downloaded 7BUK
+    Downloaded 4KPG
+    Downloaded 8S9R
+    Downloaded 2E1P
+    Downloaded 2ZWO
+    Downloaded 2ZWP
+    Downloaded 3VHQ
+    Downloaded 3WIU
+    Downloaded 3WIV
+    Downloaded 4JP8
+    Downloaded 2Z2Z
+    Downloaded 4FDM
+    Downloaded 8CP0
+    Downloaded 4X6U
+    Downloaded 4X71
+    Downloaded 6FZ1
+    Downloaded 6FZ7
+    Downloaded 6FZ8
+    Downloaded 6FZ9
+    Downloaded 6FZC
+    Downloaded 6FZD
+    Downloaded 6S3G
+    Downloaded 6S3J
+    Downloaded 6S3V
+    Downloaded 4X7B
+    Downloaded 4X85
+    Downloaded 6FZA
+    Downloaded 2W22
+    Downloaded 3AUK
+    Downloaded 6A12
+    Downloaded 1JI3
+    Downloaded 1KU0
+    Downloaded 4FKB
+    Downloaded 7QJM
+    Downloaded 2DSN
+    Downloaded 2Z5G
+    Downloaded 3UMJ
+    Downloaded 5AH0
+    Downloaded 5CE5
+    Downloaded 7EY3
+    Downloaded 8RSE
+    Downloaded 4FMP
+    Downloaded 4KG7
+    Downloaded 4HVL
+    Downloaded 4J7A
+    Downloaded 4M1Z
+    Downloaded 6SXP
+    Downloaded 6SXY
+    Downloaded 8QMZ
+    Downloaded 3EBL
+    Downloaded 3WHI
+    Downloaded 5HC0
+    Downloaded 5HC2
+    Downloaded 5HC3
+    Downloaded 2ZJF
+    Downloaded 5IQ0
+    Downloaded 5IQ2
+    Downloaded 5IQ3
+    Downloaded 1JKM
+    Downloaded 4Q05
+    Downloaded 7W2A
+    Downloaded 2E3J
+    Downloaded 4C87
+    Downloaded 4C88
+    Downloaded 5XMD
+    Downloaded 6UNW
+    Downloaded 8EA1
+    Downloaded 8EHE
+    Downloaded 3TI7
+    Downloaded 3TI9
+    Downloaded 5XM6
+    Downloaded 2ZSH
+    Downloaded 6ZL7
+    Downloaded 5MLX
+    Downloaded 4Q3O
+    Downloaded 4YPV
+    Downloaded 6AX1
+    Downloaded 5D8M
+    Downloaded 5MII
+    Downloaded 5YL7
+    Downloaded 3FCY
+    Downloaded 5OLU
+    Downloaded 6FR2
+    Downloaded 5O7G
+    Downloaded 8COY
+    Downloaded 3PDC
+    Downloaded 4BTV
+    Downloaded 4BVK
+    Downloaded 4LVN
+    Downloaded 6I5E
+    Downloaded 4BRS
+    Downloaded 4BVJ
+    Downloaded 4ZOQ
+    Downloaded 6KD0
+    Downloaded 7Y6M
+    Downloaded 2VTV
+    Downloaded 3HJU
+    Downloaded 4BYM
+    Downloaded 5YAE
+    Downloaded 4OB6
+    Downloaded 4OB7
+    Downloaded 4OB8
+    Downloaded 3LPA
+    Downloaded 3LPC
+    Downloaded 3LPD
+    Downloaded 2O7R
+    Downloaded 4OU4
+    Downloaded 4OU5
+    Downloaded 3ANS
+    Downloaded 3DNM
+    Downloaded 5JD4
+    Downloaded 4BVL
+    Downloaded 3VV3
+    Downloaded 4KRX
+    Downloaded 4KRY
+    Downloaded 7WOL
+    Downloaded 4WY5
+    Downloaded 7EBA
+    Downloaded 6WYM
+    Downloaded 3NWO
+    Downloaded 3P2M
+    Downloaded 6F9M
+    Downloaded 8H83
+    Downloaded 2WV7
+    Downloaded 2ZRQ
+    Downloaded 3A3P
+    Downloaded 8OIM
+    Downloaded 3W9B
+    Downloaded 7A6G
+    Downloaded 7CG2
+    Downloaded 7CG6
+    Downloaded 7XR8
+    Downloaded 2X8J
+    Downloaded 2X8J
+    Downloaded 4K6G
+    Downloaded 4WY8
+    Downloaded 3D7R
+    Downloaded 3GA7
+    Downloaded 4C4X
+    Downloaded 4K6H
+    Downloaded 4K6K
+    Downloaded 5Y5D
+    Downloaded 5Y6Y
+    Downloaded 6RJ8
+    Downloaded 4K5Q
+    Downloaded 5CW2
+    Downloaded 8JY1
+    Downloaded 1LZK
+    Downloaded 1LZL
+    Downloaded 3AIK
+    Downloaded 3AIM
+    Downloaded 3AIN
+    Downloaded 3AIO
+    Downloaded 4NS4
+    Downloaded 4V2I
+    Downloaded 7PRM
+    Downloaded 3FAK
+    Downloaded 3K6K
+    Downloaded 6I8W
+    Downloaded 7D78
+    Downloaded 4O08
+    Downloaded 5JD5
+    Downloaded 6ISP
+    Downloaded 6ISQ
+    Downloaded 6ISR
+    Downloaded 6J1P
+    Downloaded 6J1Q
+    Downloaded 6J1R
+    Downloaded 6J1S
+    Downloaded 2XLB
+    Downloaded 2XLC
+    Downloaded 2Z30
+    Downloaded 3FYT
+    Downloaded 3FYU
+    Downloaded 3JW8
+    Downloaded 3JWE
+    Downloaded 4NZZ
+    Downloaded 6K34
+    Downloaded 7L4T
+    Downloaded 7YC0
+    Downloaded 7YC4
+    Downloaded 1ODS
+    Downloaded 2D80
+    Downloaded 2D81
+    Downloaded 2Z2X
+    Downloaded 2Z2Y
+    Downloaded 2Z56
+    Downloaded 1LBS
+    Downloaded 3QH4
+    Downloaded 4N5H
+    Downloaded 4XVC
+    Downloaded 6AAE
+    Downloaded 6IEY
+    Downloaded 3ICV
+    Downloaded 4F0J
+    Downloaded 4JNC
+    Downloaded 5GMR
+    Downloaded 8CLN
+    Downloaded 8CLP
+    Downloaded 3KXP
+    Downloaded 5LK6
+    Downloaded 6KF5
+    Downloaded 6KF7
+    Downloaded 7CI0
+    Downloaded 7V3K
+    Downloaded 7W8N
+    Downloaded 4CG3
+    Downloaded 5GMS
+    Downloaded 2W2M
+    Downloaded 2W2O
+    Downloaded 2W2P
+    Downloaded 2W2Q
+    Downloaded 2XTJ
+    Downloaded 6SBN
+    Downloaded 6SCD
+    Downloaded 7B1X
+    Downloaded 2C7B
+    Downloaded 2VF2
+    Downloaded 2XRM
+    Downloaded 5FFN
+    Downloaded 6KEU
+    Downloaded 1EA7
+    Downloaded 1EVQ
+    Downloaded 1QZ3
+    Downloaded 2HM7
+    Downloaded 2IXT
+    Downloaded 4RNC
+    Downloaded 6KF1
+    Downloaded 8AIS
+    Downloaded 8AIT
+    Downloaded 2GKO
+    Downloaded 3U1T
+    Downloaded 3V9A
+    Downloaded 6F9O
+    Downloaded 6KF1
+    Downloaded 7JQY
+    Downloaded 3WJ2
+    Downloaded 4NMX
+    Downloaded 5ESR
+    Downloaded 3ZXX
+    Downloaded 4NVR
+    Downloaded 7OZM
+    Downloaded 7YME
+    Downloaded 2R11
+    Downloaded 3R3U
+    Downloaded 3R3V
+    Downloaded 3R3Y
+    Downloaded 3R41
+    Downloaded 3VIS
+    Downloaded 4H6V
+    Downloaded 4H6W
+    Downloaded 4OPM
+    Downloaded 5K3C
+    Downloaded 6QHP
+    Downloaded 6QKS
+    Downloaded 5ZUN
+    Downloaded 8YFY
+    Downloaded 8YFZ
+    Downloaded 3B12
+    Downloaded 3WIB
+    Downloaded 4INZ
+    Downloaded 4IO0
+    Downloaded 4P9N
+    Downloaded 6Y9G
+    Downloaded 3PE6
+    Downloaded 5MXP
+    Downloaded 8DAJ
+    Downloaded 4B9A
+    Downloaded 4BAT
+    Downloaded 4BAZ
+    Downloaded 8CMV
+    Downloaded 5XJH
+    Downloaded 6IJ3
+    Downloaded 6IJ4
+    Downloaded 6IJ5
+    Downloaded 6IJ6
+    Downloaded 6KUO
+    Downloaded 6KUQ
+    Downloaded 6KUS
+    Downloaded 8H5J
+    Downloaded 8H5L
+    Downloaded 8H5M
+    Downloaded 8H5O
+    Downloaded 4CCW
+    Downloaded 5K3D
+    Downloaded 5WSL
+    Downloaded 7ZJT
+    Downloaded 4OSE
+    Downloaded 6EQD
+    Downloaded 6KY5
+    Downloaded 7OSB
+    Downloaded 8J5N
+    Downloaded 5SWN
+    Downloaded 7OTS
+    Downloaded 8SDC
+    Downloaded 1J1I
+    Downloaded 4CCY
+    Downloaded 7AT2
+    Downloaded 7AT3
+    Downloaded 4PSU
+    Downloaded 7AT0
+    Downloaded 7NB5
+    Downloaded 7Z6B
+    Downloaded 1EHY
+    Downloaded 4OV6
+    Downloaded 7EC8
+    Downloaded 7ECB
+    Downloaded 1MT3
+    Downloaded 1XQV
+    Downloaded 1XQW
+    Downloaded 1XRL
+    Downloaded 1XRM
+    Downloaded 1XRQ
+    Downloaded 3E3A
+    Downloaded 7VMD
+    Downloaded 8QRJ
+    Downloaded 7SH6
+    Downloaded 2WUD
+    Downloaded 4C6H
+    Downloaded 7QJN
+    Downloaded 7VPA
+    Downloaded 3KSR
+    Downloaded 4BRZ
+    Downloaded 1U2E
+    Downloaded 8HGW
+    Downloaded 8HGV
+    Downloaded 7BFN
+    Downloaded 7BFO
+    Downloaded 8AIR
+    Downloaded 2PU7
+    Downloaded 2PUH
+    Downloaded 3QIT
+    Downloaded 3V1K
+    Downloaded 3V1L
+    Downloaded 3BWX
+    Downloaded 4FHZ
+    Downloaded 4FTW
+    Downloaded 6PAK
+    Downloaded 1S2N
+    Downloaded 5JZ9
+    Downloaded 6O44
+    Downloaded 7P0Y
+    Downloaded 2RHT
+    Downloaded 4X00
+    Downloaded 6QE2
+    Downloaded 1IUN
+    Downloaded 2D0D
+    Downloaded 3ZXY
+    Downloaded 4CG1
+    Downloaded 4UHC
+    Downloaded 5JZB
+    Downloaded 5Z6O
+    Downloaded 7Z2U
+    Downloaded 7Z2V
+    Downloaded 8C4Z
+    Downloaded 8ETY
+    Downloaded 8GKO
+    Downloaded 8GU4
+    Downloaded 8SPK
+    Downloaded 1LW6
+    Downloaded 3FOB
+    Downloaded 8ETX
+    Downloaded 8ETZ
+    Downloaded 8EU0
+    Downloaded 8EU1
+    Downloaded 8H7O
+    Downloaded 1DBI
+    Downloaded 4DGQ
+    Downloaded 8PI1
+    Downloaded 1BJR
+    Downloaded 1HKH
+    Downloaded 1HT3
+    Downloaded 1IC6
+    Downloaded 1THM
+    Downloaded 1VA4
+    Downloaded 3F7M
+    Downloaded 4G5X
+    Downloaded 4G8B
+    Downloaded 4G8C
+    Downloaded 2B6N
+    Downloaded 6AID
+    Downloaded 8A2C
+    Downloaded 1A7U
+    Downloaded 1BRO
+    Downloaded 1BRT
+    Downloaded 4LXH
+    Downloaded 7CQB
+    Downloaded 7DS7
+    Downloaded 8B4U
+    Downloaded 1SCN
+    Downloaded 4DZT
+    Downloaded 6ATX
+    Downloaded 8C4X
+    Downloaded 1A2Q
+    Downloaded 1A88
+    Downloaded 1AK9
+    Downloaded 1AQN
+    Downloaded 1MEE
+    Downloaded 1S01
+    Downloaded 1S02
+    Downloaded 1SBH
+    Downloaded 1SBI
+    Downloaded 1SBN
+    Downloaded 1SBT
+    Downloaded 1SCJ
+    Downloaded 1ST2
+    Downloaded 1SUB
+    Downloaded 1SUC
+    Downloaded 1UBN
+    Downloaded 1YU6
+    Downloaded 2SNI
+    Downloaded 3VYV
+    Downloaded 4GI3
+    Downloaded 5G59
+    Downloaded 5GL8
+    Downloaded 5W15
+    Downloaded 7TVW
+    Downloaded 1A8Q
+    Downloaded 1AF4
+    Downloaded 1AV7
+    Downloaded 1BH6
+    Downloaded 1C3L
+    Downloaded 3QTL
+    Downloaded 5Z7X
+    Downloaded 8V16
+    Downloaded 1A8S
+    Downloaded 4WFI
+    Downloaded 5OX2
+    Downloaded 5YFE
+    Downloaded 6ANE
+    Downloaded 7AM3
+    Downloaded 7AM4
+    Downloaded 7AM5
+    Downloaded 7AM6
+    Downloaded 7AM6
+    Downloaded 7AM7
+    Downloaded 7AM7
+    Downloaded 7AM8
+    Downloaded 7QVH
+    Downloaded 8CRU
+    Downloaded 8J17
+    Downloaded 8VE9
+    Downloaded 8VEK
+    Downloaded 8VEL
+    Downloaded 8VEM
+    Downloaded 3HEA
+    Downloaded 3HI4
+    Downloaded 3IA2
+    Downloaded 3T4U
+    Downloaded 5EGN
+    Downloaded 5H6G
+    Downloaded 7C4D
+    Downloaded 7QJO
+    Downloaded 7QJQ
+    Downloaded 8C65
+    Downloaded 3PF8
+    Downloaded 3PF9
+    Downloaded 3RLI
+    Downloaded 4KE6
+    Downloaded 6ILW
+    Downloaded 6ILX
+    Downloaded 7CWQ
+    Downloaded 7LD8
+    Downloaded 7QJR
+    Downloaded 7QJS
+    Downloaded 7VVC
+    Downloaded 7VWN
+    Downloaded 7W1N
+    Downloaded 7W45
+    Downloaded 8IAN
+    Downloaded 8IBI
+    Downloaded 8IBJ
+    Downloaded 8XHO
+    Downloaded 1AH2
+    Downloaded 1C9J
+    Downloaded 1C9M
+    Downloaded 1C9N
+    Downloaded 1IAV
+    Downloaded 1MPT
+    Downloaded 1NDU
+    Downloaded 1Q5P
+    Downloaded 1ST3
+    Downloaded 2XMZ
+    Downloaded 5ARB
+    Downloaded 7QJP
+    Downloaded 7W44
+    Downloaded 7YKQ
+    Downloaded 4GDM
+    Downloaded 4GEC
+    Downloaded 4GEG
+    Downloaded 4KE9
+    Downloaded 5XG0
+    Downloaded 7DZT
+    Downloaded 7DZU
+    Downloaded 7DZV
+    Downloaded 7QJT
+    Downloaded 7YM9
+    Downloaded 7NEI
+    Downloaded 8BRA
+    Downloaded 1DUI
+    Downloaded 1GNV
+    Downloaded 1SPB
+    Downloaded 1SUA
+    Downloaded 1SUE
+    Downloaded 2XUA
+    Downloaded 3BGO
+    Downloaded 3F49
+    Downloaded 3OM8
+    Downloaded 6U9L
+    Downloaded 6UBE
+    Downloaded 3QM1
+    Downloaded 5H6B
+    Downloaded 5LUI
+    Downloaded 5LUJ
+    Downloaded 5LUK
+    Downloaded 5LUL
+    Downloaded 5ZNO
+    Downloaded 5ZRQ
+    Downloaded 7V8U
+    Downloaded 8D1D
+    Downloaded 1R3D
+    Downloaded 5YNS
+    Downloaded 7E0N
+    Downloaded 1GNS
+    Downloaded 5CML
+    Downloaded 7CTR
+    Downloaded 7CTS
+    Downloaded 8J45
+    Downloaded 1JFR
+    Downloaded 5XFZ
+    Downloaded 7CEF
+    Downloaded 7CEH
+    Downloaded 7XTT
+    Downloaded 5XFY
+    Downloaded 5XH3
+    Downloaded 5ZOA
+    Downloaded 7CY0
+    Downloaded 7XTR
+    Downloaded 7XTS
+    Downloaded 7XTU
+    Downloaded 8X6V
+    Downloaded 7VVE
+    Downloaded 7YKO
+    Downloaded 8H5K
+    Downloaded 7EOA
+    Downloaded 7Q4H
+    Downloaded 7Q4H
+    Downloaded 7Q4J
+    Downloaded 7Q4J
+    Downloaded 2FX5
+    Downloaded 4EB0
+    Downloaded 6THS
+    Downloaded 6THT
+    Downloaded 7CUV
+    Downloaded 7E31
+    Downloaded 7XRI
+    Downloaded 6AVY
+    Downloaded 5XKS
+    Downloaded 3BF7
+    Downloaded 4MXD
+    Downloaded 8ILT
+    Downloaded 4PSC
+    Downloaded 8SKM
+    Downloaded 8SLJ
+    Downloaded 2WTM
+    Downloaded 3DKR
+    Downloaded 6NY9
+    Downloaded 8FTP
+    Downloaded 4DIU
+    Downloaded 7XRH
+    Downloaded 1R1D
+    Downloaded 1TQH
+    Downloaded 8G0N
+    Downloaded 4F21
+    Downloaded 5DWD
+    Downloaded 3U0V
+    Downloaded 6QGQ
+    Downloaded 6QGN
+    Downloaded 6QGO
+    Downloaded 6QGS
+    Downloaded 1FJ2
+    Downloaded 6AVV
+    Downloaded 6AVW
+    Downloaded 6AVX
+    Downloaded 3CN7
+    Downloaded 5AJH
+    Downloaded 2O2G
+    Downloaded 6BJE
+    Downloaded 1CEX
+    Downloaded 1CUA
+    Downloaded 1CUB
+    Downloaded 1CUF
+    Downloaded 1CUG
+    Downloaded 1CUH
+    Downloaded 1CUI
+    Downloaded 1CUJ
+    Downloaded 1CUU
+    Downloaded 1CUV
+    Downloaded 1CUW
+    Downloaded 1CUX
+    Downloaded 1CUY
+    Downloaded 1CUZ
+    Downloaded 1FFA
+    Downloaded 1FFB
+    Downloaded 1FFC
+    Downloaded 1FFD
+    Downloaded 1FFE
+    Downloaded 1XZA
+    Downloaded 1XZD
+    Downloaded 1XZE
+    Downloaded 1XZF
+    Downloaded 1XZG
+    Downloaded 1XZH
+    Downloaded 1XZI
+    Downloaded 1XZJ
+    Downloaded 1XZK
+    Downloaded 3TRD
+    Downloaded 1BS9
+    Downloaded 1G66
+    Downloaded 2AXE
+    Downloaded 3DCN
+    Downloaded 1AGY
+    Downloaded 1CUS
+    Downloaded 5X88
+    Downloaded 8JCT
+    Downloaded 2CUT
+    Downloaded 7CC4
+    Downloaded 1CUE
+    Downloaded 3GBS
+    Downloaded 3QPA
+    Downloaded 7CY3
+    Downloaded 4OYL
+    Downloaded 4OYY
+    Downloaded 7R1K
+    Downloaded 3QPD
+    Downloaded 1I6W
+    Downloaded 1T2N
+    Downloaded 1T4M
+    Downloaded 3D2A
+    Downloaded 3D2B
+    Downloaded 3D2C
+    Downloaded 3QMM
+    Downloaded 3QZU
+    Downloaded 5CT4
+    Downloaded 5CT8
+    Downloaded 2QXT
+    Downloaded 4ISS
+    Downloaded 4IST
+    Downloaded 6DHV
+    Downloaded 8EWW
+    Downloaded 4GYR
+    Downloaded 6TE4
+    Downloaded 2VYA
+    Downloaded 3QJ8
+    Downloaded 6MRG
+    Downloaded 2WJ1
+    Downloaded 4DO3
+    Downloaded 6KVR
+    Downloaded 4HBP
+    Downloaded 2WAP
+    Downloaded 1MT5
+    Downloaded 3A1I
+    Downloaded 5AC3
+    Downloaded 5EWQ
+    Downloaded 1M21
+    Downloaded 4YJ6
+    Downloaded 4YJI
+    Downloaded 3A2Q
+    Downloaded 8ES6
+    Downloaded 4CP8
+    Downloaded 5H6S
+    Downloaded 2GI3
+    Downloaded 8XAC
+    Downloaded 8WDW
+    Downloaded 6C62
+    Downloaded 6C6G
+    Downloaded 2DC0
+    Downloaded 1O9N
+    Downloaded 1O9O
+    Downloaded 1O9Q
+    Downloaded 1OBI
+    Downloaded 1OBJ
+    Downloaded 1OBK
+    Downloaded 1OBL
+    Downloaded 1OCK
+    Downloaded 4JGG
+    Downloaded 7C29
+    Downloaded 7C2A
+    Downloaded 7C2C
+    Downloaded 7C2D
+    Downloaded 1IVN
+    Downloaded 1J00
+    Downloaded 1JRL
+    Downloaded 3HP4
+    Downloaded 5TIC
+    Downloaded 5TID
+    Downloaded 6LFC
+    Downloaded 6LFB
+    Downloaded 7V1Y
+    Downloaded 7UL6
+    Downloaded 7MDC
+    Downloaded 7MDE
+    Downloaded 7MDF
+    Downloaded 6KSU
+    Downloaded 7U1B
+    Downloaded 7SPN
+    Downloaded 7ULW
+    Downloaded 4IVI
+    Downloaded 4IVK
+    Downloaded 8FEK
+    Downloaded 4LCL
+    Downloaded 3HL9
+    Downloaded 3HLC
+    Downloaded 3HLE
+    Downloaded 7PP3
+    Downloaded 8KEM
+    Downloaded 4GB7
+    Downloaded 4LCM
+    Downloaded 7V21
+    Downloaded 6KJC
+    Downloaded 8J5V
+    Downloaded 6KJD
+    Downloaded 6KJE
+    Downloaded 5GMX
+    Downloaded 8SDN
+    Downloaded 7ATL
+    Downloaded 1WYB
+    Downloaded 1WYC
+    Downloaded 2DCF
+    Downloaded 2E8I
+    Downloaded 2ZLY
+    Downloaded 2ZM0
+    Downloaded 2ZM2
+    Downloaded 2ZM7
+    Downloaded 2ZM8
+    Downloaded 2ZM9
+    Downloaded 2ZMA
+    Downloaded 3VWL
+    Downloaded 3VWM
+    Downloaded 3VWN
+    Downloaded 3VWP
+    Downloaded 3VWQ
+    Downloaded 3VWR
+    Downloaded 6KJH
+    Downloaded 6KJJ
+    Downloaded 6KJQ
+    Downloaded 8RLJ
+    Downloaded 7Y3Z
+    Downloaded 5GKV
+    Downloaded 7TI1
+    Downloaded 3W8K
+    Downloaded 4WBG
+    Downloaded 4NK3
+    Downloaded 5EVL
+    Downloaded 2WZX
+    Downloaded 3S1Y
+    Downloaded 6G9T
+    Downloaded 6K8X
+    Downloaded 6M5H
+    Downloaded 3S4X
+    Downloaded 3WRT
+    Downloaded 3WRZ
+    Downloaded 6NJK
+    Downloaded 5EVI
+    Downloaded 5EVI
+    Downloaded 5EVI
+    Downloaded 5EVI
+    Downloaded 5F1F
+    Downloaded 5F1G
+    Downloaded 5JOC
+    Downloaded 5XHR
+    Downloaded 1GA0
+    Downloaded 5GGW
+    Downloaded 1Q2Q
+    Downloaded 2DNS
+    Downloaded 4XUX
+    Downloaded 5CGS
+    Downloaded 5CGW
+    Downloaded 8CUP
+    Downloaded 8FQR
+    Downloaded 8FQT
+    Downloaded 1BLS
+    Downloaded 1FR1
+    Downloaded 1Y54
+    Downloaded 1ZC2
+    Downloaded 3IWI
+    Downloaded 4NET
+    Downloaded 4QD4
+    Downloaded 5E2G
+    Downloaded 5HAI
+    Downloaded 5W12
+    Downloaded 6N9K
+    Downloaded 6WGQ
+    Downloaded 6X9Y
+    Downloaded 8FQP
+    Downloaded 8FQV
+    Downloaded 1RGY
+    Downloaded 4HEF
+    Downloaded 4U0T
+    Downloaded 4WYY
+    Downloaded 6LC7
+    Downloaded 6WIF
+    Downloaded 8JB7
+    Downloaded 1S6R
+    Downloaded 1ZKJ
+    Downloaded 2Q9M
+    Downloaded 2ZC7
+    Downloaded 4OOY
+    Downloaded 6WHF
+    Downloaded 8DI7
+    Downloaded 1FCM
+    Downloaded 1FSW
+    Downloaded 1I5Q
+    Downloaded 1KVL
+    Downloaded 1L0D
+    Downloaded 1L0E
+    Downloaded 1L0F
+    Downloaded 1PI4
+    Downloaded 2P9V
+    Downloaded 3FKV
+    Downloaded 3IWO
+    Downloaded 3IWQ
+    Downloaded 3IXD
+    Downloaded 3IXG
+    Downloaded 4KEN
+    Downloaded 6I30
+    Downloaded 4X68
+    Downloaded 5E2H
+    Downloaded 3TG9
+    Downloaded 2ZJ9
+    Downloaded 5ZA2
+    Downloaded 5ZA2
+    Downloaded 3OZH
+    Downloaded 7MQN
+    Downloaded 1CEF
+    Downloaded 3WWX
+    Downloaded 1SDE
+    Downloaded 4GDN
+    Downloaded 5TGF
+    Downloaded 4E6X
+    Downloaded 3O3V
+    Downloaded 7ZN6
+    Downloaded 8R7I
+    Downloaded 3PPS
+    Downloaded 3V9E
+    Downloaded 5LWX
+    Downloaded 1GW0
+    Downloaded 2Q9O
+    Downloaded 3DKH
+    Downloaded 6F5K
+    Downloaded 5LWW
+    Downloaded 6KLG
+    Downloaded 5LM8
+    Downloaded 5MHW
+    Downloaded 1ZPU
+    Downloaded 5E9N
+    Downloaded 6TTD
+    Downloaded 5B7E
+    Downloaded 1V10
+    Downloaded 5NQ7
+    Downloaded 5NQ8
+    Downloaded 5YS1
+    Downloaded 7F19
+    Downloaded 3NSY
+    Downloaded 6IM7
+    Downloaded 6IM8
+    Downloaded 6XJ0
+    Downloaded 6EVG
+    Downloaded 3NSC
+    Downloaded 3NSF
+    Downloaded 3QQX
+    Downloaded 1A65
+    Downloaded 1HFU
+    Downloaded 3KW7
+    Downloaded 1GYC
+    Downloaded 1KYA
+    Downloaded 2H5U
+    Downloaded 2HZH
+    Downloaded 3DIV
+    Downloaded 3FPX
+    Downloaded 3PXL
+    Downloaded 5LDU
+    Downloaded 5MEJ
+    Downloaded 5MEW
+    Downloaded 1PF3
+    Downloaded 2QT6
+    Downloaded 6RHH
+    Downloaded 2XYB
+    Downloaded 4A2F
+    Downloaded 5EHF
+    Downloaded 2HRG
+    Downloaded 4A2D
+    Downloaded 4JHU
+    Downloaded 5A7E
+    Downloaded 5ANH
+    Downloaded 6H5Y
+    Downloaded 3T6V
+    Downloaded 5Z1X
+    Downloaded 5B7F
+    Downloaded 3UAA
+    Downloaded 4E9Q
+    Downloaded 4HAK
+    Downloaded 4HAL
+    Downloaded 1KV7
+    Downloaded 9F1T
+    Downloaded 3ZX1
+    Downloaded 6Z0K
+    Downloaded 6XIZ
+    Downloaded 6Z0J
+    Downloaded 2YQB
+    Downloaded 3ZBM
+    Downloaded 3ZIY
+    Downloaded 5OBO
+    Downloaded 6QPV
+    Downloaded 6QPZ
+    Downloaded 6QQ1
+    Downloaded 7QQ2
+    Downloaded 7R2U
+    Downloaded 6WCN
+    Downloaded 6TFD
+    Downloaded 6VOW
+    Downloaded 8QGF
+    Downloaded 3AW5
+    Downloaded 6K3D
+    Downloaded 2DV6
+    Downloaded 2YXV
+    Downloaded 2ZOO
+    Downloaded 6W2K
+    Downloaded 8P4G
+    Downloaded 2XU9
+    Downloaded 4F7K
+    Downloaded 6VOX
+    Downloaded 8R8S
+    Downloaded 3X1F
+    Downloaded 3X1N
+    Downloaded 7QXK
+    Downloaded 7RAB
+    Downloaded 8RFV
+    Downloaded 6THF
+    Downloaded 1BQ5
+    Downloaded 8RFL
+    Downloaded 4E9V
+    Downloaded 8RFS
+    Downloaded 2VN3
+    Downloaded 5B1K
+    Downloaded 5TB7
+    Downloaded 1GS6
+    Downloaded 1GS7
+    Downloaded 1GS8
+    Downloaded 1HAU
+    Downloaded 1NDT
+    Downloaded 1OE1
+    Downloaded 1OE2
+    Downloaded 1WA0
+    Downloaded 1WA1
+    Downloaded 1WAE
+    Downloaded 2BO0
+    Downloaded 2BP0
+    Downloaded 2BP0
+    Downloaded 2BP8
+    Downloaded 2BP8
+    Downloaded 2XWZ
+    Downloaded 2XX0
+    Downloaded 2XX1
+    Downloaded 2XXF
+    Downloaded 2XXG
+    Downloaded 2JFC
+    Downloaded 4CSP
+    Downloaded 5ONX
+    Downloaded 1MZZ
+    Downloaded 1N70
+    Downloaded 1MZY
+    Downloaded 6QPT
+    Downloaded 2DWT
+    Downloaded 1ZV2
+    Downloaded 1KBV
+    Downloaded 5ZL1
+    Downloaded 4M3H
+    Downloaded 6Y4A
+    Downloaded 6YO5
+    Downloaded 6YZD
+    Downloaded 6YZF
+    Downloaded 6YZY
+    Downloaded 3WI9
+    Downloaded 3WKP
+    Downloaded 3WKQ
+    Downloaded 5LHL
+    Downloaded 5MKM
+    Downloaded 5O3K
+    Downloaded 6FDJ
+    Downloaded 6RH9
+    Downloaded 6RHQ
+    Downloaded 6ZIJ
+    Downloaded 6ZIP
+    Downloaded 7PEN
+    Downloaded 6THE
+    Downloaded 3G5W
+    Downloaded 3TAS
+    Downloaded 3GDC
+    Downloaded 3WIA
+    Downloaded 4KNS
+    Downloaded 7PTM
+    Downloaded 6S0O
+    Downloaded 7PES
+    Downloaded 7PFR
+    Downloaded 7PU0
+    Downloaded 7PUH
+    Downloaded 8P9U
+    Downloaded 8P9U
+    Downloaded 8P9V
+    Downloaded 4B2N
+    Downloaded 3S3U
+    Downloaded 3TM1
+    Downloaded 4IHE
+    Downloaded 5XYO
+    Downloaded 5XYP
+    Downloaded 5XYQ
+    Downloaded 5XYS
+    Downloaded 5XYT
+    Downloaded 5Y0L
+    Downloaded 5Y0M
+    Downloaded 7YU0
+    Downloaded 7YU1
+    Downloaded 5O1M
+    Downloaded 4A5T
+    Downloaded 6O1G
+    Downloaded 6I44
+    Downloaded 8FGX
+    Downloaded 5I25
+    Downloaded 5EOD
+    Downloaded 8W20
+    Downloaded 7WQX
+    Downloaded 8JHZ
+    Downloaded 8VGT
+    Downloaded 8S0N
+    Downloaded 7MEQ
+    Downloaded 8S0L
+    Downloaded 9IZN
+    Downloaded 8Y1D
+    Downloaded 8YOY
+    Downloaded 8Y7X
+    Downloaded 1Z8G
+    Downloaded 3T2N
+    Downloaded 6P0P
+    Downloaded 3E0N
+    Downloaded 5LYO
+    Downloaded 3DFJ
+    Downloaded 5TJX
+    Downloaded 8A3Q
+    Downloaded 6TWB
+    Downloaded 3GYL
+    Downloaded 6O1F
+    Downloaded 1O5E
+    Downloaded 7E50
+    Downloaded 4QT8
+    Downloaded 5UGD
+    Downloaded 1BML
+    Downloaded 1BUI
+    Downloaded 5GVT
+    Downloaded 1L4D
+    Downloaded 6Q1U
+    Downloaded 7XYD
+    Downloaded 1L4Z
+    Downloaded 6A8O
+    Downloaded 6D40
+    Downloaded 1DDJ
+    Downloaded 1RJX
+    Downloaded 3UIR
+    Downloaded 1QRZ
+    Downloaded 6D3X
+    Downloaded 6D3Z
+    Downloaded 1CO7
+    Downloaded 1LTO
+    Downloaded 2BM2
+    Downloaded 2F9N
+    Downloaded 2F9O
+    Downloaded 5WI6
+    Downloaded 6AOD
+    Downloaded 8VGK
+    Downloaded 1A0L
+    Downloaded 4NA7
+    Downloaded 4TY6
+    Downloaded 8VIS
+    Downloaded 1EZX
+    Downloaded 1OPH
+    Downloaded 2ZEB
+    Downloaded 1UTJ
+    Downloaded 6T7P
+    Downloaded 1BRU
+    Downloaded 1EAW
+    Downloaded 1M9U
+    Downloaded 2ANW
+    Downloaded 2ANY
+    Downloaded 3BN9
+    Downloaded 3P8F
+    Downloaded 4IS5
+    Downloaded 1B0E
+    Downloaded 1C1M
+    Downloaded 1HAX
+    Downloaded 1SGF
+    Downloaded 2ZGC
+    Downloaded 2ZGJ
+    Downloaded 5F8T
+    Downloaded 1XX9
+    Downloaded 1XXD
+    Downloaded 1ZHM
+    Downloaded 1ZHP
+    Downloaded 1ZHR
+    Downloaded 1ZPZ
+    Downloaded 3BG8
+    Downloaded 3SOR
+    Downloaded 4CRC
+    Downloaded 6TS4
+    Downloaded 1BIT
+    Downloaded 1ZJD
+    Downloaded 1ZLR
+    Downloaded 1ZZZ
+    Downloaded 2ZCH
+    Downloaded 6MRQ
+    Downloaded 7CJ1
+    Downloaded 7N7X
+    Downloaded 1KYN
+    Downloaded 1TON
+    Downloaded 4DGJ
+    Downloaded 1OP0
+    Downloaded 2ASU
+    Downloaded 1F7Z
+    Downloaded 3TGJ
+    Downloaded 2OQ5
+    Downloaded 8H3S
+    Downloaded 9DPF
+    Downloaded 1F5R
+    Downloaded 1FY8
+    Downloaded 3TGK
+    Downloaded 1DLK
+    Downloaded 7PZO
+    Downloaded 1BTP
+    Downloaded 3QK1
+    Downloaded 1FI8
+    Downloaded 1G3B
+    Downloaded 5MS3
+    Downloaded 1EUF
+    Downloaded 1NPM
+    Downloaded 1AU8
+    Downloaded 1FN8
+    Downloaded 1H4W
+    Downloaded 1PPZ
+    Downloaded 1TRN
+    Downloaded 2R9P
+    Downloaded 2RA3
+    Downloaded 4DG4
+    Downloaded 4WWY
+    Downloaded 4WXV
+    Downloaded 5TP0
+    Downloaded 7QE8
+    Downloaded 1A0J
+    Downloaded 1AMH
+    Downloaded 1AN1
+    Downloaded 1ANB
+    Downloaded 1ANC
+    Downloaded 1AND
+    Downloaded 1ANE
+    Downloaded 1AQ7
+    Downloaded 1AVW
+    Downloaded 1BRA
+    Downloaded 1DPO
+    Downloaded 1EZS
+    Downloaded 1FMG
+    Downloaded 1GVL
+    Downloaded 1HJ9
+    Downloaded 1J14
+    Downloaded 1J15
+    Downloaded 1K9O
+    Downloaded 1L2E
+    Downloaded 1NTP
+    Downloaded 1SGT
+    Downloaded 1SLU
+    Downloaded 1SLW
+    Downloaded 1TAW
+    Downloaded 1TRM
+    Downloaded 1V2J
+    Downloaded 1V2K
+    Downloaded 1V2N
+    Downloaded 1V2O
+    Downloaded 1V2Q
+    Downloaded 1V2S
+    Downloaded 1V2U
+    Downloaded 1Y59
+    Downloaded 2D8W
+    Downloaded 2FI4
+    Downloaded 3MYW
+    Downloaded 3PLB
+    Downloaded 3PLK
+    Downloaded 3PWB
+    Downloaded 3UNQ
+    Downloaded 3UNS
+    Downloaded 3UQV
+    Downloaded 3UWI
+    Downloaded 3V0X
+    Downloaded 3VEQ
+    Downloaded 3VFE
+    Downloaded 4B1T
+    Downloaded 4B2A
+    Downloaded 4B2B
+    Downloaded 4B2C
+    Downloaded 4NIV
+    Downloaded 5PTP
+    Downloaded 6DWR
+    Downloaded 6QFG
+    Downloaded 8ADT
+    Downloaded 8D4S
+    Downloaded 9BKF
+    Downloaded 1BZX
+    Downloaded 1HJ8
+    Downloaded 2FMJ
+    Downloaded 2TBS
+    Downloaded 2ZPQ
+    Downloaded 2ZPR
+    Downloaded 2ZPS
+    Downloaded 6QFF
+    Downloaded 1MBQ
+    Downloaded 2EEK
+    Downloaded 2TLD
+    Downloaded 1B0F
+    Downloaded 1H1B
+    Downloaded 1HNE
+    Downloaded 1PPF
+    Downloaded 2RG3
+    Downloaded 6XHZ
+    Downloaded 5MRT
+    Downloaded 5MRR
+    Downloaded 1BOQ
+    Downloaded 1GBA
+    Downloaded 1GBE
+    Downloaded 1GBJ
+    Downloaded 1P01
+    Downloaded 1P09
+    Downloaded 1QQ4
+    Downloaded 3M7T
+    Downloaded 3M7U
+    Downloaded 3URC
+    Downloaded 3URD
+    Downloaded 3URE
+    Downloaded 2SFA
+    Downloaded 2EA3
+    Downloaded 2OUA
+    Downloaded 1HPG
+    Downloaded 2PFE
+    Downloaded 1CSO
+    Downloaded 1SGD
+    Downloaded 1SGC
+    Downloaded 3S6O
+    Downloaded 1Z7A
+    Downloaded 3CL6
+    Successfully downloaded: 1448
+    Failed downloads: 0
+
+
+
+```python
+print(len(set(pdb_ids)))
+```
+
+    1430
+

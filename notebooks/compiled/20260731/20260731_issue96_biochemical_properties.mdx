@@ -1,0 +1,759 @@
+---
+    title: 20260731_issue96_biochemical_properties
+    section: "Dry Lab"
+    path: "/dry-lab/issue/96"
+    navTitle: "Issue 96"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+# PETaDex ORF Biochemical Properties Precompute
+
+> **Author:** Angela Jiang  
+> **Date Started:** 2026-07-01  
+> **Date Finished:** 2026-07-31  
+> **Input:** s3://petadex/logan/petadex.catalytic_orfs.v1.1.fa;
+> `signalp6_orf_predictions` (cleavage sites for secreted ORFs)  
+> **Output:** `orf_biochemical_properties` (PostgreSQL table)
+
+------------------------------------------------------------------------
+
+## 1. Objective
+
+The goal of this pipeline is to precompute sequence-derived biochemical
+properties for every PETaDex catalytic ORF and load them into a
+queryable PostgreSQL table, so downstream analyses can filter and rank
+candidates directly rather than recomputing properties from amino acid
+strings each time. Properties describe the protein that actually exists
+once translation and any signal-peptide cleavage are complete, not an
+artifact of the ORF’s raw coding sequence: for ORFs with a
+SignalP-predicted signal peptide, properties are computed on the mature
+(cleaved) sequence, since the signal peptide is proteolytically removed
+during secretion and is never part of the functional protein.
+
+### 1.1. Place in the Project
+
+Properties like hydrophobicity, isoelectric point, and stability are
+useful first-pass filters when triaging candidate plastic-degrading
+enzymes for wet-lab validation — for example, prioritizing sequences
+that are predicted stable and soluble before committing time to
+expression and assay. This triage is only meaningful if the properties
+describe the molecule that would actually be expressed and assayed: for
+a secreted candidate, that molecule is the mature protein, not the full
+ORF translation. Precomputing these once for the whole corpus means
+every future analysis or notebook can join against this table instead of
+re-running Biopython over the full ORF corpus each time.
+
+This pipeline is downstream of, and depends on, the SignalP6 Pipeline
+having completed and loaded `signalp6_orf_predictions`. The
+mature-sequence step (2.2) reads each secreted ORF’s predicted cleavage
+position from that table. Running this pipeline before SignalP6 finishes
+is still possible — every ORF is simply treated as having no signal
+peptide (full-sequence properties only) until a cleavage-site export is
+supplied.
+
+## 2. Experiment
+
+### 2.0. Install requirements
+
+1.  Biopython (`Bio.SeqUtils.ProtParam`)
+2.  Python 3.9+ with `boto3` and `numpy`
+3.  PostgreSQL client (`psql`) — for the manual cleavage-site export
+    (2.2) and for loading results
+
+### 2.1. Tool selection
+
+Biochemical features are computed with
+`Bio.SeqUtils.ProtParam.ProteinAnalysis`, selected because it computes
+deterministic sequence-derived properties without alignment, structure
+prediction, or trained inference — no GPU and no external database
+lookups are required. Every property below is computed on the **analyzed
+sequence**: the mature (SignalP-cleaved) sequence for ORFs with a
+predicted signal peptide, or the full ORF sequence otherwise (2.2).
+
+| Output column       | Biopython call         | Rationale                                                                                                                                                                                                                                                                                               |
+|------------------------|------------------------|------------------------|
+| `sequence_length`   | `len(sequence)`        | Length of the analyzed sequence. Needed for length filters; paired with `full_sequence_length` (2.5) to recover signal peptide length when relevant.                                                                                                                                                    |
+| `molecular_weight`  | `.molecular_weight()`  | Molecular weight of the analyzed sequence, in Daltons.                                                                                                                                                                                                                                                  |
+| `isoelectric_point` | `.isoelectric_point()` | Predicted pI; relevant to solubility and purification. Signal peptides are enriched for positively charged residues, so computing this on the mature sequence avoids a systematic upward bias for secreted proteins.                                                                                    |
+| `gravy_score`       | `.gravy()`             | Grand average of hydropathicity; relevant to hydrophobicity/solubility. Signal peptides have a strongly hydrophobic core (required for Sec-translocon insertion), so computing this on the full ORF would bias secreted proteins toward appearing more hydrophobic than the mature protein actually is. |
+| `instability_index` | `.instability_index()` | Coarse sequence-derived stability estimate, based on dipeptide composition across the analyzed sequence.                                                                                                                                                                                                |
+| `aromaticity`       | `.aromaticity()`       | Fraction of aromatic residues; potentially relevant to substrate binding. Signal peptides are enriched for aliphatic, not aromatic, hydrophobic residues, so this property is the least sensitive to sequence basis.                                                                                    |
+
+**Why mature sequence, not full ORF, for secreted proteins.** GRAVY and
+isoelectric point are the two properties most affected: both are driven
+by residue composition, and the signal peptide’s composition
+(hydrophobic core, positively charged n-region) differs systematically
+from the mature protein’s. Since secreted ORFs are exactly the
+candidates this project prioritizes for wet-lab work, computing these
+properties on the full ORF would concentrate the largest bias on the
+highest-value subset. Molecular weight and sequence length are computed
+on the analyzed sequence as a natural consequence of the same slicing
+rather than as an independent correctness concern.
+
+**Amino acid alphabet.** ProtParam calculations require the 20 standard
+residues (`ACDEFGHIKLMNPQRSTVWY`). The full ORF is uppercased and
+stripped of terminal stop symbols (`*`) before any slicing; alphabet
+validation then runs on the analyzed sequence (post-slice for mature
+ORFs), so noncanonical residues confined to a removed signal peptide do
+not mark an otherwise-valid mature sequence as invalid. Any remaining
+noncanonical character marks the row `calc_status = invalid_sequence`
+rather than forcing a calculation on ambiguous residues (e.g. `X`).
+
+### 2.2. Export signal peptide cleavage sites from PostgreSQL
+
+This step is manual. `signalp6_orf_predictions` (from the SignalP6
+Pipeline) already contains exactly one row per ORF with a predicted
+signal peptide, with `cleavage_pos` giving the residue after which
+cleavage occurs — no filtering by `top_signal` is needed, since
+OTHER-classified ORFs are never stored in that table.
+
+``` bash
+psql "host=<HOST> port=5432 dbname=petadex user=<USER> sslmode=require" \
+  -c "\copy (
+        SELECT orf_id, cleavage_pos
+        FROM signalp6_orf_predictions
+        WHERE cleavage_pos IS NOT NULL
+      ) TO 'signalp_cleavage_sites.tsv'
+      WITH (FORMAT csv, HEADER true, DELIMITER E'\t');"
+```
+
+`WHERE cleavage_pos IS NOT NULL` excludes the rare SignalP edge case
+where a positive label was returned without a usable cleavage site
+(documented in the SignalP schema). Those ORFs are simply absent from
+the export, and 2.3 treats an absent `orf_id` exactly like “no signal
+peptide” — full-sequence properties, no special-casing required.
+
+At full corpus scale this file has on the order of several million rows
+— the secreted fraction of the full ORF corpus, per the SignalP
+benchmarking (`signalp6_pipeline_methods.md`, §2.1) — a few hundred MB
+uncompressed, gzip-able if convenient. Host, port, and credentials are
+intentionally omitted (managed separately as operational secrets, not
+part of this document).
+
+### 2.3. Stream the ORF FASTA and compute properties
+
+Every PETaDex ORF record uses the following pipe-delimited header:
+
+``` text
+>{orf_id}|{genbank_accession}|{library_id}|{contig_id}|{orf_start}|{orf_end}|{orf_type}
+```
+
+Only the first field is used:
+
+``` python
+orf_id = int(header_first_token.split("|", 1)[0])
+```
+
+All other header fields are ignored; properties are computed from
+sequence alone and keyed by `orf_id`.
+
+The pipeline (`precompute_biochem_resumable.py`, Appendix A) streams the
+FASTA directly from S3 rather than downloading it first:
+
+``` text
+S3 PETaDex ORF FASTA
+  -> streamed record-by-record via boto3
+  -> orf_id looked up against the SignalP cleavage-site export (2.2)
+  -> mature-sequence slice if found, full sequence otherwise
+  -> per-sequence Biopython ProteinAnalysis calculation
+  -> gzip-compressed CSV part files
+  -> manifest/checkpoint JSON
+  -> later PostgreSQL COPY load
+```
+
+No full FASTA or output table is held in memory; one record and one
+output part are processed at a time. Running on an EC2 instance with an
+IAM instance profile (rather than a local SSO session) means credentials
+refresh automatically, so a long-running stream does not depend on a
+session that can expire mid-run.
+
+**Cleavage-site lookup.** The TSV from 2.2 is loaded once at startup
+into two parallel NumPy arrays (`orf_id`, sorted; `cleavage_pos`,
+aligned), rather than a Python dict. At several million entries, a dict
+of boxed Python ints costs on the order of hundreds of MB to over a
+gigabyte of interpreter overhead; two `int64`/`int16` NumPy arrays cost
+roughly 60–80 MB for the same data, and lookup is `O(log n)` via
+`numpy.searchsorted`. If `--cleavage-sites` is omitted, every ORF is
+treated as full-sequence, since there is then no cleavage information to
+apply.
+
+**Mature-sequence slicing.** The full ORF sequence is uppercased and
+stop-symbol-stripped first, establishing the same residue coordinate
+system SignalP itself would have used. If a cleavage position is found
+and it falls strictly within the sequence
+(`0 < cleavage_pos < full_length`), the analyzed sequence becomes
+`full_seq[cleavage_pos:]` and the row is flagged `is_mature = true`. A
+cleavage position that doesn’t fit the sequence bounds (which SignalP’s
+own construction should prevent, but isn’t assumed) falls back to
+full-sequence computation for that ORF and is logged to
+`bad_records.tsv` as `degenerate_cleavage_site` rather than either
+crashing or silently producing a nonsensical slice.
+
+**Sequence cleaning and `calc_status`.** Alphabet validation (2.1) runs
+on the analyzed sequence — mature or full, whichever was selected above.
+If noncanonical residues remain, the row is written with
+`calc_status = invalid_sequence`, the analyzed sequence’s length, and
+null feature values. Otherwise all ProtParam properties are computed and
+the row is written with `calc_status = ok`. This preserves one row per
+ORF and distinguishes “not present” from “present but not computable.”
+
+**Resumability.** Output parts are written atomically: each part is
+written to `*.csv.gz.tmp` and renamed to `*.csv.gz` only once complete.
+A `manifest.json` checkpoint records rows written and status counts
+after each completed part. On `--resume`, the script skips records
+already accounted for in the manifest and continues from the next
+unfinished region — at most one in-progress part needs to be recomputed
+after an interruption. Output part size is set by `--rows-per-file`
+(production: `5,000,000`), balancing checkpoint frequency against file
+count.
+
+Run command:
+
+``` bash
+nohup python precompute_biochem_resumable.py \
+  --fasta s3://petadex/logan/petadex.catalytic_orfs.v1.1.fa \
+  --cleavage-sites ./signalp_cleavage_sites.tsv \
+  --out-dir ./biochem_FULL \
+  --rows-per-file 5000000 \
+  --progress-every 100000 \
+  --resume \
+  > biochem_FULL.nohup.log 2>&1 &
+```
+
+Resuming after interruption uses the same command with the same
+`--out-dir`; the manifest determines where to continue.
+
+### 2.4. Output format
+
+``` text
+biochem_FULL/
+├── manifest.json
+├── bad_records.tsv
+└── parts/
+    ├── orf_biochem_part_000000.csv.gz
+    └── ...
+```
+
+CSV columns:
+
+``` text
+orf_id,sequence_length,molecular_weight,isoelectric_point,gravy_score,instability_index,aromaticity,calc_status,noncanonical_residues,is_mature,full_sequence_length,cleavage_pos_used
+```
+
+Null token: `\N` (matches PostgreSQL `COPY` convention).
+`noncanonical_residues` is populated only for `invalid_sequence` rows.
+`full_sequence_length` and `cleavage_pos_used` are populated only when
+`is_mature = true`; both are `\N` otherwise, since they would be
+redundant with `sequence_length` for the full-sequence case.
+
+Records where `orf_id` cannot be parsed at all (distinct from a valid
+ORF with an invalid sequence) are logged to `bad_records.tsv` (`reason`,
+`header`, `details`) rather than written to a CSV part. The same file
+records `degenerate_cleavage_site` events (2.3).
+
+### 2.5. Create the PostgreSQL schema
+
+``` sql
+CREATE TABLE public.orf_biochemical_properties (
+    orf_id BIGINT PRIMARY KEY,
+    sequence_length INTEGER NOT NULL,
+    molecular_weight REAL,
+    isoelectric_point REAL,
+    gravy_score REAL,
+    instability_index REAL,
+    aromaticity REAL,
+    calc_status TEXT NOT NULL DEFAULT 'ok',
+    noncanonical_residues TEXT,
+    is_mature BOOLEAN NOT NULL DEFAULT false,
+    full_sequence_length INTEGER,
+    cleavage_pos_used SMALLINT,
+
+    CONSTRAINT orf_biochemical_properties_sequence_length_check
+        CHECK (sequence_length > 0),
+
+    CONSTRAINT orf_biochemical_properties_isoelectric_point_check
+        CHECK (isoelectric_point IS NULL OR (isoelectric_point >= 0 AND isoelectric_point <= 14)),
+
+    CONSTRAINT orf_biochemical_properties_aromaticity_check
+        CHECK (aromaticity IS NULL OR (aromaticity >= 0 AND aromaticity <= 1)),
+
+    CONSTRAINT orf_biochemical_properties_calc_status_check
+        CHECK (calc_status IN ('ok', 'invalid_sequence')),
+
+    CONSTRAINT orf_biochemical_properties_status_consistency_check
+        CHECK (
+            (calc_status = 'ok' AND molecular_weight IS NOT NULL AND isoelectric_point IS NOT NULL
+             AND gravy_score IS NOT NULL AND instability_index IS NOT NULL AND aromaticity IS NOT NULL)
+            OR
+            (calc_status = 'invalid_sequence' AND molecular_weight IS NULL AND isoelectric_point IS NULL
+             AND gravy_score IS NULL AND instability_index IS NULL AND aromaticity IS NULL)
+        ),
+
+    -- Mirrors the OTHER-row pattern in signalp6_orf_predictions: fields that
+    -- would be redundant with sequence_length in the common case are left
+    -- NULL rather than duplicated across ~98% of rows.
+    CONSTRAINT orf_biochemical_properties_mature_consistency_check
+        CHECK (
+            (is_mature = false AND full_sequence_length IS NULL AND cleavage_pos_used IS NULL)
+            OR
+            (is_mature = true AND full_sequence_length IS NOT NULL AND cleavage_pos_used IS NOT NULL
+             AND sequence_length = full_sequence_length - cleavage_pos_used)
+        )
+);
+```
+
+| Column                                                                                     | Type            | Rationale                                                                                                                                                                                                                                                       |
+|------------------------|------------------------|------------------------|
+| `orf_id`                                                                                   | `BIGINT`        | Matches `orf_origins.orf_id`; avoids overflow as the corpus grows.                                                                                                                                                                                              |
+| `sequence_length`                                                                          | `INTEGER`       | Length of the analyzed sequence (mature or full; see 2.1).                                                                                                                                                                                                      |
+| `molecular_weight`, `isoelectric_point`, `gravy_score`, `instability_index`, `aromaticity` | `REAL`          | Four-byte float sufficient for all sequence-derived values at this scale.                                                                                                                                                                                       |
+| `calc_status`                                                                              | `TEXT`          | Distinguishes computed vs. intentionally-null rows.                                                                                                                                                                                                             |
+| `noncanonical_residues`                                                                    | `TEXT`          | Auditable record of observed non-standard symbols.                                                                                                                                                                                                              |
+| `is_mature`                                                                                | `BOOLEAN`       | Whether `sequence_length` and the five properties reflect the SignalP-cleaved mature sequence rather than the full ORF.                                                                                                                                         |
+| `full_sequence_length`                                                                     | `INTEGER NULL`  | Original ORF length before cleavage. NULL when `is_mature = false`, since it would equal `sequence_length` there.                                                                                                                                               |
+| `cleavage_pos_used`                                                                        | `SMALLINT NULL` | The `signalp6_orf_predictions.cleavage_pos` value applied. NULL when `is_mature = false`. Kept alongside `full_sequence_length` (rather than only one of the two) so the consistency check can catch a slicing bug rather than merely assume one didn’t happen. |
+
+Indexes are built after bulk load, selected by actual query pattern
+(e.g. `gravy_score`, `sequence_length`, `calc_status`, `is_mature`).
+
+### 2.6. Mature-sequence handling: scope and remaining limitations
+
+This pipeline trusts `signalp6_orf_predictions.cleavage_pos` as ground
+truth and does not re-validate SignalP’s prediction; if SignalP6 is
+rerun and a cleavage position changes, the affected
+`orf_biochemical_properties` rows are not automatically recomputed —
+re-running 2.2–2.3 for the changed subset is a separate, manual step.
+Only the six sequence-derived properties in 2.1 are computed on the
+mature sequence; no other downstream table (e.g. any future structural
+or domain-annotation pipeline) is currently updated to use mature
+coordinates by this pipeline. ORFs with a SignalP-predicted signal
+peptide but a `NULL` cleavage site (2.2) are computed on the full
+sequence, identically to ORFs with no predicted signal peptide at all —
+there is no intermediate “partially trusted” category.
+
+------------------------------------------------------------------------
+
+## Appendix: Pipeline Script
+
+### A. `precompute_biochem_resumable.py`
+
+Streams the FASTA corpus directly from S3, looks up each ORF’s SignalP
+cleavage site (if any) via the manually-exported TSV from 2.2, computes
+ProtParam properties on the resulting mature-or-full sequence, and
+writes resumable gzip-compressed CSV parts.
+
+``` python
+#!/usr/bin/env python3
+
+import argparse
+import csv
+import gzip
+import io
+import json
+import math
+import re
+import time
+from pathlib import Path
+from urllib.parse import urlparse
+
+import boto3
+import numpy as np
+from Bio.SeqUtils.ProtParam import ProteinAnalysis
+
+STANDARD_AA = set("ACDEFGHIKLMNPQRSTVWY")
+HEADER_RE = re.compile(r"^>(\S+)")
+
+COLUMNS = [
+    "orf_id",
+    "sequence_length",
+    "molecular_weight",
+    "isoelectric_point",
+    "gravy_score",
+    "instability_index",
+    "aromaticity",
+    "calc_status",
+    "noncanonical_residues",
+    "is_mature",
+    "full_sequence_length",
+    "cleavage_pos_used",
+]
+
+
+def parse_orf_id(header_line: str) -> int:
+    """
+    PETaDex header:
+    >{orf_id}|{genbank_accession}|{library_id}|{contig_id}|{orf_start}|{orf_end}|{orf_type}
+    """
+    m = HEADER_RE.match(header_line.strip())
+    if not m:
+        raise ValueError(f"Bad FASTA header: {header_line[:120]}")
+    first_token = m.group(1)
+    orf_id_text = first_token.split("|", 1)[0]
+    return int(orf_id_text)
+
+
+def load_cleavage_lookup(path):
+    """
+    Load a two-column TSV (orf_id, cleavage_pos) manually exported from
+    signalp6_orf_predictions (see methods 2.2) into two parallel,
+    orf_id-sorted NumPy arrays.
+
+    At several million rows this is roughly 60-80 MB total, versus several
+    hundred MB to over a gigabyte for a Python dict of boxed ints holding
+    the same data. Lookup is O(log n) via numpy.searchsorted.
+    """
+    orf_ids = []
+    positions = []
+    opener = gzip.open if str(path).endswith(".gz") else open
+    with opener(path, "rt", encoding="utf-8") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        for row in reader:
+            orf_ids.append(int(row["orf_id"]))
+            positions.append(int(row["cleavage_pos"]))
+
+    orf_id_arr = np.asarray(orf_ids, dtype=np.int64)
+    pos_arr = np.asarray(positions, dtype=np.int32)
+    order = np.argsort(orf_id_arr, kind="stable")
+    return orf_id_arr[order], pos_arr[order]
+
+
+def lookup_cleavage_pos(orf_id_arr, pos_arr, orf_id: int):
+    if orf_id_arr is None or len(orf_id_arr) == 0:
+        return None
+    idx = np.searchsorted(orf_id_arr, orf_id)
+    if idx < len(orf_id_arr) and orf_id_arr[idx] == orf_id:
+        return int(pos_arr[idx])
+    return None
+
+
+def clean_full_sequence(seq_raw: str) -> str:
+    """Uppercase and strip terminal stop symbols from the full ORF sequence,
+    establishing the same residue coordinate system SignalP itself uses,
+    before any mature-sequence slicing is attempted."""
+    return seq_raw.strip().upper().replace("*", "")
+
+
+def select_analyzed_sequence(full_seq: str, cleavage_pos):
+    """
+    Decide which sequence ProtParam should actually run on.
+
+    Returns (analyzed_seq, is_mature, full_length_for_row, cleavage_pos_for_row,
+    degenerate: bool). A degenerate cleavage_pos (outside the sequence bounds)
+    falls back to full-sequence analysis rather than crashing or slicing
+    into nonsense; the caller logs this case.
+    """
+    if cleavage_pos is None:
+        return full_seq, False, None, None, False
+
+    full_length = len(full_seq)
+    if cleavage_pos <= 0 or cleavage_pos >= full_length:
+        return full_seq, False, None, None, True
+
+    mature_seq = full_seq[cleavage_pos:]
+    return mature_seq, True, full_length, cleavage_pos, False
+
+
+def compute_props(seq: str):
+    p = ProteinAnalysis(seq)
+    return {
+        "sequence_length": len(seq),
+        "molecular_weight": p.molecular_weight(),
+        "isoelectric_point": p.isoelectric_point(),
+        "gravy_score": p.gravy(),
+        "instability_index": p.instability_index(),
+        "aromaticity": p.aromaticity(),
+    }
+
+
+def fmt_float(x):
+    if x is None:
+        return r"\N"
+    if isinstance(x, float) and (math.isnan(x) or math.isinf(x)):
+        return r"\N"
+    return f"{x:.6f}"
+
+
+def fmt_int_or_null(x):
+    return r"\N" if x is None else str(x)
+
+
+def open_fasta_stream(source: str):
+    """
+    Open a FASTA source as a text-mode line iterator.
+    Supports local paths and s3:// URIs. S3 objects are streamed directly
+    (not downloaded to disk) via a boto3 StreamingBody wrapped in
+    TextIOWrapper. Requires credentials available to boto3 (an EC2 instance
+    profile is recommended for long-running streams, since instance
+    credentials auto-refresh).
+    """
+    if source.startswith("s3://"):
+        parsed = urlparse(source)
+        bucket = parsed.netloc
+        key = parsed.path.lstrip("/")
+        s3 = boto3.client("s3")
+        obj = s3.get_object(Bucket=bucket, Key=key)
+        return io.TextIOWrapper(obj["Body"], encoding="utf-8", errors="replace")
+    return open(source, "rt", encoding="utf-8", errors="replace")
+
+
+def fasta_records(source: str):
+    handle = open_fasta_stream(source)
+    try:
+        header = None
+        chunks = []
+        for line in handle:
+            if line.startswith(">"):
+                if header is not None:
+                    yield header, "".join(chunks)
+                header = line.rstrip("\n")
+                chunks = []
+            else:
+                chunks.append(line.strip())
+        if header is not None:
+            yield header, "".join(chunks)
+    finally:
+        handle.close()
+
+
+def load_manifest(manifest_path: Path):
+    if manifest_path.exists():
+        with manifest_path.open("rt") as f:
+            return json.load(f)
+    return None
+
+
+def save_manifest(manifest_path: Path, manifest: dict):
+    tmp_path = manifest_path.with_suffix(".json.tmp")
+    with tmp_path.open("wt") as f:
+        json.dump(manifest, f, indent=2)
+    tmp_path.replace(manifest_path)
+
+
+def write_part(out_dir: Path, part_index: int, rows):
+    parts_dir = out_dir / "parts"
+    parts_dir.mkdir(parents=True, exist_ok=True)
+
+    final_path = parts_dir / f"orf_biochem_part_{part_index:06d}.csv.gz"
+    tmp_path = parts_dir / f"orf_biochem_part_{part_index:06d}.csv.gz.tmp"
+
+    if final_path.exists():
+        return final_path
+
+    with gzip.open(tmp_path, "wt", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(COLUMNS)
+        writer.writerows(rows)
+
+    tmp_path.replace(final_path)
+    return final_path
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--fasta", required=True, help="Local path or s3:// URI")
+    ap.add_argument("--out-dir", required=True)
+    ap.add_argument(
+        "--cleavage-sites",
+        default=None,
+        help=(
+            "Local TSV (orf_id, cleavage_pos), manually exported from "
+            "signalp6_orf_predictions (methods 2.2). If omitted, every ORF "
+            "is treated as full-sequence."
+        ),
+    )
+    ap.add_argument("--rows-per-file", type=int, default=5_000_000)
+    ap.add_argument("--progress-every", type=int, default=100_000)
+    ap.add_argument("--max-records", type=int, default=None)
+    ap.add_argument("--resume", action="store_true")
+    args = ap.parse_args()
+
+    fasta_source = args.fasta
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    parts_dir = out_dir / "parts"
+    parts_dir.mkdir(exist_ok=True)
+
+    manifest_path = out_dir / "manifest.json"
+    bad_path = out_dir / "bad_records.tsv"
+
+    # Clean abandoned temp files from interrupted runs.
+    for tmp in parts_dir.glob("*.tmp"):
+        tmp.unlink()
+
+    orf_id_arr, pos_arr = (None, None)
+    if args.cleavage_sites:
+        orf_id_arr, pos_arr = load_cleavage_lookup(args.cleavage_sites)
+        print(f"[start] cleavage_sites entries loaded: {len(orf_id_arr):,}", flush=True)
+    else:
+        print("[start] no --cleavage-sites given; all ORFs treated as full-sequence", flush=True)
+
+    old_manifest = load_manifest(manifest_path) if args.resume else None
+    completed_rows = int(old_manifest.get("rows_written", 0)) if old_manifest else 0
+    completed_parts = int(old_manifest.get("files_written", 0)) if old_manifest else 0
+
+    stats = {
+        "source_fasta": fasta_source,
+        "cleavage_sites_source": args.cleavage_sites,
+        "rows_per_file": args.rows_per_file,
+        "records_seen_total_this_run": 0,
+        "records_skipped_due_to_resume": completed_rows,
+        "rows_written": completed_rows,
+        "ok_rows": int(old_manifest.get("ok_rows", 0)) if old_manifest else 0,
+        "mature_rows": int(old_manifest.get("mature_rows", 0)) if old_manifest else 0,
+        "invalid_sequence_rows": int(old_manifest.get("invalid_sequence_rows", 0)) if old_manifest else 0,
+        "degenerate_cleavage_rows": int(old_manifest.get("degenerate_cleavage_rows", 0)) if old_manifest else 0,
+        "parse_error_rows": int(old_manifest.get("parse_error_rows", 0)) if old_manifest else 0,
+        "files_written": completed_parts,
+        "start_time": time.time(),
+        "resume": bool(old_manifest),
+    }
+
+    print(f"[start] fasta={fasta_source}", flush=True)
+    print(f"[start] out_dir={out_dir}", flush=True)
+    print(f"[start] resume={bool(old_manifest)} completed_rows={completed_rows:,}", flush=True)
+
+    if not bad_path.exists() or not old_manifest:
+        with bad_path.open("wt") as bad:
+            bad.write("reason\theader\tdetails\n")
+
+    current_rows = []
+    part_index = completed_parts
+    processed_index = 0
+
+    with bad_path.open("at") as bad:
+        for header, seq_raw in fasta_records(fasta_source):
+            if args.max_records is not None and processed_index >= args.max_records:
+                break
+
+            processed_index += 1
+            stats["records_seen_total_this_run"] += 1
+
+            if processed_index <= completed_rows:
+                if processed_index % args.progress_every == 0:
+                    print(f"[resume-skip] skipped={processed_index:,}/{completed_rows:,}", flush=True)
+                continue
+
+            try:
+                orf_id = parse_orf_id(header)
+                full_seq = clean_full_sequence(seq_raw)
+
+                if len(full_seq) == 0:
+                    raise ValueError("empty_sequence")
+
+                cleavage_pos = lookup_cleavage_pos(orf_id_arr, pos_arr, orf_id)
+                (
+                    analyzed_seq,
+                    is_mature,
+                    full_length_for_row,
+                    cleavage_pos_for_row,
+                    degenerate,
+                ) = select_analyzed_sequence(full_seq, cleavage_pos)
+
+                if degenerate:
+                    stats["degenerate_cleavage_rows"] += 1
+                    safe_header = header.replace("\t", " ")[:300]
+                    bad.write(
+                        f"degenerate_cleavage_site\t{safe_header}\t"
+                        f"orf_id={orf_id} cleavage_pos={cleavage_pos} "
+                        f"full_length={len(full_seq)}\n"
+                    )
+
+                if is_mature:
+                    stats["mature_rows"] += 1
+
+                invalid = sorted(set(analyzed_seq) - STANDARD_AA)
+
+                if invalid:
+                    row = [
+                        orf_id, len(analyzed_seq), r"\N", r"\N", r"\N", r"\N", r"\N",
+                        "invalid_sequence", "".join(invalid),
+                        "true" if is_mature else "false",
+                        fmt_int_or_null(full_length_for_row),
+                        fmt_int_or_null(cleavage_pos_for_row),
+                    ]
+                    stats["invalid_sequence_rows"] += 1
+                else:
+                    props = compute_props(analyzed_seq)
+                    row = [
+                        orf_id,
+                        props["sequence_length"],
+                        fmt_float(props["molecular_weight"]),
+                        fmt_float(props["isoelectric_point"]),
+                        fmt_float(props["gravy_score"]),
+                        fmt_float(props["instability_index"]),
+                        fmt_float(props["aromaticity"]),
+                        "ok", "",
+                        "true" if is_mature else "false",
+                        fmt_int_or_null(full_length_for_row),
+                        fmt_int_or_null(cleavage_pos_for_row),
+                    ]
+                    stats["ok_rows"] += 1
+
+                current_rows.append(row)
+                stats["rows_written"] += 1
+
+            except Exception as e:
+                stats["parse_error_rows"] += 1
+                safe_header = header.replace("\t", " ")[:300]
+                bad.write(f"parse_error\t{safe_header}\t{repr(e)}\n")
+
+            if len(current_rows) >= args.rows_per_file:
+                final_path = write_part(out_dir, part_index, current_rows)
+                part_index += 1
+                current_rows = []
+
+                stats["files_written"] = part_index
+                stats["elapsed_sec"] = time.time() - stats["start_time"]
+                stats["records_per_sec_this_run"] = (
+                    stats["records_seen_total_this_run"] / stats["elapsed_sec"]
+                    if stats["elapsed_sec"] else None
+                )
+                save_manifest(manifest_path, stats)
+
+                print(
+                    f"[part-complete] {final_path} "
+                    f"rows_written={stats['rows_written']:,} "
+                    f"ok={stats['ok_rows']:,} "
+                    f"mature={stats['mature_rows']:,} "
+                    f"invalid={stats['invalid_sequence_rows']:,} "
+                    f"degenerate={stats['degenerate_cleavage_rows']:,} "
+                    f"errors={stats['parse_error_rows']:,}",
+                    flush=True,
+                )
+
+            if processed_index % args.progress_every == 0:
+                elapsed = time.time() - stats["start_time"]
+                rate = stats["records_seen_total_this_run"] / elapsed if elapsed else 0
+                print(
+                    f"[progress] records_seen_this_run={stats['records_seen_total_this_run']:,} "
+                    f"global_position={processed_index:,} "
+                    f"rows_written={stats['rows_written']:,} "
+                    f"rate_this_run={rate:,.1f}/sec",
+                    flush=True,
+                )
+
+    if current_rows:
+        final_path = write_part(out_dir, part_index, current_rows)
+        part_index += 1
+        stats["files_written"] = part_index
+        print(f"[final-part-complete] {final_path}", flush=True)
+
+    stats["elapsed_sec"] = time.time() - stats["start_time"]
+    stats["records_per_sec_this_run"] = (
+        stats["records_seen_total_this_run"] / stats["elapsed_sec"]
+        if stats["elapsed_sec"] else None
+    )
+    stats["completed"] = True
+    save_manifest(manifest_path, stats)
+
+    print("[complete]", flush=True)
+    print(json.dumps(stats, indent=2), flush=True)
+
+
+if __name__ == "__main__":
+    main()
+```

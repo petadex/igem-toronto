@@ -1,0 +1,196 @@
+---
+    title: 260516_issue76_pazy_scraper
+    section: "Dry Lab"
+    path: "/dry-lab/issue/76"
+    navTitle: "Issue 76"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+## Pazy Interactive Literature Scraper
+
+Lead     : `Aditya Ghosh`
+
+Issue    : [Github Issue #](https://github.com/petadex/igem-toronto/issues/) (Interactive Literature Extraction)
+
+Start    : `2026-05-30`
+
+Complete : `2026-05-30`
+
+Files    : `~/igem-toronto/files/260530_issue_pazy_scraper/` (local working directory for active analysis and intermediate outputs)
+
+S3 files : `s3://petadex/pazy_scraper/` (remote archive for final outputs shared with team)
+
+---
+
+### Data Accessed: 2026-05-12
+```bash
+# api used to pull input data
+# https://api.pazy.eu/api/literature/
+
+## Introduction
+
+This notebook processes a JSON target list of papers and utilizes `undetected_chromedriver` to interactively scrape text for the PAZY database. 
+
+## Objectives
+
+1. Load a target list of unretrieved DOIs from `input_paper_data.json`.
+2. Automate browser navigation to publisher endpoints using stealth Selenium techniques.
+3. Provide a manual override interface in the Jupyter terminal to bypass CAPTCHAs.
+4. Continuously save extracted text to `scraped_texts.json` to prevent data loss upon disconnection.
+
+---
+
+## Materials and Methods
+
+### System Initialization
+
+Environment requires standard data science libraries and specific browser automation tools:
+* Python 3.11
+* `undetected-chromedriver`
+* `selenium`
+
+### Data Initialization
+
+Input data is sourced from the upstream identifier mapping pipeline.
+
+```bash
+# Accessed: 2026-05-12
+# Input JSON must be present in the working directory.
+
+
+```python
+import json
+import os
+import time
+import requests
+from selenium.webdriver.common.by import By
+import undetected_chromedriver as uc
+
+# Define your target API and local save file
+PAZY_API_URL = 'https://api.pazy.eu/api/literature/'
+save_file = 'scraped_texts.json'
+```
+
+
+```python
+# Fetch the live target papers directly from the Pazy API
+print("Fetching target literature from Pazy API...")
+try:
+    response = requests.get(PAZY_API_URL, timeout=15)
+    response.raise_for_status()
+    paper_data = response.json()
+    print(f"Successfully loaded {len(paper_data)} target papers directly from the server.")
+except Exception as e:
+    print(f"Error fetching data from API: {e}")
+    paper_data = []
+
+# Load previous progress so we pick up exactly where we left off
+scraped_results = {}
+if os.path.exists(save_file):
+    with open(save_file, 'r', encoding='utf-8-sig') as f:
+        scraped_results = json.load(f)
+        print(f"Loaded {len(scraped_results)} previously scraped papers. Resuming...")
+```
+
+
+```python
+for paper in paper_data:
+    paper_id = str(paper.get("id"))
+    doi_url = paper.get("doi")
+    
+    # Validate the DOI exists
+    if not doi_url or str(doi_url).strip().lower() == "null":
+        continue
+
+    # Skip if already successfully scraped in a previous run
+    if paper_id in scraped_results:
+        continue
+
+    print("\n" + "*"*50)
+    print(f"Loading ID: {paper_id}")
+    print(f"Title:      {paper.get('title')}")
+    print(f"DOI:        {doi_url}")
+    print("*"*50)
+    
+    # Generate a fresh ChromeOptions object for this specific session
+    options = uc.ChromeOptions()
+    driver = uc.Chrome(options=options)
+    
+    try:
+        driver.get(doi_url)
+        time.sleep(3)
+        
+        print("Browser loaded. Please verify the page.")
+        user_choice = input("Press ENTER to auto-scrape, 'N' for manual paste or 'SKIP' to abandon: ").strip().upper()
+        
+        if user_choice == 'SKIP':
+            raise Exception("User manually skipped this article.")
+            
+        elif user_choice == 'N':
+            print("\n[MANUAL MODE ACTIVATED]")
+            print("1. Copy the text from the browser.")
+            print("2. Paste it directly into this input box.")
+            print("3. Type the word DONE on a new line and press Enter.\n")
+            
+            manual_lines = []
+            while True:
+                line = input()
+                if line.strip().upper() == 'DONE':
+                    break
+                manual_lines.append(line)
+            
+            clean_text = '\n'.join(manual_lines)
+            
+        else:
+            # Native Selenium text extraction
+            body_element = driver.find_element(By.TAG_NAME, "body")
+            clean_text = body_element.text
+        
+        # Save successful text
+        scraped_results[paper_id] = clean_text
+        
+        with open(save_file, 'w', encoding='utf-8') as f:
+            json.dump(scraped_results, f, ensure_ascii=False, indent=4)
+            
+        print(f"Success! Saved {len(clean_text)} characters for ID {paper_id}.")
+        
+    except Exception as e:
+        print(f"Failed or Skipped ID {paper_id}. Error: {e}")
+        
+        # Save a highly visible placeholder tag in your JSON dictionary
+        scraped_results[paper_id] = f"[FAILED TO SCRAPE] ERROR: {e}"
+        
+        with open(save_file, 'w', encoding='utf-8') as f:
+            json.dump(scraped_results, f, ensure_ascii=False, indent=4)
+            
+    finally:
+        driver.quit()
+        time.sleep(1)
+
+print("\nPipeline complete!")
+```
+
+## Results & Discussion
+
+The automated literature analysis successfully evaluated 214 target documents to determine their relevance to plastic degradation. By cross-referencing title semantics with scraped full-text contents, the dataset was categorized into actionable tiers.
+
+**Key metric**: 196 / 214 items (91.5%) were confirmed as relevant to plastic degradation.
+
+**Breakdown by category**:
+* **Definitely Plastic**: 133 papers (62%). These explicitly contained plastic-related keywords directly in their titles. (Note: 125 were confirmed via text extraction, and 8 were classified by title alone due to scrape failures).
+* **Probably Plastic / Related**: 63 papers (29.5%). While their titles did not explicitly mention plastics, the automated text scraper found plastic-related terminology within the body/abstract.
+* **Unrelated**: 10 papers (4.6%). These documents lacked plastic keywords in both the title and the extracted text.
+* **Requires Manual Review**: 8 papers (3.7%). These lacked plastic keywords in the title and failed the text extraction phase, requiring human-in-the-loop verification.
+
+**Observations**:
+* The scraping pipeline achieved a 92.5% text-extraction success rate (retrieving text for 198 out of 214 papers).
+* Relying purely on title semantics would have missed 63 highly relevant papers, proving the necessity of the full-text extraction pipeline for this dataset.
+* Only 10 papers were definitively ruled out, indicating that the initial target DOI list was already highly enriched for relevant proteomics literature.
+
+**Follow-up questions**:
+* Are the 10 "Unrelated" papers true negatives, or do they use highly specific, non-standard nomenclature for plastics?
+* Can the 16 papers that failed the automated text scrape be manually rescued using the Interactive Scraper Notebook override?

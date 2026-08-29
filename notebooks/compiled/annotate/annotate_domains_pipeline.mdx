@@ -1,0 +1,1071 @@
+---
+    title: annotate_domains_pipeline
+    section: "Dry Lab"
+    path: "/dry-lab/issue/domains"
+    navTitle: "Issue domains"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+# Annotate Domains
+
+**Lead**: `Nino Saeki / NSaeki1103`  
+**Issue**: [#12 — Novel Domain Discovery pt1.](https://github.com/petadex/igem-toronto/issues/12)  
+**Start**: `2026-03-30`  
+**Complete**: `2026-06-28`
+
+**Local working directory**: `~/igem-toronto/files/YYMMDD_issue59_annotate_domains/`  
+**S3 archive**: `s3://petadex/annotate_domains/`
+
+---
+
+## Introduction
+
+The PETadex family-representative dataset contains accession identifiers and HMM-extracted regions rather than complete protein open reading frames (ORFs). Domain annotation and structural novelty analysis should be performed on complete ORF sequences whenever possible because truncated representatives can omit neighboring domains, distort domain boundaries, and produce fragments that appear novel only because the original sequence was incomplete.
+
+KEY:
+
+This pipeline maps every family-representative accession to its corresponding `orf_id` in the PostgreSQL `nr_catalytic_orfs` table, retrieves the complete ORF sequence from the large catalytic-ORF FASTA archive, annotates known regions using PETadex HMMs and InterProScan, removes annotated regions, and filters the remaining candidate fragments for minimum length, excessive low complexity, excessive predicted disorder, invalid residues, and redundancy. The final products are a filtered FASTA file and a metadata CSV containing the provenance and filtering history of every retained sequence.
+
+## Objectives
+
+1. Recover complete ORF sequences for all available family-representative accessions.
+2. Remove regions already explained by PETadex HMMs or InterProScan signatures.
+3. Produce a quality-controlled, nonredundant candidate-domain dataset suitable for folding and TED/FoldClass novelty analysis.
+
+---
+
+## Final outputs
+
+- `final_filtered_candidates.fa` — final representative sequence dataset.
+- `final_filtered_candidates.csv` — metadata, coordinates, filter metrics, and cluster assignments.
+- `pipeline_counts.csv` — sequence counts after every processing stage.
+- `unmapped_accessions.csv` — accessions not found in PostgreSQL.
+- `missing_full_orfs.csv` — mapped ORFs not found in the source FASTA.
+
+## 1. System Initialization
+
+This notebook is designed for an Ubuntu EC2 instance or comparable Linux system. It assumes:
+
+- AWS CLI access to public PETadex objects using `--no-sign-request`.
+- Network access to the PostgreSQL database containing `nr_catalytic_orfs`.
+- HMMER for PETadex HMM searches.
+- InterProScan for broad domain annotation.
+- MMseqs2 for sequence clustering/dereplication.
+- NCBI BLAST+ `segmasker` for low-complexity measurement.
+- Python 3.10+ with `pandas`, `biopython`, `psycopg2-binary`, `numpy`, and `metapredict`.
+
+Record exact software versions in the output log before processing.
+
+
+```python
+# Run once if the software is not already installed.
+# The apt and conda commands may need to be adapted to the VM image.
+
+# !sudo apt-get update
+# !sudo apt-get install -y awscli hmmer ncbi-blast+ parallel
+# !python -m pip install --upgrade pandas biopython numpy psycopg2-binary metapredict
+
+# Confirm versions
+import sys, subprocess, shutil, platform
+
+print("Python:", sys.version)
+print("Platform:", platform.platform())
+
+for executable, args in [
+    ("aws", ["--version"]),
+    ("hmmsearch", ["-h"]),
+    ("segmasker", ["-version"]),
+    ("mmseqs", ["version"]),
+]:
+    path = shutil.which(executable)
+    print(f"{executable}: {path or 'NOT FOUND'}")
+    if path:
+        result = subprocess.run(
+            [executable, *args],
+            text=True,
+            capture_output=True,
+            check=False
+        )
+        first_line = (result.stdout or result.stderr).splitlines()[:1]
+        print(" ", first_line[0] if first_line else "version unavailable")
+```
+
+## 2. Configuration
+
+Edit only this cell when moving the pipeline to a different machine. Database passwords are read from environment variables rather than written into the notebook.
+
+
+```python
+from pathlib import Path
+import os
+
+# ---------- Project directories ----------
+WORKDIR = Path.home() / "igem-toronto/files/260713_issue59_annotate_domains"
+INPUT_DIR = WORKDIR / "input"
+INTERMEDIATE_DIR = WORKDIR / "intermediate"
+OUTPUT_DIR = WORKDIR / "output"
+LOG_DIR = WORKDIR / "logs"
+
+for directory in [WORKDIR, INPUT_DIR, INTERMEDIATE_DIR, OUTPUT_DIR, LOG_DIR]:
+    directory.mkdir(parents=True, exist_ok=True)
+
+# ---------- Source data ----------
+ACCESSION_CSV_S3 = "s3://petadex/esm_embeddings/family_representatives_accessions.csv"
+FULL_ORF_FASTA_S3 = "s3://petadex/logan/petadex.catalytic_orfs.v1.1.fa"
+# Alternate source used previously:
+# FULL_ORF_FASTA_URL = "https://petadexstorage.blob.core.windows.net/petadex-orf-fastaa/blastnr_pazy.catalytic_orfs.fa"
+
+ACCESSION_CSV = INPUT_DIR / "family_representatives_accessions.csv"
+ACCESSION_ORF_MAP = INTERMEDIATE_DIR / "accessions_with_orf_ids.csv"
+FULL_ORF_FASTA = INTERMEDIATE_DIR / "matched_full_orfs.fa"
+
+# ---------- PostgreSQL ----------
+DB_HOST = os.environ.get("PETADEX_DB_HOST", "")
+DB_PORT = int(os.environ.get("PETADEX_DB_PORT", "5432"))
+DB_NAME = os.environ.get("PETADEX_DB_NAME", "")
+DB_USER = os.environ.get("PETADEX_DB_USER", "")
+DB_PASSWORD = os.environ.get("PETADEX_DB_PASSWORD", "")
+
+DB_TABLE = "nr_catalytic_orfs"
+DB_ACCESSION_COLUMN = "accession"
+DB_ORF_ID_COLUMN = "orf_id"
+
+# In the original family representative CSV, Python row[3] was the working
+# accession field. Set this to a column name after inspecting the CSV, or use 3.
+ACCESSION_COLUMN = 3
+
+# ---------- Annotation tools ----------
+PETADEX_HMM_DIR = INPUT_DIR / "pazy_hmms"
+PETADEX_DOMTBLOUT = INTERMEDIATE_DIR / "petadex_hits.domtblout"
+
+INTERPROSCAN_DIR = Path.home() / "interproscan"
+INTERPROSCAN_EXE = INTERPROSCAN_DIR / "interproscan.sh"
+INTERPRO_CHUNK_DIR = INTERMEDIATE_DIR / "interpro_chunks"
+INTERPRO_OUTPUT_DIR = INTERMEDIATE_DIR / "interpro_outputs"
+INTERPRO_COMBINED_TSV = INTERMEDIATE_DIR / "interproscan_combined.tsv"
+
+# ---------- Filtering thresholds ----------
+MIN_FRAGMENT_LENGTH = 40
+MAX_FRAGMENT_LENGTH = 1000
+MAX_LOW_COMPLEXITY_FRACTION = 0.30
+MAX_DISORDER_FRACTION = 0.50
+MAX_INVALID_RESIDUE_FRACTION = 0.00
+
+# MMseqs2 clustering values used in the earlier analysis:
+MIN_SEQUENCE_IDENTITY = 0.90
+MIN_ALIGNMENT_COVERAGE = 0.80
+MMSEQS_COVERAGE_MODE = 0
+MMSEQS_THREADS = max(1, os.cpu_count() or 1)
+
+print("Working directory:", WORKDIR)
+```
+
+## 3. Data Initialization
+
+### 3.1 Download the family-representative accession table
+
+The source CSV contains family representative identifiers. It does **not** contain complete ORF sequences; the relevant accession field was previously found at Python index `3`.
+
+
+```python
+import subprocess
+
+if not ACCESSION_CSV.exists():
+    subprocess.run(
+        [
+            "aws", "s3", "cp",
+            ACCESSION_CSV_S3,
+            str(ACCESSION_CSV),
+            "--no-sign-request"
+        ],
+        check=True
+    )
+
+print(f"Downloaded: {ACCESSION_CSV}")
+print(f"Size: {ACCESSION_CSV.stat().st_size / 1e6:.2f} MB")
+```
+
+
+```python
+import pandas as pd
+
+accession_raw = pd.read_csv(ACCESSION_CSV)
+print("Shape:", accession_raw.shape)
+display(accession_raw.head())
+print("Columns:")
+for i, column in enumerate(accession_raw.columns):
+    print(i, repr(column))
+```
+
+### 3.2 Normalize and validate accession identifiers
+
+This cell extracts the accession column, removes blanks, strips FASTA-style prefixes, and preserves a unique accession list. Examples are printed before any database query so an incorrect column can be caught early.
+
+
+```python
+import re
+
+def clean_accession(value):
+    if pd.isna(value):
+        return None
+    value = str(value).strip()
+    if not value:
+        return None
+    value = value.lstrip(">")
+    # Handle values embedded in pipe-delimited FASTA headers.
+    fields = value.split("|")
+    wp_like = next((f for f in fields if re.fullmatch(r"[A-Z]{1,5}_?\d+(?:\.\d+)?", f)), None)
+    return wp_like or value
+
+if isinstance(ACCESSION_COLUMN, int):
+    accession_series = accession_raw.iloc[:, ACCESSION_COLUMN]
+    selected_column_name = accession_raw.columns[ACCESSION_COLUMN]
+else:
+    accession_series = accession_raw[ACCESSION_COLUMN]
+    selected_column_name = ACCESSION_COLUMN
+
+accessions = (
+    accession_series
+    .map(clean_accession)
+    .dropna()
+    .drop_duplicates()
+    .reset_index(drop=True)
+    .to_frame(name="accession")
+)
+
+print("Selected source column:", selected_column_name)
+print("Unique cleaned accessions:", len(accessions))
+display(accessions.head(20))
+
+assert len(accessions) > 0, "No accessions were extracted."
+assert accessions["accession"].str.len().gt(0).all()
+```
+
+## 4. Map accessions to ORF IDs
+
+The mapping is read from PostgreSQL in batches to avoid an oversized `IN (...)` query. The table and column names are configurable because database schemas may differ between deployments.
+
+Before running this section, set the following environment variables in the shell:
+
+```bash
+export PETADEX_DB_HOST="..."
+export PETADEX_DB_NAME="..."
+export PETADEX_DB_USER="..."
+export PETADEX_DB_PASSWORD="..."
+```
+
+
+```python
+import psycopg2
+from psycopg2 import sql
+from psycopg2.extras import execute_values
+
+def batched(values, batch_size):
+    for start in range(0, len(values), batch_size):
+        yield values[start:start + batch_size]
+
+required_db_values = {
+    "PETADEX_DB_HOST": DB_HOST,
+    "PETADEX_DB_NAME": DB_NAME,
+    "PETADEX_DB_USER": DB_USER,
+    "PETADEX_DB_PASSWORD": DB_PASSWORD,
+}
+missing = [name for name, value in required_db_values.items() if not value]
+if missing:
+    raise RuntimeError(
+        "Set these environment variables before mapping IDs: " + ", ".join(missing)
+    )
+
+connection = psycopg2.connect(
+    host=DB_HOST,
+    port=DB_PORT,
+    dbname=DB_NAME,
+    user=DB_USER,
+    password=DB_PASSWORD,
+)
+
+mapping_rows = []
+query = sql.SQL(
+    "SELECT {accession_col}, {orf_col} "
+    "FROM {table} "
+    "WHERE {accession_col} = ANY(%s)"
+).format(
+    accession_col=sql.Identifier(DB_ACCESSION_COLUMN),
+    orf_col=sql.Identifier(DB_ORF_ID_COLUMN),
+    table=sql.Identifier(DB_TABLE),
+)
+
+try:
+    with connection.cursor() as cursor:
+        values = accessions["accession"].tolist()
+        for batch_number, batch in enumerate(batched(values, 10_000), start=1):
+            cursor.execute(query, (batch,))
+            mapping_rows.extend(cursor.fetchall())
+            print(
+                f"Batch {batch_number}: queried {len(batch):,}; "
+                f"cumulative matches {len(mapping_rows):,}"
+            )
+finally:
+    connection.close()
+
+mapping = pd.DataFrame(mapping_rows, columns=["accession", "orf_id"])
+mapping["accession"] = mapping["accession"].astype(str).str.strip()
+mapping["orf_id"] = mapping["orf_id"].astype(str).str.strip()
+mapping = mapping.drop_duplicates()
+
+accession_map = accessions.merge(mapping, on="accession", how="left")
+accession_map.to_csv(ACCESSION_ORF_MAP, index=False)
+
+unmapped = accession_map[accession_map["orf_id"].isna()].copy()
+unmapped.to_csv(OUTPUT_DIR / "unmapped_accessions.csv", index=False)
+
+print("Requested accessions:", len(accessions))
+print("Mapped accessions:", accession_map["orf_id"].notna().sum())
+print("Unmapped accessions:", accession_map["orf_id"].isna().sum())
+display(accession_map.head())
+```
+
+## 5. Retrieve complete ORF sequences
+
+The large FASTA is streamed directly from S3, so it does not need to be stored locally. Headers in the source archive have previously appeared in the form:
+
+```text
+>1|WP_054022242.1|...
+```
+
+The parser therefore checks both the first pipe-delimited field (`orf_id`) and the second field (`accession`). A sequence is retained if either identifier matches the PostgreSQL mapping.
+
+
+```python
+from Bio import SeqIO
+from io import TextIOWrapper
+import subprocess
+
+mapped = accession_map.dropna(subset=["orf_id"]).copy()
+target_orf_ids = set(mapped["orf_id"].astype(str))
+target_accessions = set(mapped["accession"].astype(str))
+
+def parse_source_header(record_id):
+    fields = record_id.split("|")
+    source_orf_id = fields[0].strip() if fields else record_id.strip()
+    source_accession = fields[1].strip() if len(fields) > 1 else None
+    return source_orf_id, source_accession
+
+found_orf_ids = set()
+found_accessions = set()
+written = 0
+
+command = [
+    "aws", "s3", "cp",
+    FULL_ORF_FASTA_S3,
+    "-",
+    "--no-sign-request",
+]
+
+process = subprocess.Popen(
+    command,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+)
+
+assert process.stdout is not None
+text_stream = TextIOWrapper(process.stdout, encoding="utf-8")
+
+with FULL_ORF_FASTA.open("w") as output_handle:
+    for record_number, record in enumerate(SeqIO.parse(text_stream, "fasta"), start=1):
+        source_orf_id, source_accession = parse_source_header(record.id)
+
+        match = (
+            source_orf_id in target_orf_ids
+            or (source_accession is not None and source_accession in target_accessions)
+        )
+        if match:
+            SeqIO.write(record, output_handle, "fasta")
+            written += 1
+            found_orf_ids.add(source_orf_id)
+            if source_accession:
+                found_accessions.add(source_accession)
+
+        if record_number % 1_000_000 == 0:
+            print(
+                f"Scanned {record_number:,} records; "
+                f"wrote {written:,}/{len(mapped):,}"
+            )
+
+        if (
+            target_orf_ids.issubset(found_orf_ids)
+            or target_accessions.issubset(found_accessions)
+        ):
+            print("All target identifiers found; stopping stream early.")
+            process.terminate()
+            break
+
+return_code = process.wait()
+stderr = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
+
+# A terminated S3 stream can return a nonzero code after successful early stopping.
+if return_code not in (0, -15) and written == 0:
+    raise RuntimeError(f"S3 streaming failed with code {return_code}:\n{stderr}")
+
+print("Sequences written:", written)
+print("Output:", FULL_ORF_FASTA)
+```
+
+
+```python
+# Build a definitive full-ORF inventory and identify mapped records that were missing.
+full_orf_rows = []
+
+for record in SeqIO.parse(FULL_ORF_FASTA, "fasta"):
+    source_orf_id, source_accession = parse_source_header(record.id)
+    sequence = str(record.seq).upper()
+    full_orf_rows.append({
+        "source_header": record.id,
+        "orf_id": source_orf_id,
+        "accession": source_accession,
+        "orf_length": len(sequence),
+        "sequence": sequence,
+    })
+
+full_orfs = pd.DataFrame(full_orf_rows)
+full_orfs.to_csv(INTERMEDIATE_DIR / "full_orf_inventory.csv", index=False)
+
+found_keys = set(full_orfs["orf_id"].astype(str)) | set(full_orfs["accession"].dropna().astype(str))
+missing_full_orfs = mapped[
+    ~mapped["orf_id"].astype(str).isin(found_keys)
+    & ~mapped["accession"].astype(str).isin(found_keys)
+].copy()
+missing_full_orfs.to_csv(OUTPUT_DIR / "missing_full_orfs.csv", index=False)
+
+print("Recovered full ORFs:", len(full_orfs))
+print("Mapped IDs missing from FASTA:", len(missing_full_orfs))
+display(full_orfs.head())
+```
+
+## 6. Annotate known regions
+
+### 6.1 PETadex HMMs
+
+Run `hmmsearch` against every PETadex/PAZy HMM and append domain-level hits to one `domtblout` file. The domain independent E-value threshold can be changed below; `1e-5` is used as a conservative default.
+
+
+```python
+# Download PETadex HMMs if necessary.
+PETADEX_HMM_DIR.mkdir(parents=True, exist_ok=True)
+
+# Example source used previously:
+# !aws s3 cp s3://petadex/logan/pazy_hmms/ "{PETADEX_HMM_DIR}/" #     --recursive --no-sign-request
+
+hmm_files = sorted(PETADEX_HMM_DIR.glob("*.hmm"))
+print("HMM files found:", len(hmm_files))
+if not hmm_files:
+    raise FileNotFoundError(
+        f"No .hmm files found in {PETADEX_HMM_DIR}. Download the PETadex HMM library first."
+    )
+```
+
+
+```python
+import subprocess
+
+PETADEX_DOMTBLOUT.unlink(missing_ok=True)
+
+for index, hmm_file in enumerate(hmm_files, start=1):
+    per_hmm_output = INTERMEDIATE_DIR / f"{hmm_file.stem}.domtblout"
+    command = [
+        "hmmsearch",
+        "--cpu", str(MMSEQS_THREADS),
+        "--domE", "1e-5",
+        "--domtblout", str(per_hmm_output),
+        str(hmm_file),
+        str(FULL_ORF_FASTA),
+    ]
+    subprocess.run(command, check=True, stdout=subprocess.DEVNULL)
+
+    with PETADEX_DOMTBLOUT.open("a") as combined, per_hmm_output.open() as source:
+        for line in source:
+            if not line.startswith("#"):
+                combined.write(line)
+
+    print(f"[{index}/{len(hmm_files)}] {hmm_file.name}")
+```
+
+### 6.2 InterProScan
+
+InterProScan is run on 1,000-sequence chunks to avoid one very large, fragile job. GNU Parallel may be used to process multiple chunks concurrently, but the number of simultaneous jobs should not exceed available memory.
+
+
+```python
+from Bio import SeqIO
+
+INTERPRO_CHUNK_DIR.mkdir(parents=True, exist_ok=True)
+INTERPRO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+CHUNK_SIZE = 1000
+records = SeqIO.parse(FULL_ORF_FASTA, "fasta")
+chunk_index = 0
+chunk = []
+
+for record in records:
+    chunk.append(record)
+    if len(chunk) == CHUNK_SIZE:
+        chunk_path = INTERPRO_CHUNK_DIR / f"chunk_{chunk_index:05d}.fa"
+        SeqIO.write(chunk, chunk_path, "fasta")
+        chunk_index += 1
+        chunk = []
+
+if chunk:
+    chunk_path = INTERPRO_CHUNK_DIR / f"chunk_{chunk_index:05d}.fa"
+    SeqIO.write(chunk, chunk_path, "fasta")
+    chunk_index += 1
+
+print("Chunks created:", chunk_index)
+```
+
+
+```python
+# Run this cell after confirming INTERPROSCAN_EXE points to a valid installation.
+# Keep JOBS conservative because each InterProScan process can use substantial RAM.
+
+JOBS = min(4, max(1, MMSEQS_THREADS // 2))
+chunk_files = sorted(INTERPRO_CHUNK_DIR.glob("chunk_*.fa"))
+
+if not INTERPROSCAN_EXE.exists():
+    raise FileNotFoundError(f"InterProScan executable not found: {INTERPROSCAN_EXE}")
+
+for i, chunk_file in enumerate(chunk_files, start=1):
+    expected_output = INTERPRO_OUTPUT_DIR / f"{chunk_file.name}.tsv"
+    if expected_output.exists() and expected_output.stat().st_size > 0:
+        print(f"[{i}/{len(chunk_files)}] already complete: {chunk_file.name}")
+        continue
+
+    command = [
+        str(INTERPROSCAN_EXE),
+        "-i", str(chunk_file),
+        "-f", "TSV",
+        "-o", str(expected_output),
+        "-cpu", str(MMSEQS_THREADS),
+        "-dp",
+    ]
+    subprocess.run(command, check=True)
+    print(f"[{i}/{len(chunk_files)}] complete: {chunk_file.name}")
+```
+
+
+```python
+# Merge chunk-level TSV files.
+tsv_files = sorted(INTERPRO_OUTPUT_DIR.glob("*.tsv"))
+
+with INTERPRO_COMBINED_TSV.open("w") as combined:
+    for tsv_file in tsv_files:
+        with tsv_file.open() as source:
+            for line in source:
+                combined.write(line)
+
+print("TSV files merged:", len(tsv_files))
+print("Combined output:", INTERPRO_COMBINED_TSV)
+print("Size:", INTERPRO_COMBINED_TSV.stat().st_size / 1e6, "MB")
+```
+
+## 7. Parse annotation intervals
+
+Coordinates from both tools are converted to Python half-open intervals `[start, end)`. Overlapping or adjacent intervals are merged before computing the complement. This prevents duplicate fragments and avoids off-by-one errors.
+
+
+```python
+from collections import defaultdict
+
+def merge_intervals(intervals):
+    if not intervals:
+        return []
+    intervals = sorted(intervals)
+    merged = [list(intervals[0])]
+    for start, end in intervals[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end:
+            merged[-1][1] = max(last_end, end)
+        else:
+            merged.append([start, end])
+    return [tuple(x) for x in merged]
+
+def complement_intervals(length, covered):
+    covered = merge_intervals(covered)
+    fragments = []
+    cursor = 0
+    for start, end in covered:
+        start = max(0, start)
+        end = min(length, end)
+        if cursor < start:
+            fragments.append((cursor, start))
+        cursor = max(cursor, end)
+    if cursor < length:
+        fragments.append((cursor, length))
+    return fragments
+
+petadex_intervals = defaultdict(list)
+
+with PETADEX_DOMTBLOUT.open() as handle:
+    for line in handle:
+        if not line.strip() or line.startswith("#"):
+            continue
+        fields = line.split()
+        target_name = fields[0]
+        # HMMER domtblout: ali_from and ali_to are columns 18 and 19 (1-based).
+        ali_from = int(fields[17])
+        ali_to = int(fields[18])
+        start0 = ali_from - 1
+        end0 = ali_to
+        petadex_intervals[target_name].append((start0, end0))
+
+print("Sequences with PETadex HMM intervals:", len(petadex_intervals))
+```
+
+
+```python
+interpro_intervals = defaultdict(list)
+
+with INTERPRO_COMBINED_TSV.open() as handle:
+    for line_number, line in enumerate(handle, start=1):
+        if not line.strip() or line.startswith("#"):
+            continue
+        fields = line.rstrip("\n").split("\t")
+        if len(fields) < 8:
+            print(f"Skipping malformed InterProScan line {line_number}")
+            continue
+
+        sequence_id = fields[0]
+        start1 = int(fields[6])
+        end1 = int(fields[7])
+        interpro_intervals[sequence_id].append((start1 - 1, end1))
+
+print("Sequences with InterProScan intervals:", len(interpro_intervals))
+```
+
+## 8. Extract unannotated candidate fragments
+
+A fragment is created only from the complement of the union of PETadex and InterProScan intervals. Each fragment receives a stable identifier containing its source ORF and 1-based inclusive coordinates.
+
+
+```python
+RAW_CANDIDATE_FASTA = INTERMEDIATE_DIR / "candidate_fragments_raw.fa"
+RAW_CANDIDATE_CSV = INTERMEDIATE_DIR / "candidate_fragments_raw.csv"
+
+candidate_rows = []
+
+with RAW_CANDIDATE_FASTA.open("w") as fasta_out:
+    for record in SeqIO.parse(FULL_ORF_FASTA, "fasta"):
+        sequence = str(record.seq).upper()
+        source_id = record.id
+        source_orf_id, source_accession = parse_source_header(source_id)
+
+        intervals = (
+            petadex_intervals.get(source_id, [])
+            + petadex_intervals.get(source_orf_id, [])
+            + interpro_intervals.get(source_id, [])
+            + interpro_intervals.get(source_orf_id, [])
+        )
+        covered = merge_intervals(intervals)
+        complements = complement_intervals(len(sequence), covered)
+
+        for fragment_number, (start0, end0) in enumerate(complements, start=1):
+            fragment_sequence = sequence[start0:end0]
+            fragment_id = (
+                f"{source_orf_id}"
+                f"__frag{fragment_number}"
+                f"__{start0 + 1}-{end0}"
+            )
+
+            fasta_out.write(f">{fragment_id}\n{fragment_sequence}\n")
+            candidate_rows.append({
+                "fragment_id": fragment_id,
+                "source_header": source_id,
+                "orf_id": source_orf_id,
+                "accession": source_accession,
+                "start_1based": start0 + 1,
+                "end_1based": end0,
+                "fragment_length": len(fragment_sequence),
+                "annotated_residues_removed": sum(e - s for s, e in covered),
+                "source_orf_length": len(sequence),
+                "sequence": fragment_sequence,
+            })
+
+raw_candidates = pd.DataFrame(candidate_rows)
+raw_candidates.to_csv(RAW_CANDIDATE_CSV, index=False)
+
+print("Raw complement fragments:", len(raw_candidates))
+display(raw_candidates.head())
+```
+
+## 9. Quality filtering
+
+Filtering order:
+
+1. Remove fragments outside the allowed length range.
+2. Remove sequences containing unsupported amino-acid symbols.
+3. Measure low-complexity coverage with `segmasker`; remove fragments exceeding the threshold.
+4. Predict intrinsic disorder with `metapredict`; remove fragments exceeding the threshold.
+5. Cluster the remaining fragments using MMseqs2 at 90% identity and 80% coverage.
+6. Retain one representative per cluster. Singleton clusters are retained automatically.
+
+The metadata table records every metric and the reason a sequence was excluded.
+
+
+```python
+VALID_AA = set("ACDEFGHIKLMNPQRSTVWY")
+
+quality = raw_candidates.copy()
+quality["length_pass"] = quality["fragment_length"].between(
+    MIN_FRAGMENT_LENGTH,
+    MAX_FRAGMENT_LENGTH,
+    inclusive="both"
+)
+quality["invalid_residue_fraction"] = quality["sequence"].map(
+    lambda seq: sum(residue not in VALID_AA for residue in seq) / len(seq) if seq else 1.0
+)
+quality["alphabet_pass"] = (
+    quality["invalid_residue_fraction"] <= MAX_INVALID_RESIDUE_FRACTION
+)
+
+print("Length pass:", quality["length_pass"].sum(), "/", len(quality))
+print("Alphabet pass:", quality["alphabet_pass"].sum(), "/", len(quality))
+```
+
+
+```python
+# Write sequences eligible for SEG analysis.
+SEG_INPUT_FASTA = INTERMEDIATE_DIR / "candidate_fragments_pre_seg.fa"
+SEG_MASKED_FASTA = INTERMEDIATE_DIR / "candidate_fragments_seg_masked.fa"
+
+eligible_for_seg = quality[quality["length_pass"] & quality["alphabet_pass"]]
+
+with SEG_INPUT_FASTA.open("w") as handle:
+    for row in eligible_for_seg.itertuples(index=False):
+        handle.write(f">{row.fragment_id}\n{row.sequence}\n")
+
+subprocess.run(
+    [
+        "segmasker",
+        "-in", str(SEG_INPUT_FASTA),
+        "-out", str(SEG_MASKED_FASTA),
+        "-outfmt", "fasta",
+    ],
+    check=True
+)
+
+low_complexity_fraction = {}
+for record in SeqIO.parse(SEG_MASKED_FASTA, "fasta"):
+    masked = str(record.seq)
+    # segmasker commonly emits lowercase masked residues.
+    lc_count = sum(character.islower() for character in masked)
+    low_complexity_fraction[record.id] = lc_count / len(masked) if masked else 1.0
+
+quality["low_complexity_fraction"] = quality["fragment_id"].map(low_complexity_fraction)
+quality["low_complexity_pass"] = (
+    quality["low_complexity_fraction"].fillna(1.0)
+    <= MAX_LOW_COMPLEXITY_FRACTION
+)
+
+print(
+    "Low-complexity pass:",
+    quality["low_complexity_pass"].sum(),
+    "/",
+    len(quality)
+)
+```
+
+
+```python
+import metapredict as meta
+import numpy as np
+
+def disorder_fraction(sequence, threshold=0.5):
+    scores = np.asarray(meta.predict_disorder(sequence), dtype=float)
+    if len(scores) == 0:
+        return 1.0
+    return float((scores >= threshold).mean())
+
+disorder_eligible_mask = (
+    quality["length_pass"]
+    & quality["alphabet_pass"]
+    & quality["low_complexity_pass"]
+)
+
+disorder_values = {}
+eligible_rows = quality.loc[disorder_eligible_mask, ["fragment_id", "sequence"]]
+
+for i, row in enumerate(eligible_rows.itertuples(index=False), start=1):
+    disorder_values[row.fragment_id] = disorder_fraction(row.sequence)
+    if i % 1000 == 0:
+        print(f"Predicted disorder for {i:,}/{len(eligible_rows):,}")
+
+quality["disorder_fraction"] = quality["fragment_id"].map(disorder_values)
+quality["disorder_pass"] = (
+    quality["disorder_fraction"].fillna(1.0)
+    <= MAX_DISORDER_FRACTION
+)
+
+quality["precluster_pass"] = (
+    quality["length_pass"]
+    & quality["alphabet_pass"]
+    & quality["low_complexity_pass"]
+    & quality["disorder_pass"]
+)
+
+def exclusion_reason(row):
+    reasons = []
+    if not row["length_pass"]:
+        reasons.append("length")
+    if not row["alphabet_pass"]:
+        reasons.append("invalid_residue")
+    if not row["low_complexity_pass"]:
+        reasons.append("low_complexity")
+    if not row["disorder_pass"]:
+        reasons.append("disorder")
+    return ";".join(reasons) if reasons else ""
+
+quality["exclusion_reason"] = quality.apply(exclusion_reason, axis=1)
+quality.to_csv(INTERMEDIATE_DIR / "candidate_quality_metrics.csv", index=False)
+
+print("Pre-clustering pass:", quality["precluster_pass"].sum(), "/", len(quality))
+```
+
+## 10. MMseqs2 dereplication
+
+The earlier command was:
+
+```bash
+mmseqs easy-cluster input.fa clustered tmp     --min-seq-id 0.9     -c 0.8
+```
+
+This notebook uses the same identity and coverage values while explicitly setting coverage mode and thread count. `easy-cluster` creates a representative FASTA and a cluster-membership TSV. A cluster containing only one sequence is a singleton, and its representative is retained.
+
+
+```python
+PRECLUSTER_FASTA = INTERMEDIATE_DIR / "candidate_fragments_precluster.fa"
+MMSEQS_PREFIX = INTERMEDIATE_DIR / "filtered_clustered"
+MMSEQS_TMP = INTERMEDIATE_DIR / "mmseqs_tmp"
+
+precluster = quality[quality["precluster_pass"]].copy()
+
+with PRECLUSTER_FASTA.open("w") as handle:
+    for row in precluster.itertuples(index=False):
+        handle.write(f">{row.fragment_id}\n{row.sequence}\n")
+
+command = [
+    "mmseqs", "easy-cluster",
+    str(PRECLUSTER_FASTA),
+    str(MMSEQS_PREFIX),
+    str(MMSEQS_TMP),
+    "--min-seq-id", str(MIN_SEQUENCE_IDENTITY),
+    "-c", str(MIN_ALIGNMENT_COVERAGE),
+    "--cov-mode", str(MMSEQS_COVERAGE_MODE),
+    "--threads", str(MMSEQS_THREADS),
+]
+
+subprocess.run(command, check=True)
+print("MMseqs2 clustering complete.")
+```
+
+
+```python
+CLUSTER_TSV = Path(str(MMSEQS_PREFIX) + "_cluster.tsv")
+REP_FASTA = Path(str(MMSEQS_PREFIX) + "_rep_seq.fasta")
+
+cluster_membership = pd.read_csv(
+    CLUSTER_TSV,
+    sep="\t",
+    names=["cluster_representative", "fragment_id"],
+    dtype=str,
+)
+
+cluster_sizes = (
+    cluster_membership.groupby("cluster_representative")
+    .size()
+    .rename("cluster_size")
+    .reset_index()
+)
+
+cluster_membership = cluster_membership.merge(
+    cluster_sizes,
+    on="cluster_representative",
+    how="left"
+)
+cluster_membership["is_singleton_cluster"] = cluster_membership["cluster_size"].eq(1)
+
+representative_ids = set(
+    record.id for record in SeqIO.parse(REP_FASTA, "fasta")
+)
+
+final_metadata = quality.merge(
+    cluster_membership,
+    on="fragment_id",
+    how="left"
+)
+final_metadata["is_cluster_representative"] = (
+    final_metadata["fragment_id"].isin(representative_ids)
+)
+final_metadata["final_pass"] = (
+    final_metadata["precluster_pass"]
+    & final_metadata["is_cluster_representative"]
+)
+
+print("Clusters:", cluster_membership["cluster_representative"].nunique())
+print("Singleton clusters:", cluster_sizes["cluster_size"].eq(1).sum())
+print("Final representatives:", final_metadata["final_pass"].sum())
+```
+
+## 11. Export final dataset
+
+
+```python
+FINAL_FASTA = OUTPUT_DIR / "final_filtered_candidates.fa"
+FINAL_CSV = OUTPUT_DIR / "final_filtered_candidates.csv"
+ALL_METADATA_CSV = OUTPUT_DIR / "all_candidate_filter_metadata.csv"
+
+final_rows = final_metadata[final_metadata["final_pass"]].copy()
+
+with FINAL_FASTA.open("w") as handle:
+    for row in final_rows.itertuples(index=False):
+        handle.write(f">{row.fragment_id}\n{row.sequence}\n")
+
+final_rows.to_csv(FINAL_CSV, index=False)
+final_metadata.to_csv(ALL_METADATA_CSV, index=False)
+
+print("Final FASTA:", FINAL_FASTA)
+print("Final metadata:", FINAL_CSV)
+print("All filter metadata:", ALL_METADATA_CSV)
+print("Final sequence count:", len(final_rows))
+```
+
+## 12. Validation and quantitative summary - AI produced
+
+These checks verify that:
+
+- FASTA identifiers are unique.
+- Metadata and FASTA contain the same representatives.
+- Every final sequence passes all configured thresholds.
+- Every final sequence is the representative of an MMseqs2 cluster.
+
+
+```python
+final_records = list(SeqIO.parse(FINAL_FASTA, "fasta"))
+final_fasta_ids = [record.id for record in final_records]
+final_csv_ids = final_rows["fragment_id"].tolist()
+
+assert len(final_fasta_ids) == len(set(final_fasta_ids)), "Duplicate IDs in final FASTA."
+assert set(final_fasta_ids) == set(final_csv_ids), "FASTA/CSV identifier mismatch."
+assert final_rows["length_pass"].all()
+assert final_rows["alphabet_pass"].all()
+assert final_rows["low_complexity_pass"].all()
+assert final_rows["disorder_pass"].all()
+assert final_rows["is_cluster_representative"].all()
+
+for record in final_records:
+    seq = str(record.seq).upper()
+    assert MIN_FRAGMENT_LENGTH <= len(seq) <= MAX_FRAGMENT_LENGTH
+    assert set(seq).issubset(VALID_AA)
+
+print("All final validation checks passed.")
+```
+
+
+```python
+counts = pd.DataFrame([
+    {"stage": "unique_accessions", "count": len(accessions)},
+    {"stage": "mapped_accessions", "count": int(accession_map["orf_id"].notna().sum())},
+    {"stage": "recovered_full_orfs", "count": len(full_orfs)},
+    {"stage": "raw_unannotated_fragments", "count": len(quality)},
+    {"stage": "length_pass", "count": int(quality["length_pass"].sum())},
+    {"stage": "alphabet_pass", "count": int((quality["length_pass"] & quality["alphabet_pass"]).sum())},
+    {"stage": "low_complexity_pass", "count": int((
+        quality["length_pass"]
+        & quality["alphabet_pass"]
+        & quality["low_complexity_pass"]
+    ).sum())},
+    {"stage": "disorder_pass_precluster", "count": int(quality["precluster_pass"].sum())},
+    {"stage": "final_cluster_representatives", "count": int(final_metadata["final_pass"].sum())},
+])
+
+counts["retained_from_previous_percent"] = (
+    counts["count"] / counts["count"].shift(1) * 100
+)
+counts["retained_from_initial_percent"] = (
+    counts["count"] / counts.iloc[0]["count"] * 100
+)
+counts.to_csv(OUTPUT_DIR / "pipeline_counts.csv", index=False)
+display(counts)
+```
+
+## 13. Results & Discussion
+
+Populate this section after the notebook has completed. The summary cell below generates a draft using the measured counts.
+
+**Key metric**: `final_cluster_representatives / raw_unannotated_fragments` candidate fragments passed all quality and redundancy filters.
+
+**Interpretation guidance**
+
+- A high unmapped-accession count may indicate an incorrect accession column, inconsistent version suffixes, or a database snapshot mismatch.
+- A high missing-full-ORF count may indicate that the PostgreSQL table and FASTA archive were generated from different releases.
+- A large reduction during domain masking is expected when most of each ORF is already explained by PETadex or InterProScan.
+- A large low-complexity or disorder reduction suggests that many complement fragments are linkers, terminal tails, or compositionally biased regions rather than independently folding domains.
+- MMseqs2 representatives include both multi-member cluster representatives and all singleton sequences.
+
+**Follow-up questions**
+
+1. Should novelty scoring be performed against TED/FoldClass before folding all retained candidates?
+2. Should cluster representatives be prioritized by cluster size, predicted structure confidence, or distance from known domain families?
+3. Should threshold sensitivity be tested at lower identity, stricter disorder, or longer minimum-fragment length?
+
+
+```python
+def stage_count(stage):
+    return int(counts.loc[counts["stage"] == stage, "count"].iloc[0])
+
+raw_n = stage_count("raw_unannotated_fragments")
+final_n = stage_count("final_cluster_representatives")
+percent = (final_n / raw_n * 100) if raw_n else 0.0
+
+summary = f"""
+Pipeline completed with {stage_count('unique_accessions'):,} unique input accessions.
+{stage_count('mapped_accessions'):,} accessions mapped to ORF IDs, and
+{stage_count('recovered_full_orfs'):,} complete ORF sequences were recovered.
+
+Domain masking produced {raw_n:,} unannotated fragments. After length,
+alphabet, low-complexity, disorder, and MMseqs2 redundancy filtering,
+{final_n:,} representative sequences remained ({percent:.2f}% of raw fragments).
+""".strip()
+
+print(summary)
+```
+
+## 14. Archive final outputs
+
+Review the final FASTA, metadata, and count table before upload.
+
+
+```python
+# Uncomment after validation and after choosing the final S3 destination.
+#
+# S3_OUTPUT = "s3://petadex/annotate_domains/2026-07-13/"
+# for output_file in [
+#     FINAL_FASTA,
+#     FINAL_CSV,
+#     ALL_METADATA_CSV,
+#     OUTPUT_DIR / "pipeline_counts.csv",
+#     OUTPUT_DIR / "unmapped_accessions.csv",
+#     OUTPUT_DIR / "missing_full_orfs.csv",
+# ]:
+#     subprocess.run(
+#         [
+#             "aws", "s3", "cp",
+#             str(output_file),
+#             S3_OUTPUT,
+#             "--no-sign-request",
+#         ],
+#         check=True
+#     )
+```

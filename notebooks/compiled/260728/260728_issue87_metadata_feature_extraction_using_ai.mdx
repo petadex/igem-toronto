@@ -1,0 +1,131 @@
+---
+    title: 260728_issue87_metadata_feature_extraction_using_ai
+    section: "Dry Lab"
+    path: "/dry-lab/issue/87"
+    navTitle: "Issue 87"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+# Plastic Degradation Enzyme Data Pipeline & Literature Network Mapping
+
+## 1. Executive Summary
+This project establishes an end-to-end data engineering, machine learning extraction and network visualization pipeline designed to process biological research literature at scale. Specifically targeting synthetic and natural plastic/rubber degrading enzymes, the system autonomously acquires paywalled manuscripts, converts unstructured text into a fully relational JSON schema and constructs a global citation network of the field.
+
+By integrating custom web automation, hybrid MuPDF/GROBID structural parsing, multi-stage LLM screening via AWS Bedrock, automated schema enforcement and graph visualization in Gephi, this pipeline tracks the temporal evolution of research, clusters publications by biochemical properties and optimizes large-scale extraction costs.
+
+## 2. Corpus Genesis & Iterative Citation Expansion
+The foundation of the dataset was built using a highly targeted multi-generational search strategy. The process began with building a concentrated seed database and iteratively expanding it through citation networks.
+
+### Phase 1: Seed Generation & Initial Triage
+* **Source Compilation:** Initial literature was aggregated from three primary streams. The PAZy database API provided DOIs, PETadex NR accessions yielded roughly 6,000 papers and a custom broad keyword scraping script gathered the remainder. This combined ingestion created a foundational corpus of approximately 11,600 papers.
+* **Acquisition & Conversion:** Full texts for these initial sources were autonomously scraped as PDFs and converted into structured JSONs using the hybrid MuPDF and GROBID pipeline.
+* **Keyword & LLM Filtering:** The raw JSON text was passed through a keyword filter to isolate documents discussing potential plastic-degrading enzymes, reducing the pool from 11,600 to roughly 10,000 papers. A subsequent stringent screening pass using an LLM identified manuscripts containing concrete enzymatic activity data, resulting in a highly curated core of 900 seed papers.
+
+### Phase 2: Iterative Bidirectional Citation Expansion
+* To map the broader landscape, the project utilized Litmaps to perform bidirectional citation traversal based on the 900 seed papers.
+* **First-Order Expansion:** For each seed paper, the top 200 forward citations and top 200 backward references were queried. This expanded the network to roughly 40,000 papers. Abstract and title screening via RIS exports filtered this massive pool down to 3,400 highly relevant candidates.
+* **Second-Order Expansion:** The bidirectional expansion was repeated on those 3,400 candidates, generating a macro-network of 100,000 papers. A final rigorous screening pass distilled this network down to a concentrated corpus of 4,600 highly relevant papers.
+* **Final Ingestion:** The final 4,600 papers undergo full-text scraping, JSON conversion and ingestion into the deep extraction pipeline.
+
+## 3. Automated Corpus Acquisition & Network Crawling
+To support the iterative expansion and acquire full texts for the entire corpus, the pipeline relies on a custom-built automation engine capable of both targeted DOI fetching and broad keyword pagination.
+* **Institutional Proxy Integration:** The scraper authenticates via the university library proxy (EZProxy) to bypass publisher paywalls and access full-text PDFs.
+* **Keyword Search & Pagination:** The engine can execute broad queries (e.g. "plastic degradation enzymes") and autonomously paginate through hundreds of library search results. It features dynamic waits and UI state verification to ensure it never desynchronizes during long scraping runs.
+* **Dynamic Bot Evasion & Navigation:** Utilizes `undetected_chromedriver` combined with PyAutoGUI fallback mechanisms to navigate complex publisher portals. It successfully handles EPUB/viewer frames and circumvents bot-verification checks.
+* **Stateful File Tracking:** The system monitors local directory states to confirm successful background downloads. It instantly renames incoming files to sanitized identifiers to ensure seamless downstream processing.
+* **System Resiliency:** Built for high-volume execution, the engine features automated resume logic, comprehensive error logging to CSV files, rate-limit pacing and dynamic memory-crash recovery to revive the browser during out-of-memory failures.
+
+## 4. Multi-Stage Automated Data Extraction Pipeline
+
+**Pipeline Architecture:**
+```text
+[ Unstructured PDFs ]
+       |
+       v
+[ MuPDF (Raw Perfect Text) ]  +  [ GROBID (XML Structural Tags) ]
+       |                              |
+       +--------------+---------------+
+                      |
+                      v
+[ Fuzzy String Reconciliation & State Machine ]
+                      |
+                      v
+[ Stage 1: Structurally Tagged JSON (Abstract, Methods, Results, etc.) ]
+                      |
+                      v
+[ Stage 2: Metadata Injection (Merge GROBID Titles/DOIs with MuPDF Content) ]
+                      |
+                      v
+[ Text Preprocessing & Token Optimization ]
+                      |
+                      v
+[ Stage 3: AWS Bedrock Batch Inference (Claude Sonnet) ]
+                      |
+                      v
+[ Export & Enrichment to Relational CSVs ]
+```
+
+### Stage 1: Hybrid Text Extraction & Structural Reconciliation
+* Converting visually complex PDFs into machine-readable formats without losing characters requires a dual-engine approach.
+* **MuPDF & GROBID Integration:** The system uses the MuPDF C engine to extract perfect raw text strings while simultaneously sending the PDF to a local GROBID server to map the XML document structure (headers, abstracts, body paragraphs).
+* **Fuzzy Reconciliation Engine:** A custom Python pipeline runs a two-tier state machine that aligns the perfect MuPDF text blocks with the GROBID XML tags using `difflib` sequence matching.
+* **Heuristic Fallback:** If GROBID misses a block of text, a regex-driven fallback intelligently classifies the orphaned text based on length, prefix numbering and keywords.
+* **Smoothing & Merging:** Consecutive text blocks sharing the same section label are merged into clean continuous JSON blobs. This automatically filters out publisher artifacts and page numbers.
+
+### Stage 2: Metadata Injection & Deduplication
+* To ensure downstream citation matching remains perfectly accurate, the pipeline isolates and merges the best components from both extraction engines.
+* **Precision Metadata Harvesting:** While MuPDF yields superior full-text extraction, GROBID is optimized for academic header metadata. A custom Python tool extracts the title, doi and authors exclusively from the GROBID-processed files.
+* **Master JSON Compilation:** The tool uses a pre-filtered list of deduplicated files as a master reference and dynamically maps the precise GROBID metadata to the flawless MuPDF body content. This outputs a finalized master directory of JSONs ready for LLM ingestion.
+
+### Stage 3: Deep Biochemical Feature Extraction via AWS Bedrock
+* The final data extraction is handled by an automated AWS Bedrock pipeline running Claude Sonnet. The script packages the preprocessed JSONs into JSONL format, uploads them to an S3 bucket and triggers asynchronous batch inference to bypass API throttling.
+* The system prompt enforces strict relational logic:
+  * **The Degradation Short-Circuit:** The model first determines if the paper actually tests enzymes for the degradation of target polymers. If the paper discusses general medical enzymes or the biosynthesis/accumulation of bioplastics, it short-circuits the extraction and outputs a negative flag to save compute time.
+  * **Absolute Relational Accuracy:** The prompt forces the LLM to map entities using strictly generated primary and foreign keys (e.g. EXP_1, PROT_1, VAR_1, ASSAY_1). It ensures that multiple enzyme variants tested across varying environmental conditions are never mixed.
+  * **Data Consolidation:** Once the batch job completes, a Python handler downloads the S3 output, saves individual JSON records and parses the nested arrays to automatically append rows to six master CSV files.
+
+## 5. Relational Schema & Quality Assurance
+The core pipeline consolidates extracted attributes into six normalized interconnected CSV datasets:
+
+| Dataset | Primary Key | Contents & Scope |
+| :--- | :--- | :--- |
+| **experiments.csv** | `EXP_ID` | High-level experimental setups, overall study objectives and trial contexts. |
+| **plasmids.csv** | `PLASMID_ID` | Genetic constructs, expression vectors, host organisms and insertion details. |
+| **proteins.csv** | `PROT_ID` | Protein sequences, enzyme nomenclature, expression systems and wildtype vs. mutant markers. |
+| **assay_variables.csv** | `VAR_ID` | Environmental parameters including pH, temperature, buffer compositions, incubation times and substrate concentrations. |
+| **assays_main.csv** | `ASSAY_ID` | Methodology, assay types and experimental procedures. |
+| **activity.csv** | `ACT_ID` | Specific activity metrics, degradation rates, kinetic values ($K_m$, $V_{max}$) and yield measures. |
+
+### Grounding Framework
+* **Validation Accuracy:** An automated evaluation script calculates string similarity ratios using fuzzy string matching between extracted data and source text. This diagnostic framework demonstrated a 97% to 98% exact or near-exact match accuracy, confirming that minor discrepancies stemmed from PDF text extraction artifacts rather than model hallucinations.
+
+## 6. Literature Network Integration & Visualization
+The extracted biochemical attributes are integrated into a global citation network mapping the academic landscape:
+* **Corpus Integration:** Cross-referenced over 3,700 Litmaps reference/citation files with the seed papers.
+* **Automated DOI Reconciliation:** Audit scripts cross-reference matched directories to patch missing DOIs in original paper files automatically.
+* **Strict Activity Filtering:** Citation graphs are strictly filtered against triage folders, retaining only literature classified as positive for biological degradation.
+* **Master Network Dataset:** Generates `Global_Citation_Map_With_Enzymes.csv`, merging raw citation edges with Broad Enzyme Type, Specific Name, Substrate Class, Organism, Variant Counts and Publication Type.
+
+The master network file is imported into Gephi 0.11.2 for structural and temporal analysis:
+* **Temporal Cascading (Ordered Layout):** Anchors publications along a strict historical timeline axis to illustrate the sequential evolution of plastic degradation discoveries over time.
+* **Network Clustering (ForceAtlas 2 & Modularity):** Applies force-directed layout algorithms alongside modularity calculations to group publications with high citation overlap and identify distinct research silos.
+* **Hierarchical Grouping (Circle Pack Layout):** Groups publication clusters hierarchically based on broader enzymatic classes and substrate target categories.
+
+## 7. Current Status & Future Roadmap
+
+**Completed Milestones:**
+* Established a bidirectional citation expansion protocol to map 100k+ papers from 900 highly curated seeds.
+* Built and deployed an automated web scraper capable of executing broad keyword searches, paginating through thousands of results and fetching authenticated PDFs.
+* Engineered a hybrid MuPDF and GROBID parsing pipeline to extract perfect text and reconstruct logical document schemas via fuzzy reconciliation.
+* Built a targeted metadata injection tool to merge GROBID academic headers with MuPDF content, creating a master deduplicated JSON directory.
+* Developed a fully automated AWS Bedrock Batch extraction script utilizing Claude Sonnet to extract and map strict relational tables.
+* Defined relational JSON schema and verified the automated 6-CSV export pipeline.
+* Integrated citation networks with extracted enzyme characteristics in `Global_Citation_Map_With_Enzymes.csv`.
+
+**Ongoing & Planned Work:**
+* **Model Distillation:** Utilize high-confidence extraction outputs from larger foundation models as synthetic training data to fine-tune compact models to further reduce production API overhead.
+* **Pre-Extraction Classification:** Train a lightweight local classifier to pre-screen manuscripts for degradation keywords before invoking cloud-based LLM pipelines.

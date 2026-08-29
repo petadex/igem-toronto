@@ -1,0 +1,124 @@
+---
+    title: 260330_issue61_esmvariantgeneration
+    section: "Dry Lab"
+    path: "/dry-lab/issue/61"
+    navTitle: "Issue 61"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+## Create prototype code that uses ESM-2 to generate site-specific mutants with temperature scaling
+
+Lead     : `Chinmay Potdar / ChinmayMPotdar`
+
+Issue    : [Github Issue #61](https://github.com/petadex/igem-toronto/issues/61) — _ESM‑2 site‑directed temperature‑scaled mutagenesis and variant generation_
+
+Start    : `2026-03-28`
+
+Complete : `2026-03-30`
+
+Files    : `~/resources/260328_issue61_esm2_mutagenesis/` — local working directory (active analysis, intermediate outputs)
+
+S3 files : `s3://petadex/esm2_mutagenesis/` — remote archive (final outputs, shared with team)
+
+---
+
+### Data Accessed: 2026-03-28
+```bash
+# PETase sequence defined locally
+# PETase structure loaded from local PDB file
+# Example if structure stored remotely:
+# aws s3 cp s3://petadex/structures/petase_reference.pdb ./petase_reference.pdb
+```
+
+## Introduction
+
+Engineering PETase for improved PET degradation typically requires mutating residues near the catalytic triad or substrate-binding interface. Traditional mutagenesis approaches are slow and limited in scope.
+
+Protein language models such as ESM‑2 provide a powerful alternative: they can propose plausible amino‑acid substitutions based on learned evolutionary constraints. By masking specific residues and sampling replacements using temperature‑scaled logits, we can generate diverse yet model‑consistent PETase variants.
+
+This notebook implements a prototype pipeline that:
+- identifies catalytic‑pocket interface residues from a PETase structure,
+- masks these residues in the PETase sequence,
+- uses ESM‑2 to generate temperature‑scaled variants, and
+- scores each variant using ESM‑2 log‑likelihood.
+
+This establishes the foundation for a future full sequence → structure → docking design loop.
+
+## Objectives
+
+1. Identify PETase catalytic‑pocket interface residues using a distance‑based structural filter.
+2. Implement a site‑specific masking strategy aligned to PDB residue numbering.
+3. Generate PETase variants using ESM‑2 with temperature‑scaled sampling and hydrophobic amino‑acid biasing.
+
+---
+
+## Materials and Methods
+
+### System Initialization
+
+Analysis was performed in Python 3.11 with:
+- **PyTorch** for GPU/CPU inference
+- **fair‑esm** for loading the pretrained ESM‑2 model
+- **Biopython (Bio.PDB)** for structure parsing
+- Standard Python libraries (`random`, `typing`)
+
+The model used was **ESM‑2 (650M parameters, 33 layers)**.
+
+### Data Initialization
+
+The PETase amino‑acid sequence was defined manually after removing N‑ and C‑terminal tags not present in the PDB structure. The PETase structure (AlphaFold or crystal structure) was loaded using `Bio.PDB.PDBParser`.
+
+```bash
+# Accessed: 2026-03-28
+# Example if structure retrieved from S3:
+# aws s3 cp s3://petadex/structures/petase_af2.pdb ./petase_af2.pdb
+```
+
+### Processing Steps
+
+```bash
+# Step 1: Load ESM‑2 model and tokenize PETase sequence
+# Step 2: Load PETase PDB structure and inspect residue numbering
+# Step 3: Define catalytic residues and identify interface neighbors (8 Å cutoff)
+# Step 4: Mask interface residues with probability 0.6
+# Step 5: Sample replacements using temperature‑scaled logits (T = 0.6, 0.8, 1.0, 1.2)
+# Step 6: Apply hydrophobic amino‑acid bias (F/W/Y/L/I/V)
+# Step 7: Decode sequences and compute ESM‑2 log‑likelihoods
+# Step 8: Rank variants and print top 10
+```
+
+Outputs can be uploaded to S3:
+
+```bash
+# Uploaded: 2026-03-30
+# aws s3 cp esm2_petase_variants.tsv s3://petadex/esm2_mutagenesis/
+```
+
+## Results & Discussion
+
+The pipeline successfully generated PETase variants by masking residues near the catalytic triad and sampling replacements using ESM‑2. Interface residues were identified using an 8 Å cutoff, and catalytic residues were excluded from mutation to preserve core enzymatic function.
+
+**Key metric:** 100 total variants were generated across four temperatures (0.6, 0.8, 1.0, 1.2). The top 10 variants (ranked by ESM‑2 log‑likelihood) were printed for inspection.
+
+**Breakdown by temperature:**
+- **T = 0.6** → conservative variants, minimal deviation from wild‑type
+- **T = 0.8** → moderate exploration
+- **T = 1.0** → balanced exploration
+- **T = 1.2** → highest diversity, more aggressive substitutions
+
+**Observations:**
+- Mutations were restricted to residues structurally close to the catalytic triad, confirming correct interface detection.
+- Lower temperatures favored substitutions with high model confidence.
+- Higher temperatures introduced more diverse amino acids while remaining plausible under the model.
+- The hydrophobic bias enriched for residues potentially beneficial for PET binding.
+
+**Follow‑up questions:**
+- How do these variants behave under structure prediction (e.g., ESMFold)?
+- Do high‑likelihood variants cluster around specific mutation hotspots?
+- How well do ESM‑2 scores correlate with predicted stability or docking affinity?
+
+This prototype establishes a reproducible, ML‑guided mutagenesis workflow that can be extended with folding and docking in future iterations.

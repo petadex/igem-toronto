@@ -1,0 +1,1746 @@
+---
+    title: 20260731_issue95_eukaryotic_localization_prediction
+    section: "Dry Lab"
+    path: "/dry-lab/issue/95"
+    navTitle: "Issue 95"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+# PETaDex DeepLoc 2.1 Pipeline
+
+> **Author:** Angela Jiang  
+> **Date Started:** 2026-07-01 **Date Finished:**2026-07-31 **Input:**
+> `s3://petadex-deeploc/input/chunks/` (chunked FASTA containing all
+> ORFs from retained 90% PID clusters)  
+> **Output:** `deeploc21_orf_predictions` (PostgreSQL table); raw
+> DeepLoc archives at `s3://petadex-deeploc/output/chunks/`
+
+------------------------------------------------------------------------
+
+## 1. Objective
+
+The goal of this pipeline is to predict eukaryotic protein subcellular
+localization, membrane association, and sorting signals across a
+quality-controlled subset of PETaDex catalytic ORFs using DeepLoc 2.1,
+and to load the results into a compact, queryable PostgreSQL table. The
+input is restricted to all members of 90% PID clusters in which at least
+95% of cluster members are independently supported as eukaryotic by
+metadata. The selected corpus is split into FASTA chunks, distributed
+across an AWS GPU Spot fleet using S3-backed atomic job claiming, and
+the raw DeepLoc outputs are archived to S3. Compact parsed predictions
+are loaded into PostgreSQL.
+
+### 1.1. Place in the Project
+
+DeepLoc complements SignalP by predicting the broader cellular
+destination and membrane association of eukaryotic proteins rather than
+only the presence and cleavage position of an N-terminal secretion
+signal. For PETaDex, this provides additional metadata that could be
+later analyzed to aid and filter the search for highly efficient
+enzymes, and distinguishes proteins predicted to be soluble,
+transmembrane, peripheral membrane-associated, or lipid-anchored. The
+90% PID cluster-purity filter is applied before inference because
+DeepLoc is intended for eukaryotic proteins; clusters with strongly
+mixed metadata assignments are more likely to reflect contamination,
+ambiguous sample provenance, or database noise. This restriction is also
+directly supported by internal benchmarking showing DeepLoc’s
+predictions are unreliable for bacterial sequences (§2.1). The procedure
+also produces a list of quality-controlled eukaryotic sequences, that
+could potentially be independently used for future analysis or filtering
+projects as well.
+
+This pipeline is downstream of, and depends on, the separate metadata
+project. The per-ORF organism/taxonomy assignments consumed in 2.2.1 are
+produced and maintained by that project, not computed here; this
+pipeline only consumes its output CSVs to build the eukaryotic filter.
+Because that upstream project will also need to rerun its classification
+on the larger PETaDex database, the exact output filenames referenced in
+2.2.1 are expected to change between builds and should be confirmed at
+the start of each rerun.
+
+## 2. Experiment
+
+### 2.0. Install requirements
+
+1.  DeepLoc 2.1 official local package (DTU Health Tech; academic
+    license where applicable)
+2.  Python 3.8 environment required by the distributed package
+3.  Python 3.9+ with `boto3>=1.43.18,<2` for orchestration and result
+    parsing (see note below)
+4.  DuckDB for local cohort construction and quality-control joins
+5.  AWS CLI v2 (fleet management only; workers use instance-role
+    credentials)
+6.  PostgreSQL client (`psql`) for loading
+
+**Why `boto3>=1.43.18` specifically:** the worker’s claim/lease
+coordination (2.4) depends on S3 conditional writes — `PutObject` with
+`If-Match`/`If-None-Match`, and `DeleteObject` with `If-Match` — which
+require a botocore version that exposes these fields on both operations.
+The worker checks this explicitly at startup (via `validate_runtime`,
+inspecting the installed botocore service model) and refuses to start
+with a clear error if the installed version is too old, rather than
+failing unpredictably partway through a claim.
+
+The DeepLoc package and model files are installed in a dedicated
+environment:
+
+``` bash
+conda create -n deeploc21 python=3.8 -y
+conda activate deeploc21
+cd deeploc2_package
+pip install .
+```
+
+The official package and model cache are retained only in private
+project infrastructure in accordance with the DTU software license.
+Workers use a private prebuilt AMI containing the installed package and
+prewarmed ESM-1B model cache, so replacement Spot instances do not
+download model weights independently at first execution.
+
+### 2.1. Tool and parameter selection
+
+DeepLoc 2.1 predicts multiple subcellular localizations, sorting
+signals, and membrane associations from protein sequence. It
+distinguishes ten localization classes:
+
+``` text
+Nucleus
+Cytoplasm
+Extracellular
+Mitochondrion
+Cell membrane
+Endoplasmic reticulum
+Chloroplast
+Golgi apparatus
+Lysosome/Vacuole
+Peroxisome
+```
+
+and four membrane-association classes:
+
+``` text
+Peripheral
+Transmembrane
+Lipid anchor
+Soluble
+```
+
+The invocation per chunk is:
+
+``` bash
+deeploc2 \
+  --fasta input.fa \
+  --output ./output \
+  --model Fast
+```
+
+The non-default choices were selected for the following reasons:
+
+-   `--model Fast`: uses the ESM-1B high-throughput model. DeepLoc 2.1
+    also provides a ProtT5 high-quality model, but the published
+    comparison reports only a marginal advantage for ProtT5 while the
+    model is substantially larger.
+-   Attention plots are not requested: the plotting option is omitted.
+    Generating one plot per sequence would create millions of
+    unnecessary files and is not required for database annotation. The
+    short tabular output retains the predicted labels and class
+    probabilities required for downstream querying.
+-   DeepLoc-provided label thresholds are used unchanged. Predicted
+    localization and membrane labels are parsed directly from the
+    output; labels are not re-derived from probabilities with custom
+    thresholds.
+
+The Fast model has a language-model sequence limit of 1,022 amino acids.
+DeepLoc handles longer sequences by removing the middle portion while
+retaining terminal sequence information. Input sequences longer than
+1,022 residues are not pre-truncated; their original sequence is
+archived in the input chunk, and their length is recorded in the
+extraction manifest so the model’s standard truncation behavior remains
+auditable. Sequences shorter than 10 amino acids are excluded before
+inference because DeepLoc does not accept them.
+
+**DeepLoc accuracy and eukaryotic-only applicability (internal
+602-sequence validation set).** Before adopting DeepLoc for production,
+an internal benchmark compared DeepLoc against SignalP on signal-peptide
+detection for the same 602 family-representative sequences used in
+SignalP benchmarking, and manually reviewed a subset of predictions
+against literature-supported localization for BLAST proxies.
+
+-   Signal-peptide presence/absence agreed between DeepLoc and SignalP
+    for 542 of 602 sequences (90.0%): 280 sequences where neither tool
+    predicted a signal peptide and 262 where both did. Of the remaining
+    60, 56 were cases where DeepLoc predicted a signal peptide that
+    SignalP did not, and 4 were cases where SignalP predicted one that
+    DeepLoc did not. This level of concordance was judged reasonable
+    given the two tools use different underlying models and objectives —
+    SignalP is signal-peptide-specific, while DeepLoc’s signal-peptide
+    call is one auxiliary output of a broader localization model.
+-   A manual literature-review spot check found DeepLoc particularly
+    accurate for endoplasmic reticulum calls, but frequently inaccurate
+    for “Cell membrane” calls — largely because bacterial sequences were
+    often assigned to this class. This reflects that DeepLoc’s training
+    data is eukaryotic and its predictions are not meaningful for
+    prokaryotic input; a sequence must be established as eukaryotic in
+    origin before DeepLoc’s output can be trusted.
+-   A small-scale sensitivity test on the 124 family-representative
+    sequences with a SignalP-predicted classical signal peptide compared
+    DeepLoc’s localization call on the cleaved (mature) versus uncleaved
+    sequence. Localization changed in 74/124 (59.7%) of cases, with the
+    majority of transitions moving toward Extracellular once the signal
+    peptide was removed (e.g. Cytoplasm → Extracellular,
+    Cytoplasm\|Extracellular → Extracellular). This indicates DeepLoc is
+    responsive to genuine sequence-level secretion signal rather than
+    producing noise, supporting its use as a secondary
+    localization/membrane-association predictor alongside SignalP.
+
+Because the literature-review pass found DeepLoc’s predictions
+effectively unreliable for bacterial input, and PETaDex is a
+predominantly prokaryotic metagenomic corpus, DeepLoc is restricted to
+the eukaryotic-filtered D2 QC95 cohort (2.2) rather than run across all
+catalytic ORFs.
+
+**Fast vs Accurate deployment benchmark.** Before production scale-up,
+the Fast and Accurate models are compared internally on the existing
+602-sequence PETaDex DeepLoc validation set. The comparison records
+exact agreement of localization labels, membrane labels, and
+sorting-signal labels, together with per-class probability differences
+and wall-clock throughput. The benchmark verifies that the installed
+package behaves as expected; production inference remains fixed to Fast
+because the full corpus scale is incompatible with the ProtT5
+high-quality model.
+
+### 2.2. Define the D2 QC95 input cohort and extract its FASTA
+
+Every PETaDex ORF record uses the following pipe-delimited header:
+
+``` text
+>{orf_id}|{genbank_accession}|{library_id}|{contig_id}|{orf_start}|{orf_end}|{orf_type}
+```
+
+`orf_id` is always the first field and always numeric. It is used to
+join metadata classifications, PID cluster assignments, FASTA records,
+DeepLoc outputs, and the final PostgreSQL table.
+
+#### 2.2.1. Metadata-supported eukaryotic set
+
+The organism/taxonomy assignments used here are produced entirely from
+S3 CSV metadata files and a downloaded NCBI taxonomy dump — **not** from
+a PostgreSQL join to `orf_origins`. PostgreSQL is only used later, in
+2.2.2, to obtain the 30/60/90 PID cluster mappings and centroid IDs; it
+plays no role in the organism classification itself.
+
+The starting eukaryotic set is produced by two exact identifier joins:
+
+-   **SRA/library-origin ORFs:** `library_id` is parsed from the FASTA
+    header (e.g. `SRR...`, `ERR...`, `DRR...`) and matched exactly
+    against the `acc` column of the deduplicated SRA metadata CSV:
+
+    ``` text
+    s3://petadex/sra/petadex_metadata_dedup.csv
+    ```
+
+    ``` text
+    FASTA library_id  =  CSV acc
+    ```
+
+    The CSV’s `organism` value is then matched against an exact name in
+    the downloaded NCBI taxonomy dump to obtain a taxid, and the taxid’s
+    lineage is followed through the NCBI parent tree. A lineage
+    containing taxid 2759 is classified as Eukaryota.
+
+    The full (non-deduplicated) raw SRA metadata CSV was also tested
+    against this join and gave identical ID coverage to the deduplicated
+    file; the raw file was subsequently deleted to save disk, so only
+    the deduplicated CSV is referenced here.
+
+-   **NR/accession-origin ORFs:** `genbank_accession` is parsed from the
+    FASTA header and matched exactly, with a versionless accession
+    fallback (e.g. `XP_123.1 → XP_123`), against:
+
+    ``` text
+    metadata-extraction/petadex_nr_metadata.csv
+    metadata-extraction/nr-job/ncbi_metadata.csv
+    ```
+
+    The existing `organism` and `taxonomy` columns in these CSVs are
+    used directly (no separate taxonomy dump lookup for this path).
+    Taxonomy strings beginning with `Eukaryota;` are classified as
+    Eukaryota.
+
+Metagenomic or environmental labels are intercepted before taxonomy
+matching. Terms including `metagenome`, `microbiome`, `environmental`,
+`uncultured`, `unclassified`, `microbial community`, `gut flora`,
+`soil sample`, `wastewater`, `sediment`, `sludge`, `fecal`, `faecal`,
+and `oral metagenome` are assigned to Unknown rather than Eukaryota.
+Therefore, a label such as `human gut metagenome` is not classified as
+human.
+
+The size of the conservative metadata-supported eukaryotic set is
+database-version dependent and is recorded in the eukaryotic-filter
+summary generated for each production build.
+
+``` text
+FASTA ID
+  -> S3 metadata CSV (SRA dedup, or NR metadata + ncbi_metadata)
+  -> organism / taxonomy string
+  -> NCBI taxonomy classification (taxid lineage, or Eukaryota; prefix check)
+  -> eukaryotic ORF list
+  -> later joined locally to PostgreSQL-exported PID clusters (2.2.2)
+```
+
+#### 2.2.2. 90% PID cluster-purity rule
+
+The complete PETaDex clustering table assigns every ORF to a
+`90pid_enzyme_id`, `60pid_family_id`, and `30pid_superfamily_id`. For
+each 90% PID cluster:
+
+``` text
+euk_fraction =
+    number of metadata-supported eukaryotic ORFs in the cluster
+    ----------------------------------------------------------------
+    total number of PETaDex ORFs in the cluster
+```
+
+The D2 cohort retains a cluster when:
+
+``` text
+euk_fraction >= 0.95
+```
+
+No minimum cluster-size threshold is applied. Every ORF in a retained
+cluster is included, including members without independent eukaryotic
+metadata support.
+
+**Why 95%.** 95% is a high enough purity bar to be a meaningful quality
+control, while still retaining a cohort of several million sequences —
+enough to be a healthy, useful input for this and future
+eukaryotic-focused analyses, without inflating DeepLoc’s compute cost by
+admitting a much larger, lower-confidence cohort. It is a practical
+balance between strictness and cohort size rather than a formally
+optimized value, and should be revisited if the upstream metadata
+classification’s precision changes materially.
+
+For each production PETaDex build, the following values are taken
+directly from `D2_all_orfs_in_90pid_eukfrac95_summary.tsv` and recorded
+with the run manifest:
+
+``` text
+<TO_BE_FILLED> retained 90% PID clusters
+<TO_BE_FILLED> total ORFs
+<TO_BE_FILLED> metadata-supported eukaryotic ORFs
+<TO_BE_FILLED> cluster-rescued ORFs
+```
+
+The cohort is generated locally with `build_d2_qc95_cohort.py` (Appendix
+A1), producing:
+
+``` text
+D2_keep_90pid_clusters_eukfrac95.tsv
+D2_all_orfs_in_90pid_eukfrac95.tsv
+D2_all_orfs_in_90pid_eukfrac95_summary.tsv
+```
+
+The ORF-level file contains:
+
+``` text
+orf_id
+90pid_enzyme_id
+n_total_orfs
+n_euk_orfs
+n_non_euk_orfs
+euk_fraction
+was_metadata_eukaryotic
+```
+
+#### 2.2.3. Extract selected sequences
+
+Selected sequences are extracted from the authoritative PETaDex FASTA
+using `extract_selected_fasta.py` (Appendix A2):
+
+``` bash
+python extract_selected_fasta.py \
+  --ids D2_all_orfs_in_90pid_eukfrac95.tsv \
+  --fasta <PETaDEX_CATALYTIC_ORF_FASTA> \
+  --out deeploc21_D2_QC95.fa \
+  --rejected deeploc21_D2_QC95_rejected.tsv \
+  --summary deeploc21_D2_QC95_extraction_summary.tsv
+```
+
+The script loads only the selected numeric ORF IDs into memory and
+streams the complete source FASTA once. Original headers are preserved.
+Sequence length is calculated during extraction:
+
+-   sequences shorter than 10 amino acids are written to the rejected
+    manifest and excluded;
+-   sequences longer than 1,022 amino acids are retained and counted as
+    Fast-model truncation candidates;
+-   missing requested ORF IDs and duplicate FASTA IDs cause the
+    extraction audit to fail.
+
+The accepted FASTA record count must equal the selected cohort count
+minus explicitly rejected short sequences.
+
+### 2.3. Chunk the D2 QC95 FASTA corpus
+
+The extracted FASTA is split into fixed-size work units using
+`split_fasta_by_records.py` (Appendix A3):
+
+``` bash
+python split_fasta_by_records.py \
+  --fasta deeploc21_D2_QC95.fa \
+  --outdir ./chunks \
+  --records-per-chunk 1000 \
+  --prefix chunk
+```
+
+`--records-per-chunk 1000` is selected for the following reasons:
+
+-   DeepLoc Fast generates ESM-1B embeddings across the full sequence
+    and is substantially more computationally intensive per record than
+    SignalP.
+-   A 1,000-record unit bounds the amount of work lost to a Spot
+    interruption.
+-   The resulting chunk count is database-version dependent and is
+    recorded in the manifest; the work units remain small enough for
+    S3-backed claiming while large enough to amortize claim, download,
+    startup, and upload overhead.
+
+The splitter streams the input line by line and writes a manifest TSV
+containing each chunk filename and record count. Chunks and the manifest
+are uploaded to the DeepLoc input prefix before the fleet starts.
+
+### 2.4. Distribute work across the AWS GPU Spot fleet
+
+Workers run on AWS GPU Spot instances managed by an Auto Scaling Group.
+The candidate instance families mirror the SignalP fleet but are
+benchmarked separately because DeepLoc has different memory and
+throughput characteristics:
+
+| Instance type                  | GPU                 | Notes                           |
+|------------------------|------------------------|------------------------|
+| `g4dn.xlarge` / `g4dn.2xlarge` | NVIDIA T4 (16 GB)   | Minimum candidate               |
+| `g5.xlarge` / `g5.2xlarge`     | NVIDIA A10G (24 GB) | Preferred high-throughput class |
+| `g6.xlarge`                    | NVIDIA L4 (24 GB)   | Preferred high-throughput class |
+
+Workers operate entirely from instance local storage as scratch. The
+licensed DeepLoc package and ESM-1B model cache are preinstalled in the
+private worker image. No result is held only in instance memory; all
+durable state is in S3, under a single dedicated bucket. Result objects
+are keyed per **attempt**, not per chunk: a chunk can be attempted more
+than once (Spot interruption, transient failure, retry), and each
+attempt writes to its own path so that two workers racing on the same
+chunk can never overwrite each other’s output. The `done` marker is the
+single canonical pointer a downstream consumer should read to find out
+which attempt’s files are the real ones.
+
+``` text
+s3://petadex-deeploc/
+├── input/
+│   ├── selection/     # D2 cluster and ORF manifests
+│   ├── manifest/       # chunk manifest TSV
+│   └── chunks/         # FASTA work units
+│
+└── output/
+    ├── chunks/          # output/chunks/<chunk_id>/<attempt_id>/results.csv
+    ├── parsed/          # output/parsed/<chunk_id>/<attempt_id>.csv.gz
+    ├── logs/            # output/logs/<chunk_id>/<attempt_id>.log
+    │                     # output/logs/<chunk_id>/<attempt_id>.error.json (retried attempts)
+    ├── claims/           # output/claims/<chunk_id>.json (one live lease per chunk)
+    ├── done/             # output/done/<chunk_id>.json (canonical attempt pointer)
+    └── failed/           # output/failed/<chunk_id>.json (permanent failure only)
+```
+
+Concretely:
+
+``` text
+Input FASTA chunks:              s3://petadex-deeploc/input/chunks/
+Chunk manifest:                  s3://petadex-deeploc/input/manifest/
+D2 QC95 selection files:         s3://petadex-deeploc/input/selection/
+Raw DeepLoc result (per attempt): s3://petadex-deeploc/output/chunks/<chunk_id>/<attempt_id>/results.csv
+Parsed CSV (per attempt):         s3://petadex-deeploc/output/parsed/<chunk_id>/<attempt_id>.csv.gz
+Worker logs (per attempt):        s3://petadex-deeploc/output/logs/<chunk_id>/<attempt_id>.log
+Retry error record (per attempt): s3://petadex-deeploc/output/logs/<chunk_id>/<attempt_id>.error.json
+Worker claims (lease):            s3://petadex-deeploc/output/claims/
+Completed markers (canonical):    s3://petadex-deeploc/output/done/
+Failed markers (permanent only):  s3://petadex-deeploc/output/failed/
+```
+
+**Downstream loading must read the `done` marker to discover the
+canonical `raw_s3_key` and `parsed_s3_key` for each chunk, rather than
+assuming a fixed filename pattern** — the attempt ID embedded in those
+paths is only known once a chunk has actually completed.
+
+**Claiming, leasing, and retries.** Chunk claims are
+optimistic-concurrency leases, not plain markers:
+
+-   A claim is created with `PutObject ... IfNoneMatch="*"`, and every
+    claim carries a unique `lease_id` (a fresh UUID per attempt)
+    distinct from the worker’s own identity (`worker_id`, itself
+    `<EC2 instance ID>:<random suffix>` so that a systemd restart on the
+    same instance counts as a new worker attempt).
+-   Heartbeats, the pre-finalization ownership recheck, and lease
+    release all use `PutObject`/`DeleteObject` with
+    `IfMatch=<current ETag>` — a true compare-and-swap, not a
+    read-then-write. A heartbeat can never overwrite a newer owner’s
+    claim, because the ETag it holds is stale the moment another
+    worker’s write has occurred.
+-   If a lease is lost while DeepLoc is still running, the worker does
+    not merely notice this at finalization time — the subprocess is
+    actively terminated (SIGTERM, then SIGKILL after a 90 second grace
+    period) as soon as the loss is detected, rather than left to run to
+    completion pointlessly.
+-   Failures are split into two kinds. A `PermanentChunkError`
+    (malformed columns, out-of-range or non-numeric probabilities,
+    duplicate or missing IDs, empty rows, an orf_id mismatch between
+    input and output) writes the terminal `failed` marker immediately —
+    retrying would not help, since the input or DeepLoc’s output is
+    genuinely invalid. Any other exception (network blip, transient S3
+    error, GPU hiccup) is treated as retryable: a per-attempt error
+    record is written under `output/logs/<chunk_id>/`, and the chunk
+    remains claimable again up to `MAX_CHUNK_ATTEMPTS` (default 3)
+    attempts before it is finally marked permanently failed. Either way,
+    a worker that has already lost its lease is blocked from writing the
+    terminal `failed` marker: the marker is only written after a
+    successful CAS refresh proves the lease is still held at that
+    instant.
+-   Chunk IDs are derived from each input key’s basename. Because two
+    different nested input keys could in principle share a basename (and
+    therefore the same claim/done/failed/output paths), the manifest is
+    validated once at build time and any such collision aborts the run
+    with an explicit error rather than silently merging two distinct
+    chunks’ output under one identity.
+-   Each polling cycle samples a bounded number of remaining candidates
+    at random (`MAX_CLAIM_ATTEMPTS_PER_CYCLE`) rather than scanning the
+    full remaining candidate list in a fixed order; idle/busy sleep
+    intervals include random jitter. Both are aimed at the same problem
+    — many workers waking at the same time and all converging on the
+    same leading candidates — from complementary angles.
+
+Worker loop per instance, per polling cycle:
+
+1.  Refresh the cached chunk manifest and the done/failed marker sets on
+    their own independent intervals (the manifest rarely changes once
+    uploaded; the marker sets change constantly).
+2.  Sample up to `MAX_CLAIM_ATTEMPTS_PER_CYCLE` unfinished candidates at
+    random.
+3.  For each sampled candidate: attempt to create a lease; skip
+    immediately if another worker holds a live one.
+4.  On a successful claim: download the chunk, decompress/copy and
+    collect header identifiers in one pass, run DeepLoc while watching
+    for lease loss or a termination signal, validate the output (see
+    2.5), and parse it.
+5.  Immediately before uploading anything, recheck that the lease is
+    still held and that no other attempt has already produced the
+    canonical `done` marker; abandon cleanly (no wasted upload, no
+    incorrect terminal marker) if either check fails.
+6.  Upload the per-attempt raw CSV, parsed CSV, and log, then write the
+    `done` marker conditionally (`IfNoneMatch="*"`) — a genuine
+    simultaneous double-finish is detected rather than silently
+    overwritten.
+7.  On a deterministic validation failure, write the terminal `failed`
+    marker (subject to the lease-ownership recheck above). On any other
+    failure, record a per-attempt error and leave the chunk claimable
+    again, up to the retry limit.
+8.  Release the lease (CAS delete) and continue to the next cycle.
+
+**Fleet shutdown.** The worker intentionally never terminates its own
+EC2 instance, even once it can find no more claimable chunks — in an
+Auto Scaling Group with nonzero desired capacity, a self-terminated
+instance would simply be replaced, producing an infinite churn loop. One
+should manually set the ASG’s desired capacity to zero once all chunks
+have a `done` or `failed` marker; this is not yet automated.
+
+#### 2.4.1. AWS access configuration
+
+Workers authenticate to S3 via an EC2 instance profile rather than
+long-lived credentials, so that credentials rotate automatically for
+long-running Spot instances (consistent with the credential-handling
+rationale used elsewhere in the PETaDex pipelines).
+
+**IAM permissions policy** (`PETaDexDeepLocS3Access`), scoped to only
+the `input/` and `output/` prefixes of the dedicated bucket:
+
+``` json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListPetadexDeepLocBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": "arn:aws:s3:::petadex-deeploc",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "input",
+            "input/*",
+            "output",
+            "output/*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ReadWritePetadexDeepLocObjects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:AbortMultipartUpload",
+        "s3:ListMultipartUploadParts"
+      ],
+      "Resource": [
+        "arn:aws:s3:::petadex-deeploc/input/*",
+        "arn:aws:s3:::petadex-deeploc/output/*"
+      ]
+    }
+  ]
+}
+```
+
+**EC2 trust policy** for the role (`PETaDexDeepLocEC2Role`):
+
+``` json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "ec2.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+```
+
+Setup:
+
+1.  Create the `PETaDexDeepLocEC2Role` role with the trust policy above.
+2.  Attach the `PETaDexDeepLocS3Access` permissions policy to that role.
+3.  Put the role in an EC2 instance profile.
+4.  Attach that instance profile to the DeepLoc test instance, and later
+    to the GPU fleet launch template.
+
+### 2.5. Parse DeepLoc outputs and prepare upload parts
+
+Each successful archive contains the raw results CSV (protein
+identifier, predicted localization/signal/membrane labels, and
+probabilities for all ten localization and four membrane classes), an
+input checksum, record counts, and a run log. Predicted labels are
+converted to compact integer bitmasks; the 14 probability values are
+stored individually.
+
+**Localization mask encoding.**
+
+| Bit | Value | Label                 |
+|-----|------:|-----------------------|
+| 0   |     1 | Nucleus               |
+| 1   |     2 | Cytoplasm             |
+| 2   |     4 | Extracellular         |
+| 3   |     8 | Mitochondrion         |
+| 4   |    16 | Cell membrane         |
+| 5   |    32 | Endoplasmic reticulum |
+| 6   |    64 | Chloroplast           |
+| 7   |   128 | Golgi apparatus       |
+| 8   |   256 | Lysosome/Vacuole      |
+| 9   |   512 | Peroxisome            |
+
+Multiple predicted localizations are represented by the bitwise OR of
+their values. For example, `Cytoplasm;Nucleus` is encoded as
+`2 | 1 = 3`.
+
+**Membrane mask encoding.**
+
+| Bit | Value | Label         |
+|-----|------:|---------------|
+| 0   |     1 | Peripheral    |
+| 1   |     2 | Transmembrane |
+| 2   |     4 | Lipid anchor  |
+| 3   |     8 | Soluble       |
+
+Sorting-signal labels are stored as normalized semicolon-delimited text
+rather than a bitmask, since DeepLoc’s signal field is sparse and has no
+matching set of per-signal probabilities to validate against.
+
+**orf_id extraction:**
+
+``` python
+def normalized_orf_id(protein_id: str) -> str:
+    value = protein_id.strip()
+    if "||" in value:
+        return value.split("||", 1)[0]
+    return value
+```
+
+The identifier is treated as a string, not cast to an integer, since
+PETaDex `orf_id` is not guaranteed to remain numeric in future builds.
+PETaDex headers use `orf_id||...` (double pipe); the substring before it
+is extracted. Any other identifier, including the bundled non-PETaDex
+smoke-test sequences, is passed through unchanged.
+
+Archives are parsed by `parse_deeploc_archives_to_upload.py` (Appendix
+A4), streaming `.tar.gz` files directly from S3:
+
+``` bash
+python parse_deeploc_archives_to_upload.py \
+  --bucket petadex-deeploc \
+  --prefix output/chunks/ \
+  --outdir ./upload_parts \
+  --rows-per-part 1000000 \
+  --workers 16
+```
+
+`--rows-per-part 1000000` keeps compressed parts manageable given
+DeepLoc’s wider rows (14 probabilities per record vs. SignalP’s fewer
+columns); `--workers 16` sets concurrent download/parse threads.
+
+The resulting `./upload_parts` directory is synced to
+`s3://petadex-deeploc/output/parsed/` as a durable copy before loading
+(2.7):
+
+``` bash
+aws s3 sync ./upload_parts s3://petadex-deeploc/output/parsed/
+```
+
+Column names are normalized to lowercase underscore form before lookup,
+so spacing/punctuation/case can vary while still resolving
+unambiguously. Missing or duplicate required columns fail the archive
+rather than being silently filled.
+
+**Output format.** Each part file is a gzip-compressed tab-separated
+file with a header row and `\N` as the null token:
+
+``` text
+orf_id
+localization_mask
+membrane_mask
+sorting_signals
+nucleus_prob
+cytoplasm_prob
+extracellular_prob
+mitochondrion_prob
+cell_membrane_prob
+endoplasmic_reticulum_prob
+chloroplast_prob
+golgi_apparatus_prob
+lysosome_vacuole_prob
+peroxisome_prob
+peripheral_prob
+transmembrane_prob
+lipid_anchor_prob
+soluble_prob
+```
+
+No prediction rows are filtered out. DeepLoc is multi-label and every
+completed prediction is retained.
+
+### 2.6. Create the PostgreSQL schema
+
+``` sql
+CREATE TABLE deeploc21_orf_predictions (
+    orf_id                        BIGINT PRIMARY KEY,
+    localization_mask              SMALLINT NOT NULL,
+    membrane_mask                  SMALLINT NOT NULL,
+    sorting_signals                TEXT,
+
+    nucleus_prob                   REAL NOT NULL,
+    cytoplasm_prob                 REAL NOT NULL,
+    extracellular_prob             REAL NOT NULL,
+    mitochondrion_prob             REAL NOT NULL,
+    cell_membrane_prob             REAL NOT NULL,
+    endoplasmic_reticulum_prob     REAL NOT NULL,
+    chloroplast_prob               REAL NOT NULL,
+    golgi_apparatus_prob           REAL NOT NULL,
+    lysosome_vacuole_prob          REAL NOT NULL,
+    peroxisome_prob                REAL NOT NULL,
+
+    peripheral_prob                REAL NOT NULL,
+    transmembrane_prob             REAL NOT NULL,
+    lipid_anchor_prob              REAL NOT NULL,
+    soluble_prob                   REAL NOT NULL,
+
+    CONSTRAINT deeploc21_orf_predictions_orf_id_fkey
+        FOREIGN KEY (orf_id)
+        REFERENCES orf_origins (orf_id)
+        NOT VALID,
+
+    CONSTRAINT deeploc21_orf_predictions_localization_mask_check
+        CHECK (localization_mask BETWEEN 1 AND 1023),
+
+    CONSTRAINT deeploc21_orf_predictions_membrane_mask_check
+        CHECK (membrane_mask BETWEEN 1 AND 15),
+
+    CONSTRAINT deeploc21_orf_predictions_probability_check
+        CHECK (
+            nucleus_prob BETWEEN 0 AND 1
+            AND cytoplasm_prob BETWEEN 0 AND 1
+            AND extracellular_prob BETWEEN 0 AND 1
+            AND mitochondrion_prob BETWEEN 0 AND 1
+            AND cell_membrane_prob BETWEEN 0 AND 1
+            AND endoplasmic_reticulum_prob BETWEEN 0 AND 1
+            AND chloroplast_prob BETWEEN 0 AND 1
+            AND golgi_apparatus_prob BETWEEN 0 AND 1
+            AND lysosome_vacuole_prob BETWEEN 0 AND 1
+            AND peroxisome_prob BETWEEN 0 AND 1
+            AND peripheral_prob BETWEEN 0 AND 1
+            AND transmembrane_prob BETWEEN 0 AND 1
+            AND lipid_anchor_prob BETWEEN 0 AND 1
+            AND soluble_prob BETWEEN 0 AND 1
+        )
+);
+
+COMMENT ON TABLE deeploc21_orf_predictions IS
+    'DeepLoc 2.1 predictions for PETaDex D2_QC95 ORFs. model=Fast (ESM-1B); no attention plots. Input contains all members of 90pid clusters with metadata-supported eukaryotic fraction >=0.95. One row per successfully predicted ORF.';
+```
+
+Design rationale:
+
+| Column                            | Type        | Rationale                                                                                                                                                                                                                                                           |
+|------------------------|------------------------|------------------------|
+| `orf_id`                          | `BIGINT`    | PETaDex ORF IDs can exceed 2.1 billion as the database grows.                                                                                                                                                                                                       |
+| `localization_mask`               | `SMALLINT`  | Ten multi-label localization flags fit in 10 bits; compact and lossless. Constrained to 1–1023 (never 0): DeepLoc always predicts at least one localization, so a zero mask indicates a parsing failure rather than valid data — same reasoning as `membrane_mask`. |
+| `membrane_mask`                   | `SMALLINT`  | Four multi-label membrane flags fit in 4 bits.                                                                                                                                                                                                                      |
+| `sorting_signals`                 | `TEXT NULL` | Preserves package output terminology; NULL indicates no predicted sorting signal.                                                                                                                                                                                   |
+| probability columns               | `REAL`      | Four-byte precision is sufficient for model probabilities and halves storage relative to DOUBLE PRECISION.                                                                                                                                                          |
+| tool/version/model columns        | omitted     | Constant across the run and stored in the table comment rather than repeated in every prediction row.                                                                                                                                                               |
+| 90% PID cluster and purity fields | omitted     | Already stored in the authoritative D2 selection manifest and available through `petadex_clustering`; repeating them in every prediction row is unnecessary.                                                                                                        |
+
+**Foreign key.** Declared `NOT VALID` to avoid a full scan at creation;
+validated after loading:
+
+``` sql
+ALTER TABLE deeploc21_orf_predictions
+    VALIDATE CONSTRAINT deeploc21_orf_predictions_orf_id_fkey;
+```
+
+**Indexes**, built after the bulk load:
+
+``` sql
+CREATE INDEX idx_deeploc21_membrane_mask
+    ON deeploc21_orf_predictions (membrane_mask);
+
+CREATE INDEX idx_deeploc21_extracellular_probability
+    ON deeploc21_orf_predictions (extracellular_prob DESC)
+    WHERE (localization_mask & 4) <> 0;
+```
+
+`orf_id` is indexed automatically as the primary key. The partial
+extracellular index targets the principal use case — ranking predicted
+extracellular proteins by confidence — without indexing every row for
+every localization label.
+
+### 2.7. Bulk load into PostgreSQL
+
+Host, port, and credentials are intentionally omitted below (managed
+separately as operational secrets, not part of this document):
+
+``` bash
+psql "host=<HOST> port=5432 dbname=petadex user=<USER> sslmode=require" \
+  -c "\copy deeploc21_orf_predictions (
+          orf_id, localization_mask, membrane_mask, sorting_signals,
+          nucleus_prob, cytoplasm_prob, extracellular_prob, mitochondrion_prob,
+          cell_membrane_prob, endoplasmic_reticulum_prob, chloroplast_prob,
+          golgi_apparatus_prob, lysosome_vacuole_prob, peroxisome_prob,
+          peripheral_prob, transmembrane_prob, lipid_anchor_prob, soluble_prob
+      )
+      FROM PROGRAM 'gunzip -c deeploc_upload_part_000000.tsv.gz'
+      WITH (FORMAT csv, HEADER true, DELIMITER E'\t', NULL '\N');"
+```
+
+Repeat per part file. Loaded row count must equal the accepted D2 FASTA
+record count; duplicate `orf_id` is rejected by the primary key. Indexes
+and FK validation run after all parts are loaded.
+
+------------------------------------------------------------------------
+
+## Appendix: Pipeline Scripts
+
+### A1. `build_d2_qc95_cohort.py`
+
+Builds the retained 90% PID cluster list and ORF-level D2 QC95 manifest
+from the local DuckDB tables `clustering` and `euk_clustered`.
+
+``` python
+#!/usr/bin/env python3
+import duckdb
+
+DB = "deeploc_filter_full/pid_clusters/pid_cluster_tiers.duckdb"
+OUT = "deeploc_filter_full/qc_90pid_purity"
+
+con = duckdb.connect(DB)
+con.execute("PRAGMA memory_limit='10GB'")
+con.execute("PRAGMA threads=4")
+con.execute("PRAGMA temp_directory='deeploc_filter_full/duckdb_tmp'")
+
+tables = {r[0] for r in con.execute("SHOW TABLES").fetchall()}
+required = {"clustering", "euk_clustered"}
+missing = required - tables
+if missing:
+    raise SystemExit(f"Missing required tables: {sorted(missing)}")
+
+con.execute("""
+CREATE OR REPLACE TABLE total_90 AS
+SELECT pid90, COUNT(*) AS n_total_orfs
+FROM clustering
+GROUP BY pid90
+""")
+
+con.execute("""
+CREATE OR REPLACE TABLE euk_90 AS
+SELECT
+    pid90,
+    COUNT(*) AS n_euk_orfs,
+    COUNT_IF(source = 'SRA') AS n_sra_euk_orfs,
+    COUNT_IF(source = 'NR') AS n_nr_euk_orfs
+FROM euk_clustered
+GROUP BY pid90
+""")
+
+con.execute("""
+CREATE OR REPLACE TABLE purity_90 AS
+SELECT
+    t.pid90,
+    t.n_total_orfs,
+    COALESCE(e.n_euk_orfs, 0) AS n_euk_orfs,
+    t.n_total_orfs - COALESCE(e.n_euk_orfs, 0) AS n_non_euk_orfs,
+    COALESCE(e.n_sra_euk_orfs, 0) AS n_sra_euk_orfs,
+    COALESCE(e.n_nr_euk_orfs, 0) AS n_nr_euk_orfs,
+    COALESCE(e.n_euk_orfs, 0)::DOUBLE / t.n_total_orfs AS euk_fraction
+FROM total_90 t
+LEFT JOIN euk_90 e USING (pid90)
+""")
+
+con.execute(f"""
+COPY (
+    SELECT
+        pid90 AS "90pid_enzyme_id",
+        n_total_orfs,
+        n_euk_orfs,
+        n_non_euk_orfs,
+        n_sra_euk_orfs,
+        n_nr_euk_orfs,
+        euk_fraction
+    FROM purity_90
+    WHERE n_euk_orfs > 0
+      AND euk_fraction >= 0.95
+    ORDER BY n_total_orfs DESC, pid90
+)
+TO '{OUT}/D2_keep_90pid_clusters_eukfrac95.tsv'
+(HEADER, DELIMITER '\t')
+""")
+
+con.execute(f"""
+COPY (
+    SELECT
+        c.orf_id,
+        c.pid90 AS "90pid_enzyme_id",
+        p.n_total_orfs,
+        p.n_euk_orfs,
+        p.n_non_euk_orfs,
+        p.euk_fraction,
+        ec.orf_id IS NOT NULL AS was_metadata_eukaryotic
+    FROM clustering c
+    JOIN purity_90 p USING (pid90)
+    LEFT JOIN euk_clustered ec
+      ON c.orf_id = ec.orf_id
+    WHERE p.n_euk_orfs > 0
+      AND p.euk_fraction >= 0.95
+    ORDER BY c.pid90, c.orf_id
+)
+TO '{OUT}/D2_all_orfs_in_90pid_eukfrac95.tsv'
+(HEADER, DELIMITER '\t')
+""")
+
+con.execute(f"""
+COPY (
+    SELECT
+        'D2_QC95_ALL_ORFS_IN_90PID_EUKFRAC95' AS dataset,
+        COUNT(*) AS n_orfs,
+        COUNT_IF(was_metadata_eukaryotic) AS n_metadata_euk_orfs,
+        COUNT_IF(NOT was_metadata_eukaryotic) AS n_cluster_rescued_orfs,
+        COUNT(DISTINCT "90pid_enzyme_id") AS n_90pid_clusters,
+        MIN(euk_fraction) AS min_euk_fraction
+    FROM read_csv(
+        '{OUT}/D2_all_orfs_in_90pid_eukfrac95.tsv',
+        delim='\t',
+        header=true,
+        all_varchar=false
+    )
+)
+TO '{OUT}/D2_all_orfs_in_90pid_eukfrac95_summary.tsv'
+(HEADER, DELIMITER '\t')
+""")
+
+print("D2 QC95 cohort written.")
+```
+
+------------------------------------------------------------------------
+
+### A2. `extract_selected_fasta.py`
+
+Streams the complete PETaDex FASTA once and writes only selected D2
+ORFs. It rejects records shorter than 10 amino acids and audits missing
+IDs and Fast-model truncation candidates.
+
+``` python
+#!/usr/bin/env python3
+import argparse
+import csv
+from pathlib import Path
+
+
+def read_ids(path):
+    wanted = set()
+    with open(path) as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        if "orf_id" not in reader.fieldnames:
+            raise ValueError("Input ID table has no orf_id column")
+        for row in reader:
+            orf_id = int(row["orf_id"])
+            if orf_id in wanted:
+                raise ValueError(f"Duplicate requested orf_id: {orf_id}")
+            wanted.add(orf_id)
+    return wanted
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--ids", required=True)
+    ap.add_argument("--fasta", required=True)
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--rejected", required=True)
+    ap.add_argument("--summary", required=True)
+    args = ap.parse_args()
+
+    wanted = read_ids(args.ids)
+    requested = len(wanted)
+    seen_selected = set()
+
+    accepted = 0
+    rejected_short = 0
+    over_fast_limit = 0
+    duplicate_fasta_ids = 0
+
+    out = open(args.out, "w")
+    rejected = open(args.rejected, "w", newline="")
+    reject_writer = csv.writer(rejected, delimiter="\t")
+    reject_writer.writerow(["orf_id", "sequence_length", "reason"])
+
+    current_header = None
+    current_seq = []
+
+    def flush_record():
+        nonlocal accepted, rejected_short, over_fast_limit, duplicate_fasta_ids
+        if current_header is None:
+            return
+
+        seq_id = current_header[1:].split("|", 1)[0].strip()
+        orf_id = int(seq_id)
+        if orf_id not in wanted:
+            return
+
+        if orf_id in seen_selected:
+            duplicate_fasta_ids += 1
+            return
+        seen_selected.add(orf_id)
+
+        seq = "".join(current_seq).replace(" ", "").strip()
+        length = len(seq)
+
+        if length < 10:
+            reject_writer.writerow([orf_id, length, "shorter_than_10_aa"])
+            rejected_short += 1
+        else:
+            out.write(current_header)
+            if not current_header.endswith("\n"):
+                out.write("\n")
+            for i in range(0, length, 80):
+                out.write(seq[i:i+80] + "\n")
+            accepted += 1
+            if length > 1022:
+                over_fast_limit += 1
+
+        wanted.remove(orf_id)
+
+    with open(args.fasta) as f:
+        for line in f:
+            if line.startswith(">"):
+                flush_record()
+                current_header = line
+                current_seq = []
+            else:
+                if current_header is None:
+                    raise RuntimeError("Input did not begin with a FASTA header")
+                current_seq.append(line.strip())
+        flush_record()
+
+    out.close()
+    rejected.close()
+
+    with open(args.summary, "w") as f:
+        f.write("metric\tvalue\n")
+        f.write(f"requested_orfs\t{requested}\n")
+        f.write(f"accepted_orfs\t{accepted}\n")
+        f.write(f"rejected_short\t{rejected_short}\n")
+        f.write(f"over_fast_limit_1022\t{over_fast_limit}\n")
+        f.write(f"missing_orfs\t{len(wanted)}\n")
+        f.write(f"duplicate_fasta_ids\t{duplicate_fasta_ids}\n")
+
+    if wanted or duplicate_fasta_ids:
+        raise SystemExit(
+            f"Extraction audit failed: missing={len(wanted)}, "
+            f"duplicate_fasta_ids={duplicate_fasta_ids}"
+        )
+
+    print(Path(args.summary).read_text())
+
+
+if __name__ == "__main__":
+    main()
+```
+
+------------------------------------------------------------------------
+
+### A3. `split_fasta_by_records.py`
+
+Splits the accepted D2 FASTA into 1,000-record chunks and writes a
+manifest TSV.
+
+``` python
+#!/usr/bin/env python3
+import argparse
+import csv
+from pathlib import Path
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--fasta", required=True)
+    ap.add_argument("--outdir", required=True)
+    ap.add_argument("--records-per-chunk", type=int, default=1000)
+    ap.add_argument("--prefix", default="chunk")
+    args = ap.parse_args()
+
+    outdir = Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    chunk_idx = -1
+    total_records = 0
+    records_in_chunk = 0
+    out = None
+    current_name = None
+    manifest = []
+
+    def close_chunk():
+        nonlocal out, current_name, records_in_chunk
+        if out is not None:
+            out.close()
+            manifest.append((current_name, records_in_chunk))
+            out = None
+
+    with open(args.fasta) as f:
+        for line in f:
+            if line.startswith(">"):
+                if total_records % args.records_per_chunk == 0:
+                    close_chunk()
+                    chunk_idx += 1
+                    current_name = f"{args.prefix}_{chunk_idx:08d}.fa"
+                    out = (outdir / current_name).open("w")
+                    records_in_chunk = 0
+                total_records += 1
+                records_in_chunk += 1
+            if out is None:
+                raise RuntimeError("Input did not start with FASTA header")
+            out.write(line)
+    close_chunk()
+
+    manifest_path = outdir / "manifest.tsv"
+    with manifest_path.open("w", newline="") as f:
+        w = csv.writer(f, delimiter="\t")
+        w.writerow(["chunk_file", "record_count"])
+        w.writerows(manifest)
+
+    print(f"Records: {total_records}")
+    print(f"Chunks: {len(manifest)}")
+    print(f"Manifest: {manifest_path}")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+------------------------------------------------------------------------
+
+### A4. `parse_deeploc_archives_to_upload.py`
+
+Streams DeepLoc result archives from S3, parses the short CSV output,
+encodes predicted labels as masks, and writes compressed PostgreSQL
+upload parts.
+
+``` python
+#!/usr/bin/env python3
+import argparse
+import csv
+import gzip
+import io
+import re
+import tarfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+import boto3
+
+
+LOCALIZATION_BITS = {
+    "nucleus": 1,
+    "cytoplasm": 2,
+    "extracellular": 4,
+    "mitochondrion": 8,
+    "cell_membrane": 16,
+    "endoplasmic_reticulum": 32,
+    "chloroplast": 64,
+    "golgi_apparatus": 128,
+    "lysosome_vacuole": 256,
+    "peroxisome": 512,
+}
+
+MEMBRANE_BITS = {
+    "peripheral": 1,
+    "transmembrane": 2,
+    "lipid_anchor": 4,
+    "soluble": 8,
+}
+
+PROBABILITY_COLUMNS = [
+    "nucleus",
+    "cytoplasm",
+    "extracellular",
+    "mitochondrion",
+    "cell_membrane",
+    "endoplasmic_reticulum",
+    "chloroplast",
+    "golgi_apparatus",
+    "lysosome_vacuole",
+    "peroxisome",
+    "peripheral",
+    "transmembrane",
+    "lipid_anchor",
+    "soluble",
+]
+
+
+def normalize(value):
+    value = value.strip().lower()
+    value = value.replace("&", "and")
+    return re.sub(r"[^a-z0-9]+", "_", value).strip("_")
+
+
+def parse_mask(value, mapping):
+    mask = 0
+    if not value.strip():
+        return mask
+    for label in re.split(r"[,;|]+", value):
+        key = normalize(label)
+        aliases = {
+            "lysosome_vacuole": "lysosome_vacuole",
+            "golgi": "golgi_apparatus",
+            "golgi_body": "golgi_apparatus",
+            "er": "endoplasmic_reticulum",
+            "cell_membrane": "cell_membrane",
+            "lipid_anchored": "lipid_anchor",
+            "peripheral_membrane": "peripheral",
+            "transmembrane_protein": "transmembrane",
+            "soluble_non_membrane": "soluble",
+        }
+        key = aliases.get(key, key)
+        if key not in mapping:
+            raise ValueError(f"Unknown DeepLoc label: {label!r}")
+        mask |= mapping[key]
+    return mask
+
+
+def parse_orf_id(protein_id):
+    return int(protein_id.split("|", 1)[0])
+
+
+def iter_archive_keys(s3, bucket, prefix, limit=None):
+    token = None
+    count = 0
+    while True:
+        kwargs = {"Bucket": bucket, "Prefix": prefix}
+        if token:
+            kwargs["ContinuationToken"] = token
+        resp = s3.list_objects_v2(**kwargs)
+        for obj in resp.get("Contents", []):
+            if obj["Key"].endswith(".tar.gz"):
+                yield obj["Key"]
+                count += 1
+                if limit and count >= limit:
+                    return
+        if not resp.get("IsTruncated"):
+            return
+        token = resp["NextContinuationToken"]
+
+
+def read_results_csv(tf):
+    matches = [
+        m for m in tf.getmembers()
+        if m.isfile()
+        and m.name.rsplit("/", 1)[-1].startswith("results_")
+        and m.name.lower().endswith(".csv")
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(f"Expected one results_*.csv, found {len(matches)}")
+    fh = tf.extractfile(matches[0])
+    if fh is None:
+        raise RuntimeError("Could not extract DeepLoc results CSV")
+    return io.TextIOWrapper(fh, encoding="utf-8", errors="replace", newline="")
+
+
+def process_archive(bucket, key, region):
+    s3 = boto3.client("s3", region_name=region)
+    body = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
+
+    with tarfile.open(fileobj=io.BytesIO(body), mode="r:gz") as tf:
+        text_fh = read_results_csv(tf)
+        reader = csv.DictReader(text_fh)
+        if not reader.fieldnames:
+            raise RuntimeError("DeepLoc results CSV has no header")
+
+        normalized_header = {normalize(h): h for h in reader.fieldnames}
+
+        required = {
+            "protein_id",
+            "localizations",
+            "signals",
+            "membrane_types",
+            *PROBABILITY_COLUMNS,
+        }
+        missing = required - set(normalized_header)
+        if missing:
+            raise RuntimeError(f"Missing required DeepLoc columns: {sorted(missing)}")
+
+        rows = []
+        for raw in reader:
+            def get(name):
+                return raw[normalized_header[name]].strip()
+
+            orf_id = parse_orf_id(get("protein_id"))
+            localization_mask = parse_mask(
+                get("localizations"), LOCALIZATION_BITS
+            )
+            if localization_mask == 0:
+                raise ValueError(f"No localization label for ORF {orf_id}")
+
+            membrane_mask = parse_mask(
+                get("membrane_types"), MEMBRANE_BITS
+            )
+            if membrane_mask == 0:
+                raise ValueError(f"No membrane label for ORF {orf_id}")
+
+            probabilities = []
+            for name in PROBABILITY_COLUMNS:
+                value = float(get(name))
+                if not 0.0 <= value <= 1.0:
+                    raise ValueError(
+                        f"Probability outside 0-1 for ORF {orf_id}: "
+                        f"{name}={value}"
+                    )
+                probabilities.append(value)
+
+            signal_text = get("signals")
+            rows.append([
+                orf_id,
+                localization_mask,
+                membrane_mask,
+                signal_text or None,
+                *probabilities,
+            ])
+
+    return key, rows
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--bucket", required=True)
+    ap.add_argument("--prefix", required=True)
+    ap.add_argument("--outdir", required=True)
+    ap.add_argument("--region", default="us-east-1")
+    ap.add_argument("--workers", type=int, default=16)
+    ap.add_argument("--limit", type=int)
+    ap.add_argument("--rows-per-part", type=int, default=1_000_000)
+    args = ap.parse_args()
+
+    outdir = Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    s3 = boto3.client("s3", region_name=args.region)
+    keys = list(iter_archive_keys(
+        s3, args.bucket, args.prefix, args.limit
+    ))
+    print(f"Archives listed: {len(keys)}")
+
+    header = [
+        "orf_id",
+        "localization_mask",
+        "membrane_mask",
+        "sorting_signals",
+        *[f"{x}_prob" for x in PROBABILITY_COLUMNS],
+    ]
+
+    failures = []
+    total_rows = 0
+    rows_in_part = 0
+    part_idx = 0
+
+    def open_part(i):
+        path = outdir / f"deeploc_upload_part_{i:06d}.tsv.gz"
+        fh = gzip.open(path, "wt", newline="")
+        writer = csv.writer(
+            fh, delimiter="\t", lineterminator="\n"
+        )
+        writer.writerow(header)
+        return fh, writer
+
+    out_fh, writer = open_part(part_idx)
+
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = {
+            pool.submit(process_archive, args.bucket, key, args.region): key
+            for key in keys
+        }
+        for future in as_completed(futures):
+            key = futures[future]
+            try:
+                _, rows = future.result()
+                for row in rows:
+                    if rows_in_part >= args.rows_per_part:
+                        out_fh.close()
+                        part_idx += 1
+                        rows_in_part = 0
+                        out_fh, writer = open_part(part_idx)
+
+                    rendered = [
+                        row[0],
+                        row[1],
+                        row[2],
+                        row[3] if row[3] is not None else "\\N",
+                        *[f"{x:.7g}" for x in row[4:]],
+                    ]
+                    writer.writerow(rendered)
+                    rows_in_part += 1
+                    total_rows += 1
+            except Exception as exc:
+                failures.append((key, repr(exc)))
+                print("FAILED", key, repr(exc), flush=True)
+
+    out_fh.close()
+
+    with open(outdir / "parse_failures.tsv", "w", newline="") as f:
+        w = csv.writer(f, delimiter="\t")
+        w.writerow(["key", "error"])
+        w.writerows(failures)
+
+    with open(outdir / "parse_summary.tsv", "w") as f:
+        f.write(f"archives\t{len(keys)}\n")
+        f.write(f"rows\t{total_rows}\n")
+        f.write(f"failures\t{len(failures)}\n")
+        f.write(f"parts\t{part_idx + 1}\n")
+
+    print(f"Rows written: {total_rows}")
+    print(f"Failures: {len(failures)}")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+------------------------------------------------------------------------
+
+### A5. `summarize_deeploc_upload_parts.py`
+
+Reads all upload parts and reports label incidence and structural
+validation failures.
+
+``` python
+#!/usr/bin/env python3
+import argparse
+import csv
+import gzip
+from collections import Counter
+from pathlib import Path
+
+
+LOCALIZATION_BITS = {
+    "nucleus": 1,
+    "cytoplasm": 2,
+    "extracellular": 4,
+    "mitochondrion": 8,
+    "cell_membrane": 16,
+    "endoplasmic_reticulum": 32,
+    "chloroplast": 64,
+    "golgi_apparatus": 128,
+    "lysosome_vacuole": 256,
+    "peroxisome": 512,
+}
+
+MEMBRANE_BITS = {
+    "peripheral": 1,
+    "transmembrane": 2,
+    "lipid_anchor": 4,
+    "soluble": 8,
+}
+
+
+def open_text(path):
+    return gzip.open(path, "rt") if str(path).endswith(".gz") else open(path)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--indir", required=True)
+    ap.add_argument("--out", default="deeploc_upload_summary.tsv")
+    args = ap.parse_args()
+
+    total = 0
+    malformed = 0
+    loc_counts = Counter()
+    mem_counts = Counter()
+    signal_present = 0
+
+    probability_columns = [
+        "nucleus_prob",
+        "cytoplasm_prob",
+        "extracellular_prob",
+        "mitochondrion_prob",
+        "cell_membrane_prob",
+        "endoplasmic_reticulum_prob",
+        "chloroplast_prob",
+        "golgi_apparatus_prob",
+        "lysosome_vacuole_prob",
+        "peroxisome_prob",
+        "peripheral_prob",
+        "transmembrane_prob",
+        "lipid_anchor_prob",
+        "soluble_prob",
+    ]
+
+    for path in sorted(Path(args.indir).glob(
+        "deeploc_upload_part_*.tsv*"
+    )):
+        with open_text(path) as f:
+            reader = csv.DictReader(f, delimiter="\t")
+            for row in reader:
+                total += 1
+                try:
+                    loc_mask = int(row["localization_mask"])
+                    mem_mask = int(row["membrane_mask"])
+                    if not 1 <= loc_mask <= 1023:
+                        malformed += 1
+                    if not 1 <= mem_mask <= 15:
+                        malformed += 1
+
+                    for label, bit in LOCALIZATION_BITS.items():
+                        if loc_mask & bit:
+                            loc_counts[label] += 1
+                    for label, bit in MEMBRANE_BITS.items():
+                        if mem_mask & bit:
+                            mem_counts[label] += 1
+
+                    if row["sorting_signals"] not in ("", "\\N"):
+                        signal_present += 1
+
+                    for column in probability_columns:
+                        value = float(row[column])
+                        if not 0.0 <= value <= 1.0:
+                            malformed += 1
+                except Exception:
+                    malformed += 1
+
+    with open(args.out, "w") as f:
+        f.write("metric\tvalue\n")
+        f.write(f"total_rows\t{total}\n")
+        for label in LOCALIZATION_BITS:
+            f.write(f"localization_{label}\t{loc_counts[label]}\n")
+        for label in MEMBRANE_BITS:
+            f.write(f"membrane_{label}\t{mem_counts[label]}\n")
+        f.write(f"rows_with_sorting_signal\t{signal_present}\n")
+        f.write(f"malformed_rows\t{malformed}\n")
+
+    print(Path(args.out).read_text())
+
+
+if __name__ == "__main__":
+    main()
+```
+
+------------------------------------------------------------------------
+
+### A6. `deeploc21_orf_predictions_schema.sql`
+
+Full PostgreSQL schema including constraints, comments, indexes, and
+example queries.
+
+``` sql
+-- =============================================================
+-- DeepLoc 2.1 ORF Predictions — PETaDex
+-- Tool:    DeepLoc 2.1
+-- Model:   Fast / ESM-1B
+-- Input:   D2_QC95
+--          All ORFs in 90pid clusters with
+--          metadata-eukaryotic fraction >= 0.95
+-- Output:  One row per predicted ORF; no rows filtered
+--
+-- Bit encodings:
+--   localization_mask:
+--       1 Nucleus
+--       2 Cytoplasm
+--       4 Extracellular
+--       8 Mitochondrion
+--      16 Cell membrane
+--      32 Endoplasmic reticulum
+--      64 Chloroplast
+--     128 Golgi apparatus
+--     256 Lysosome/Vacuole
+--     512 Peroxisome
+--
+--   membrane_mask:
+--       1 Peripheral
+--       2 Transmembrane
+--       4 Lipid anchor
+--       8 Soluble
+-- =============================================================
+
+CREATE TABLE deeploc21_orf_predictions (
+    orf_id                        BIGINT PRIMARY KEY,
+    localization_mask             SMALLINT NOT NULL,
+    membrane_mask                 SMALLINT NOT NULL,
+    sorting_signals               TEXT,
+
+    nucleus_prob                  REAL NOT NULL,
+    cytoplasm_prob                REAL NOT NULL,
+    extracellular_prob            REAL NOT NULL,
+    mitochondrion_prob            REAL NOT NULL,
+    cell_membrane_prob            REAL NOT NULL,
+    endoplasmic_reticulum_prob    REAL NOT NULL,
+    chloroplast_prob              REAL NOT NULL,
+    golgi_apparatus_prob          REAL NOT NULL,
+    lysosome_vacuole_prob         REAL NOT NULL,
+    peroxisome_prob               REAL NOT NULL,
+
+    peripheral_prob               REAL NOT NULL,
+    transmembrane_prob            REAL NOT NULL,
+    lipid_anchor_prob             REAL NOT NULL,
+    soluble_prob                  REAL NOT NULL,
+
+    CONSTRAINT deeploc21_orf_predictions_orf_id_fkey
+        FOREIGN KEY (orf_id)
+        REFERENCES orf_origins (orf_id)
+        NOT VALID,
+
+    CONSTRAINT deeploc21_orf_predictions_localization_mask_check
+        CHECK (localization_mask BETWEEN 1 AND 1023),
+
+    CONSTRAINT deeploc21_orf_predictions_membrane_mask_check
+        CHECK (membrane_mask BETWEEN 1 AND 15),
+
+    CONSTRAINT deeploc21_orf_predictions_probability_check
+        CHECK (
+            nucleus_prob BETWEEN 0 AND 1
+            AND cytoplasm_prob BETWEEN 0 AND 1
+            AND extracellular_prob BETWEEN 0 AND 1
+            AND mitochondrion_prob BETWEEN 0 AND 1
+            AND cell_membrane_prob BETWEEN 0 AND 1
+            AND endoplasmic_reticulum_prob BETWEEN 0 AND 1
+            AND chloroplast_prob BETWEEN 0 AND 1
+            AND golgi_apparatus_prob BETWEEN 0 AND 1
+            AND lysosome_vacuole_prob BETWEEN 0 AND 1
+            AND peroxisome_prob BETWEEN 0 AND 1
+            AND peripheral_prob BETWEEN 0 AND 1
+            AND transmembrane_prob BETWEEN 0 AND 1
+            AND lipid_anchor_prob BETWEEN 0 AND 1
+            AND soluble_prob BETWEEN 0 AND 1
+        )
+);
+
+COMMENT ON TABLE deeploc21_orf_predictions IS
+    'DeepLoc 2.1 predictions for PETaDex D2_QC95 ORFs. model=Fast (ESM-1B); no attention plots. Input contains all members of 90pid clusters with metadata-supported eukaryotic fraction >=0.95. One row per successfully predicted ORF.';
+
+COMMENT ON COLUMN deeploc21_orf_predictions.orf_id IS
+    'primary.key
+
+foreign.key
+
+PETaDex ORF integer accession. Refers to orf_origins.orf_id.';
+
+COMMENT ON COLUMN deeploc21_orf_predictions.localization_mask IS
+    'Bit mask of DeepLoc 2.1 predicted localizations:
+    1=Nucleus; 2=Cytoplasm; 4=Extracellular; 8=Mitochondrion;
+    16=Cell membrane; 32=Endoplasmic reticulum; 64=Chloroplast;
+    128=Golgi apparatus; 256=Lysosome/Vacuole; 512=Peroxisome.';
+
+COMMENT ON COLUMN deeploc21_orf_predictions.membrane_mask IS
+    'Bit mask of DeepLoc 2.1 predicted membrane associations:
+    1=Peripheral; 2=Transmembrane; 4=Lipid anchor; 8=Soluble.';
+
+COMMENT ON COLUMN deeploc21_orf_predictions.sorting_signals IS
+    'Normalized semicolon-delimited DeepLoc 2.1 predicted sorting-signal labels. NULL when none are predicted.';
+
+COMMENT ON COLUMN deeploc21_orf_predictions.extracellular_prob IS
+    'DeepLoc 2.1 probability assigned to the Extracellular localization class.';
+
+
+CREATE INDEX idx_deeploc21_membrane_mask
+    ON deeploc21_orf_predictions (membrane_mask);
+
+CREATE INDEX idx_deeploc21_extracellular_probability
+    ON deeploc21_orf_predictions (extracellular_prob DESC)
+    WHERE (localization_mask & 4) <> 0;
+
+
+-- =============================================================
+-- EXAMPLE QUERIES
+-- =============================================================
+
+-- Lookup by orf_id:
+--
+-- SELECT *
+-- FROM deeploc21_orf_predictions
+-- WHERE orf_id = 282353693;
+
+-- Predicted extracellular proteins, ordered by confidence:
+--
+-- SELECT orf_id, extracellular_prob, membrane_mask, sorting_signals
+-- FROM deeploc21_orf_predictions
+-- WHERE (localization_mask & 4) <> 0
+-- ORDER BY extracellular_prob DESC;
+
+-- Predicted extracellular and soluble (same pattern applies to any
+-- membrane_mask bit, e.g. & 2 for transmembrane):
+--
+-- SELECT orf_id, extracellular_prob, soluble_prob
+-- FROM deeploc21_orf_predictions
+-- WHERE (localization_mask & 4) <> 0
+--   AND (membrane_mask & 8) <> 0
+-- ORDER BY extracellular_prob DESC;
+
+-- Localization-label incidence:
+--
+-- SELECT
+--     COUNT(*) FILTER (WHERE (localization_mask & 1) <> 0) AS nucleus,
+--     COUNT(*) FILTER (WHERE (localization_mask & 2) <> 0) AS cytoplasm,
+--     COUNT(*) FILTER (WHERE (localization_mask & 4) <> 0) AS extracellular,
+--     COUNT(*) FILTER (WHERE (localization_mask & 8) <> 0) AS mitochondrion,
+--     COUNT(*) FILTER (WHERE (localization_mask & 16) <> 0) AS cell_membrane
+-- FROM deeploc21_orf_predictions;
+```

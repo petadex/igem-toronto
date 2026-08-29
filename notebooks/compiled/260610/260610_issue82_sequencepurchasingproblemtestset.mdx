@@ -1,0 +1,112 @@
+---
+    title: 260610_issue82_sequencepurchasingproblemtestset
+    section: "Dry Lab"
+    path: "/dry-lab/issue/82"
+    navTitle: "Issue 82"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+# Sequence Purchasing Problem
+
+## Background and Motivation
+
+We want to optimize how we purchase DNA sequences by considering the value of Degenerate-Codon Oligo Libraries. We can purchase a sequence where at specific positions, different bases can occur at a ratio we define. Using this, we could test many individual sequences even though we only purchased 1 sequence. Therefore, our motivation is to find the best sequence(s) to purchase for our needs, considering the following factors: 
+
+1. How many sequences are ordered
+    - we likely have a hard max here, but idk if there's also considerations if having more degenerate codons would make sequences more expensive to order?
+2. How many natural amino acid sequences (exist in nature) these purchased DNA sequences cover
+    - this is the hardest part I think, will need some smart algos trick or a reduction
+3. The predicted structural stability of the RNA
+    - if it folds in an ugly way it may not be viable
+    - reference existing algorithms for this
+4. Codon ratio: which ratio of bases at these positions would maximize the amount of natural sequences synthesized and minimize the amount of artificial ones that aren't biologically existing.
+    - this can probably be either weighted last or optimized after the first 3 are optimized for independently and then fixed.
+    - max 4 custom ratio bases according to twist, although we may be able to pay for more
+        - IUPAC Standard 50/50 combinations don't count towards this custom ratio count
+
+
+## Problem Statement
+
+We want to maximize a linear combination (we can figure out the weights or if we even want it to be a linear combo) of these factors.
+
+## Issue: The Problem is NP-Hard
+
+We want an approximation of some sort because it's likely exponential time, and the clusters are large.
+
+Existing solution uses Integer Linear Programming, but takes a long time.
+
+# We need to:
+- Find a smart solution to the search: 
+    - Only searching ancestral reconstructions (biological approximation)
+    - Figure out exactly how much degeneracy we want to allow
+    - DP Approach?
+- Once we have an "optimal" sequence, make sure it folds properly and figure out what bases to have custom ratios in.
+
+## Step 1: Download the Testing Set (IsPETase 60% Family)
+
+First download the ORF Ids from the family, as shown with the SQL code below.
+
+
+
+```python
+-- Find the ORF_ID for IsPETase:
+SELECT * FROM pazy_catalytic_orfs
+WHERE pazy_catalytic_orfs::text ILIKE '%WP_054022242%';
+
+-- the ORF_id is 1
+```
+
+
+```python
+-- Find the 60pid family ID for the ORF_ID 1:
+SELECT *
+FROM petadex_clustering
+WHERE orf_id = 1;
+
+-- the 60pid family ID is 13
+```
+
+
+```python
+-- Find all the ORF_IDs in the 60pid family ID 13:
+SELECT *
+FROM petadex_clustering
+WHERE family_id_60pid = 13;
+
+-- result is 184 ORFs in the 60pid family ID 13, which includes ORF_ID 1 (IsPETase)
+-- saved to ids.txt
+```
+
+## Step 2: Download the corresponding Sequences
+
+Next run this in the terminal (Done on VM for faster data transfer):
+
+#### install seqkit, helps parse fastas
+
+```
+wget https://github.com/shenwei356/seqkit/releases/latest/download/seqkit_linux_amd64.tar.gz
+tar -xzf seqkit_linux_amd64.tar.gz
+sudo mv seqkit /usr/local/bin/
+seqkit version
+```
+
+#### install pv, pipe viewer to track progress
+
+`sudo apt install -y pv`
+
+### Actual run command
+```
+aws s3 cp s3://petadex/logan/petadex.catalytic_orfs.v1.1.fa - --no-sign-request \
+  | pv -s 100g \
+  | seqkit grep --id-regexp '^([^|]+)' -f ids.txt -o ~/ispetase_family.fa
+```
+
+Extract just the sequences:
+
+seqkit seq -s -w 0 ispetase_family.fa > ispetase_family.seqs.txt
+
+**This full set of steps should be used to get other families' sequences later and keep them in a shared file format.**
