@@ -44,6 +44,16 @@ VERSION_RE = re.compile(r"\.\d+$")
 # letter: a broader "_[A-Za-z0-9]+$" would eat the numeric body of every RefSeq accession
 # ("WP_305403363" -> "WP"), which is exactly the bug carried by the Run 1 mapping script.
 CHAIN_RE = re.compile(r"_[A-Za-z]$")
+# A PETadex component id is always exactly "C" + three digits (C001..C046 in v260701).
+# Used as a validation counter, not as a filter: a row that fails this is a parse defect to
+# be fixed upstream, not a record to be silently dropped.
+COMPONENT_RE = re.compile(r"^C\d{3}$")
+# Legacy nr headers namespace their accessions with a database tag ("sp|P00187|CP2C1_RABIT",
+# "gi|123456|emb|CAA29171.1|"). The tags and the bare numeric gi are not accessions.
+DB_TAGS = {
+    "gi", "sp", "tr", "pdb", "emb", "dbj", "gb", "ref", "pir",
+    "prf", "tpg", "tpe", "tpd", "bbs", "bbm", "gnl", "lcl", "pat",
+}
 
 
 def open_fasta(path):
@@ -74,6 +84,7 @@ def parse(fasta_path, outdir, sep=",", limit=None, progress_every=1_000_000):
     rec_id = 0
     n_pairs = 0
     n_malformed = 0
+    n_bad_component = 0
     max_accs = 0
     accs_hist = {}
     unique = set()
@@ -89,15 +100,39 @@ def parse(fasta_path, outdir, sep=",", limit=None, progress_every=1_000_000):
                 continue
             rec_id += 1
 
-            fields = line[1:].rstrip("\n").rstrip("\r").split("|")
-            acc_field = fields[0]
+            # Split from the RIGHT. The five trailing metadata fields are fixed in number,
+            # but the accession field is not pipe-free: nr carries legacy identifiers that
+            # contain '|' themselves ("sp|P00187|CP2C1_RABIT", "gi|123|emb|CAA29171.1|").
+            # A left-anchored split shifts every column right for those records, which is
+            # how bitscores and e-values ended up in query_petadex_id / component_id.
+            fields = line[1:].rstrip("\n").rstrip("\r").rsplit("|", 5)
             # Pad so a short/odd header still produces a row rather than crashing the run.
             if len(fields) < 6:
                 n_malformed += 1
                 fields = fields + [""] * (6 - len(fields))
+            acc_field = fields[0]
             e_value, pid, bitscore, query_id, component_id = fields[1:6]
+            if not COMPONENT_RE.match(component_id):
+                n_bad_component += 1
 
-            raw_accs = [a for a in acc_field.split(sep) if a.strip()]
+            # acc_field now keeps everything left of the five metadata fields, so it can
+            # still hold pipes from legacy identifiers. Split on those too and drop the
+            # database tags, otherwise "sp|P00187|CP2C1_RABIT" contributes no usable
+            # accession at all -- and P00187 is exactly the entry we want to fold.
+            raw_accs = []
+            seen_here = set()
+            for piece in acc_field.split(sep):
+                for tok in piece.split("|"):
+                    tok = tok.strip()
+                    # Drop tags, bare gi numbers, and fragments too short to be an
+                    # accession (a lone PDB chain letter from "pdb|3A1K|A").
+                    if not tok or len(tok) < 4 or tok in DB_TAGS or tok.isdigit():
+                        continue
+                    # "pdb|3A1K|A,3A1K_A" names one entry twice; count it once.
+                    if clean_accession(tok) in seen_here:
+                        continue
+                    seen_here.add(clean_accession(tok))
+                    raw_accs.append(tok)
             n = len(raw_accs)
             max_accs = max(max_accs, n)
             accs_hist[n] = accs_hist.get(n, 0) + 1
@@ -137,6 +172,7 @@ def parse(fasta_path, outdir, sep=",", limit=None, progress_every=1_000_000):
         "mean_accessions_per_record": round(n_pairs / rec_id, 4) if rec_id else 0,
         "accessions_per_record_hist": {str(k): v for k, v in sorted(accs_hist.items())},
         "malformed_headers": n_malformed,
+        "bad_component_ids": n_bad_component,
         "seconds": round(elapsed, 1),
     }
     with open(os.path.join(outdir, "parse_stats.json"), "w", encoding="utf-8") as f:
@@ -148,6 +184,7 @@ def parse(fasta_path, outdir, sep=",", limit=None, progress_every=1_000_000):
     print(f"    unique accessions        : {len(unique):,}")
     print(f"    max accessions / record  : {max_accs}")
     print(f"    malformed headers        : {n_malformed:,}")
+    print(f"    bad component ids        : {n_bad_component:,}  (expect 0; non-zero = parse defect)")
     print(f"    elapsed                  : {elapsed:,.1f}s")
     print(f"[+] Wrote records.tsv, record_accessions.tsv, unique_accessions.csv to {outdir}/")
     return stats

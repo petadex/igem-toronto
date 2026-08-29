@@ -1,0 +1,290 @@
+<html>
+<head>
+<title>plastic_diffusion_simulator.ipynb</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #bcbec4;}
+.s1 { color: #bcbec4;}
+.s2 { color: #cf8e6d;}
+.s3 { color: #6aab73;}
+.s4 { color: #2aacb8;}
+.s5 { color: #7a7e85;}
+.ls0 { height: 1px; border-width: 0; color: #43454a; background-color:#43454a}
+</style>
+</head>
+<body bgcolor="#191a1c">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+plastic_diffusion_simulator.ipynb</font>
+</center></td></tr></table>
+<pre><span class="s0">#%% md 
+## Plastic Diffusion Simulator 
+ 
+This applies a specific case from the wet lab notes: staining PETG fabric sheets of ~0.5mm diameter (which, important to note, isn't a flat sheet --&gt; the model now uses Crank's cylinder solution instead of a plane-sheet one just for the current testing case), where the team's plan was to use a copper-carrying compounds (phthalate and sulfate as of now) 
+ 
+Some complications found: 
+ 
+1. **PETG isn't in the published polymer constant tables** 
+2. **Copper phthalate contains a metal** and the whole original code (RDKit's logP, the Piringer equation) was built and validated for organic molecules only. This also means that inorganic molecules will be approximated using Crippen's method since they are out of the scope of the model 
+ 
+However, these issues have been regulated ! <hr class="ls0">#%% md 
+## Equations used 
+ 
+1. **Hydrophobicity - Crippen's logP method** (RDKit). Used in `get_desc()` to compute `logP`. 
+Link: https://www.rdkit.org/docs/source/rdkit.Chem.Crippen.html 
+ 
+2. **Piringer diffusion coefficient** : estimates how fast a molecule moves through a given polymer: 
+ 
+$$D_P = 10^4 \cdot \exp\left[A_P' - 0.1351\,M_r^{2/3} + 0.003\,M_r - \frac{10454+\tau}{T}\right] \quad \text{(cm}^2\text{/s)}$$ 
+ 
+$M_r$ = molecular weight, $T$ = temperature (K), $A_P'$ and $\tau$ = polymer-specific constants. Used in `piringer_diffusion_coefficient()`. 
+ 
+Links: 
+https://www.stevenabbott.co.uk/practical-solubility/diff-d-values.php 
+https://www.sciencedirect.com/science/article/abs/pii/S0142941811001607 
+chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/https://plasticseurope.org/wp-content/uploads/2021/11/20130719applicability_of_mathematical_modelling_for_the_estimation_of_specific_migration_of_substances.pdf 
+ 
+3. **Crank's plane-sheet uptake** : fraction of saturation reached over time, for a flat sheet of thickness $L$ exposed on both faces. Defined below (`fractional_uptake` / `time_to_fraction`) but not actually used for the PETG case, since PETG here is a fiber, not a sheet but still kept for reference / other cases: 
+ 
+$$\frac{M_t}{M_\infty} = 1 - \sum_{n=0}^{\infty} \frac{8}{(2n+1)^2\pi^2}\, \exp\!\left(-D(2n+1)^2\pi^2 t / L^2\right)$$ 
+Links: 
+https://www.sciencedirect.com/science/article/pii/S2590123025028622 
+I took some inspo from here for the scipy part: https://www.mdpi.com/2076-3417/15/22/11857 
+ 
+4. **Crank's cylinder uptake** :  the version actually used for the PETG fiber. Same idea as #3, but for radial diffusion into a cylinder of radius $a$ instead of a flat sheet: 
+ 
+$$\frac{M_t}{M_\infty} = 1 - \sum_{n=1}^{\infty} \frac{4}{\alpha_n^2}\, \exp\!\left(-D\alpha_n^2 t / a^2\right), \qquad \alpha_n = \text{positive zeros of the Bessel function } J_0$$ 
+ 
+Used in `fractional_uptake_cylinder()`, and inverted (solved for time given a target fraction) via `time_to_fraction_cylinder()`. 
+ 
+Link: https://pythonforundergradengineers.com/crank-and-rocker-motion-with-python-and-matplotlib.html 
+ 
+5. **Crank's cylinder concentration profile** : like #4, but gives concentration at any radial position $r$ inside the fiber (not just the average across the whole cross-section), which is what makes the surface-vs-center visuals possible: 
+ 
+$$\frac{C(r,t)}{C_s} = 1 - 2\sum_{n=1}^{\infty} \frac{J_0(\alpha_n r/a)}{\alpha_n J_1(\alpha_n)}\, \exp\!\left(-D\alpha_n^2 t / a^2\right)$$ 
+ 
+Used in `concentration_profile_cylinder()`. 
+ 
+**Root-finding note:** `brentq` (Brent's method from `scipy.optimize`) searches for the time at which the uptake fraction hits a given target instead. 
+Link: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html <hr class="ls0">#%% 
+</span><span class="s1">%</span><span class="s0">pip install rdkit numpy scipy matplotlib </span><span class="s1">--</span><span class="s0">quiet</span><hr class="ls0"><span class="s0">#%% md 
+## Descriptor extraction and parameter defining 
+ 
+`get_desc()` turns a molecule's SMILES string into three properties: hydrophobicity (logP), aromatic ring content, and molecular weight.  
+`POLYMER_PARAMS` uses a list of polymer constants found online used in the Piringer equation.  <hr class="ls0">#%% 
+</span><span class="s2">from </span><span class="s0">rdkit </span><span class="s2">import </span><span class="s0">Chem</span>
+<span class="s2">from </span><span class="s0">rdkit</span><span class="s1">.</span><span class="s0">Chem </span><span class="s2">import </span><span class="s0">Crippen</span><span class="s1">, </span><span class="s0">Descriptors</span><span class="s1">, </span><span class="s0">rdMolDescriptors</span>
+<span class="s2">import </span><span class="s0">numpy </span><span class="s2">as </span><span class="s0">np</span>
+<span class="s2">from </span><span class="s0">scipy</span><span class="s1">.</span><span class="s0">optimize </span><span class="s2">import </span><span class="s0">brentq</span>
+
+
+<span class="s2">def </span><span class="s0">get_desc</span><span class="s1">(</span><span class="s0">smiles</span><span class="s1">: </span><span class="s0">str</span><span class="s1">) </span><span class="s0">-&gt; dict</span><span class="s1">:</span>
+    <span class="s0">mol </span><span class="s1">= </span><span class="s0">Chem</span><span class="s1">.</span><span class="s0">MolFromSmiles</span><span class="s1">(</span><span class="s0">smiles</span><span class="s1">)</span>
+    <span class="s2">if </span><span class="s0">mol </span><span class="s2">is None</span><span class="s1">:</span>
+        <span class="s2">raise </span><span class="s0">ValueError</span><span class="s1">(</span><span class="s3">f&quot;Could not identify: </span><span class="s2">{</span><span class="s0">smiles</span><span class="s2">!r}</span><span class="s3">&quot;</span><span class="s1">)</span>
+    <span class="s2">return </span><span class="s1">{</span>
+        <span class="s3">&quot;smiles&quot;</span><span class="s1">: </span><span class="s0">smiles</span><span class="s1">,</span>
+        <span class="s3">&quot;logP&quot;</span><span class="s1">: </span><span class="s0">round</span><span class="s1">(</span><span class="s0">Crippen</span><span class="s1">.</span><span class="s0">MolLogP</span><span class="s1">(</span><span class="s0">mol</span><span class="s1">), </span><span class="s4">3</span><span class="s1">),</span>
+        <span class="s3">&quot;aromatic_atom_fraction&quot;</span><span class="s1">: </span><span class="s0">round</span><span class="s1">(</span><span class="s0">rdMolDescriptors</span><span class="s1">.</span><span class="s0">CalcNumAromaticRings</span><span class="s1">(</span><span class="s0">mol</span><span class="s1">) </span><span class="s2">and </span><span class="s0">sum</span><span class="s1">(</span><span class="s4">1 </span><span class="s2">for </span><span class="s0">atom </span><span class="s2">in </span><span class="s0">mol</span><span class="s1">.</span><span class="s0">GetAtoms</span><span class="s1">() </span><span class="s2">if </span><span class="s0">atom</span><span class="s1">.</span><span class="s0">GetIsAromatic</span><span class="s1">()) / </span><span class="s0">mol</span><span class="s1">.</span><span class="s0">GetNumAtoms</span><span class="s1">(),</span><span class="s4">3</span><span class="s1">,),</span>
+        <span class="s3">&quot;molecular_weight&quot;</span><span class="s1">: </span><span class="s0">round</span><span class="s1">(</span><span class="s0">Descriptors</span><span class="s1">.</span><span class="s0">MolWt</span><span class="s1">(</span><span class="s0">mol</span><span class="s1">), </span><span class="s4">2</span><span class="s1">),</span>
+    <span class="s1">}</span>
+
+<span class="s0">POLYMER_PARAMS </span><span class="s1">= {</span>
+    <span class="s3">&quot;LDPE&quot;</span><span class="s1">:         {</span><span class="s3">&quot;Ap&quot;</span><span class="s1">: </span><span class="s4">11.5</span><span class="s1">, </span><span class="s3">&quot;tau&quot;</span><span class="s1">: </span><span class="s4">0</span><span class="s1">,    </span><span class="s3">&quot;Mr_range&quot;</span><span class="s1">: (</span><span class="s4">30</span><span class="s1">, </span><span class="s4">2000</span><span class="s1">),   </span><span class="s3">&quot;T_max_C&quot;</span><span class="s1">: </span><span class="s4">80</span><span class="s1">},</span>
+    <span class="s3">&quot;HDPE&quot;</span><span class="s1">:         {</span><span class="s3">&quot;Ap&quot;</span><span class="s1">: </span><span class="s4">14.5</span><span class="s1">, </span><span class="s3">&quot;tau&quot;</span><span class="s1">: </span><span class="s4">1577</span><span class="s1">, </span><span class="s3">&quot;Mr_range&quot;</span><span class="s1">: (</span><span class="s4">30</span><span class="s1">, </span><span class="s4">2000</span><span class="s1">),   </span><span class="s3">&quot;T_max_C&quot;</span><span class="s1">: </span><span class="s4">90</span><span class="s1">},</span>
+    <span class="s3">&quot;PP&quot;</span><span class="s1">:           {</span><span class="s3">&quot;Ap&quot;</span><span class="s1">: </span><span class="s4">13.1</span><span class="s1">, </span><span class="s3">&quot;tau&quot;</span><span class="s1">: </span><span class="s4">1577</span><span class="s1">, </span><span class="s3">&quot;Mr_range&quot;</span><span class="s1">: (</span><span class="s4">30</span><span class="s1">, </span><span class="s4">2000</span><span class="s1">),   </span><span class="s3">&quot;T_max_C&quot;</span><span class="s1">: </span><span class="s4">120</span><span class="s1">},</span>
+    <span class="s3">&quot;PS&quot;</span><span class="s1">:           {</span><span class="s3">&quot;Ap&quot;</span><span class="s1">: -</span><span class="s4">1.0</span><span class="s1">, </span><span class="s3">&quot;tau&quot;</span><span class="s1">: </span><span class="s4">0</span><span class="s1">,    </span><span class="s3">&quot;Mr_range&quot;</span><span class="s1">: (</span><span class="s4">104</span><span class="s1">, </span><span class="s4">647</span><span class="s1">),   </span><span class="s3">&quot;T_max_C&quot;</span><span class="s1">: </span><span class="s4">70</span><span class="s1">},</span>
+    <span class="s3">&quot;PET_above_Tg&quot;</span><span class="s1">: {</span><span class="s3">&quot;Ap&quot;</span><span class="s1">: </span><span class="s4">6.4</span><span class="s1">,  </span><span class="s3">&quot;tau&quot;</span><span class="s1">: </span><span class="s4">1577</span><span class="s1">, </span><span class="s3">&quot;Mr_range&quot;</span><span class="s1">: (</span><span class="s4">32</span><span class="s1">, </span><span class="s4">10000</span><span class="s1">),  </span><span class="s3">&quot;T_max_C&quot;</span><span class="s1">: </span><span class="s4">175</span><span class="s1">},</span>
+    <span class="s3">&quot;PET_below_Tg&quot;</span><span class="s1">: {</span><span class="s3">&quot;Ap&quot;</span><span class="s1">: </span><span class="s4">3.1</span><span class="s1">,  </span><span class="s3">&quot;tau&quot;</span><span class="s1">: </span><span class="s4">1577</span><span class="s1">, </span><span class="s3">&quot;Mr_range&quot;</span><span class="s1">: (</span><span class="s4">32</span><span class="s1">, </span><span class="s4">10000</span><span class="s1">),  </span><span class="s3">&quot;T_max_C&quot;</span><span class="s1">: </span><span class="s4">70</span><span class="s1">},</span>
+    <span class="s3">&quot;PVC_rigid&quot;</span><span class="s1">:    {</span><span class="s3">&quot;Ap&quot;</span><span class="s1">: -</span><span class="s4">1.0</span><span class="s1">, </span><span class="s3">&quot;tau&quot;</span><span class="s1">: </span><span class="s4">0</span><span class="s1">,    </span><span class="s3">&quot;Mr_range&quot;</span><span class="s1">: (</span><span class="s4">225</span><span class="s1">, </span><span class="s4">10000</span><span class="s1">), </span><span class="s3">&quot;T_max_C&quot;</span><span class="s1">: </span><span class="s4">70</span><span class="s1">},</span>
+    <span class="s3">&quot;PETG_approx&quot;</span><span class="s1">:  {</span><span class="s3">&quot;Ap&quot;</span><span class="s1">: </span><span class="s4">6.4</span><span class="s1">,  </span><span class="s3">&quot;tau&quot;</span><span class="s1">: </span><span class="s4">1577</span><span class="s1">, </span><span class="s3">&quot;Mr_range&quot;</span><span class="s1">: (</span><span class="s4">32</span><span class="s1">, </span><span class="s4">10000</span><span class="s1">),  </span><span class="s3">&quot;T_max_C&quot;</span><span class="s1">: </span><span class="s4">175</span><span class="s1">},</span>
+<span class="s1">}</span>
+
+
+<span class="s2">def </span><span class="s0">piringer_diffusion_coefficient</span><span class="s1">(</span><span class="s0">Mr</span><span class="s1">, </span><span class="s0">T_celsius</span><span class="s1">, </span><span class="s0">polymer</span><span class="s1">):</span>
+    <span class="s2">if </span><span class="s0">polymer </span><span class="s2">not in </span><span class="s0">POLYMER_PARAMS</span><span class="s1">:</span>
+        <span class="s2">raise </span><span class="s0">ValueError</span><span class="s1">(</span><span class="s3">f&quot;never heard of </span><span class="s2">{</span><span class="s0">polymer</span><span class="s2">!r}</span><span class="s3">, pick one of </span><span class="s2">{</span><span class="s0">list</span><span class="s1">(</span><span class="s0">POLYMER_PARAMS</span><span class="s1">)</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+    <span class="s0">params </span><span class="s1">= </span><span class="s0">POLYMER_PARAMS</span><span class="s1">[</span><span class="s0">polymer</span><span class="s1">]</span>
+    <span class="s0">Ap</span><span class="s1">, </span><span class="s0">tau </span><span class="s1">= </span><span class="s0">params</span><span class="s1">[</span><span class="s3">&quot;Ap&quot;</span><span class="s1">], </span><span class="s0">params</span><span class="s1">[</span><span class="s3">&quot;tau&quot;</span><span class="s1">]</span>
+    <span class="s0">Mr_lo</span><span class="s1">, </span><span class="s0">Mr_hi </span><span class="s1">= </span><span class="s0">params</span><span class="s1">[</span><span class="s3">&quot;Mr_range&quot;</span><span class="s1">]</span>
+    <span class="s2">if not </span><span class="s1">(</span><span class="s0">Mr_lo </span><span class="s1">&lt;= </span><span class="s0">Mr </span><span class="s1">&lt;= </span><span class="s0">Mr_hi</span><span class="s1">):</span>
+        <span class="s0">print</span><span class="s1">(</span><span class="s3">f&quot;  [WARNING] Mr=</span><span class="s2">{</span><span class="s0">Mr</span><span class="s2">} </span><span class="s3">is outside the validated range </span><span class="s2">{</span><span class="s0">params</span><span class="s1">[</span><span class="s3">'Mr_range'</span><span class="s1">]</span><span class="s2">} </span><span class="s3">for </span><span class="s2">{</span><span class="s0">polymer</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+    <span class="s2">if </span><span class="s0">T_celsius </span><span class="s1">&gt; </span><span class="s0">params</span><span class="s1">[</span><span class="s3">&quot;T_max_C&quot;</span><span class="s1">]:</span>
+        <span class="s0">print</span><span class="s1">(</span><span class="s3">f&quot;  [WARNING] T=</span><span class="s2">{</span><span class="s0">T_celsius</span><span class="s2">}</span><span class="s3">C exceeds the validated max </span><span class="s2">{</span><span class="s0">params</span><span class="s1">[</span><span class="s3">'T_max_C'</span><span class="s1">]</span><span class="s2">}</span><span class="s3">C for </span><span class="s2">{</span><span class="s0">polymer</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+    <span class="s0">T_kelvin </span><span class="s1">= </span><span class="s0">T_celsius </span><span class="s1">+ </span><span class="s4">273.15</span>
+    <span class="s0">exponent </span><span class="s1">= </span><span class="s0">Ap </span><span class="s1">- </span><span class="s4">0.1351 </span><span class="s1">* </span><span class="s0">Mr </span><span class="s1">** (</span><span class="s4">2 </span><span class="s1">/ </span><span class="s4">3</span><span class="s1">) + </span><span class="s4">0.003 </span><span class="s1">* </span><span class="s0">Mr </span><span class="s1">- (</span><span class="s4">10454 </span><span class="s1">+ </span><span class="s0">tau</span><span class="s1">) / </span><span class="s0">T_kelvin</span>
+    <span class="s2">return </span><span class="s4">1e4 </span><span class="s1">* </span><span class="s0">np</span><span class="s1">.</span><span class="s0">exp</span><span class="s1">(</span><span class="s0">exponent</span><span class="s1">)</span>
+
+<span class="s2">def </span><span class="s0">fractional_uptake</span><span class="s1">(</span><span class="s0">t</span><span class="s1">, </span><span class="s0">D</span><span class="s1">, </span><span class="s0">L</span><span class="s1">, </span><span class="s0">n_terms</span><span class="s1">=</span><span class="s4">50</span><span class="s1">):</span>
+    <span class="s0">t </span><span class="s1">= </span><span class="s0">np</span><span class="s1">.</span><span class="s0">asarray</span><span class="s1">(</span><span class="s0">t</span><span class="s1">, </span><span class="s0">dtype</span><span class="s1">=</span><span class="s0">float</span><span class="s1">)</span>
+    <span class="s0">total </span><span class="s1">= </span><span class="s0">np</span><span class="s1">.</span><span class="s0">zeros_like</span><span class="s1">(</span><span class="s0">t</span><span class="s1">)</span>
+    <span class="s2">for </span><span class="s0">n </span><span class="s2">in </span><span class="s0">range</span><span class="s1">(</span><span class="s0">n_terms</span><span class="s1">):</span>
+        <span class="s0">coeff </span><span class="s1">= </span><span class="s4">8.0 </span><span class="s1">/ ((</span><span class="s4">2 </span><span class="s1">* </span><span class="s0">n </span><span class="s1">+ </span><span class="s4">1</span><span class="s1">) ** </span><span class="s4">2 </span><span class="s1">* </span><span class="s0">np</span><span class="s1">.</span><span class="s0">pi </span><span class="s1">** </span><span class="s4">2</span><span class="s1">)</span>
+        <span class="s0">total </span><span class="s1">+= </span><span class="s0">coeff </span><span class="s1">* </span><span class="s0">np</span><span class="s1">.</span><span class="s0">exp</span><span class="s1">(-</span><span class="s0">D </span><span class="s1">* (</span><span class="s4">2 </span><span class="s1">* </span><span class="s0">n </span><span class="s1">+ </span><span class="s4">1</span><span class="s1">) ** </span><span class="s4">2 </span><span class="s1">* </span><span class="s0">np</span><span class="s1">.</span><span class="s0">pi </span><span class="s1">** </span><span class="s4">2 </span><span class="s1">* </span><span class="s0">t </span><span class="s1">/ </span><span class="s0">L </span><span class="s1">** </span><span class="s4">2</span><span class="s1">)</span>
+    <span class="s2">return </span><span class="s4">1.0 </span><span class="s1">- </span><span class="s0">total</span>
+
+
+<span class="s2">def </span><span class="s0">time_to_fraction</span><span class="s1">(</span><span class="s0">target_fraction</span><span class="s1">, </span><span class="s0">D</span><span class="s1">, </span><span class="s0">L</span><span class="s1">):</span>
+
+    <span class="s2">if not </span><span class="s1">(</span><span class="s4">0 </span><span class="s1">&lt; </span><span class="s0">target_fraction </span><span class="s1">&lt; </span><span class="s4">1</span><span class="s1">):</span>
+        <span class="s2">raise </span><span class="s0">ValueError</span><span class="s1">(</span><span class="s3">f&quot;target_fraction needs to be between 0 and 1, got </span><span class="s2">{</span><span class="s0">target_fraction</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+    <span class="s2">if </span><span class="s0">D </span><span class="s1">&lt;= </span><span class="s4">0</span><span class="s1">:</span>
+        <span class="s2">raise </span><span class="s0">ValueError</span><span class="s1">(</span><span class="s3">f&quot;D needs to be positive, got </span><span class="s2">{</span><span class="s0">D</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+    <span class="s2">def </span><span class="s0">f</span><span class="s1">(</span><span class="s0">t</span><span class="s1">):</span>
+        <span class="s2">return </span><span class="s0">fractional_uptake</span><span class="s1">(</span><span class="s0">t</span><span class="s1">, </span><span class="s0">D</span><span class="s1">, </span><span class="s0">L</span><span class="s1">) - </span><span class="s0">target_fraction</span>
+    <span class="s0">t_hi </span><span class="s1">= </span><span class="s0">L </span><span class="s1">** </span><span class="s4">2 </span><span class="s1">/ </span><span class="s0">D</span>
+    <span class="s2">while </span><span class="s0">f</span><span class="s1">(</span><span class="s0">t_hi</span><span class="s1">) &lt; </span><span class="s4">0</span><span class="s1">:</span>
+        <span class="s0">t_hi </span><span class="s1">*= </span><span class="s4">2</span>
+    <span class="s2">return </span><span class="s0">brentq</span><span class="s1">(</span><span class="s0">f</span><span class="s1">, </span><span class="s4">1e-12</span><span class="s1">, </span><span class="s0">t_hi</span><span class="s1">)</span>
+
+<span class="s2">from </span><span class="s0">scipy</span><span class="s1">.</span><span class="s0">special </span><span class="s2">import </span><span class="s0">jn_zeros</span>
+
+
+<span class="s2">def </span><span class="s0">fractional_uptake_cylinder</span><span class="s1">(</span><span class="s0">t</span><span class="s1">, </span><span class="s0">D</span><span class="s1">, </span><span class="s0">a</span><span class="s1">, </span><span class="s0">n_terms</span><span class="s1">=</span><span class="s4">50</span><span class="s1">):</span>
+    <span class="s0">alphas </span><span class="s1">= </span><span class="s0">jn_zeros</span><span class="s1">(</span><span class="s4">0</span><span class="s1">, </span><span class="s0">n_terms</span><span class="s1">)</span>
+    <span class="s0">t </span><span class="s1">= </span><span class="s0">np</span><span class="s1">.</span><span class="s0">asarray</span><span class="s1">(</span><span class="s0">t</span><span class="s1">, </span><span class="s0">dtype</span><span class="s1">=</span><span class="s0">float</span><span class="s1">)</span>
+    <span class="s0">total </span><span class="s1">= </span><span class="s0">np</span><span class="s1">.</span><span class="s0">zeros_like</span><span class="s1">(</span><span class="s0">t</span><span class="s1">)</span>
+    <span class="s2">for </span><span class="s0">alpha </span><span class="s2">in </span><span class="s0">alphas</span><span class="s1">:</span>
+        <span class="s0">total </span><span class="s1">+= (</span><span class="s4">4.0 </span><span class="s1">/ </span><span class="s0">alpha </span><span class="s1">** </span><span class="s4">2</span><span class="s1">) * </span><span class="s0">np</span><span class="s1">.</span><span class="s0">exp</span><span class="s1">(-</span><span class="s0">D </span><span class="s1">* </span><span class="s0">alpha </span><span class="s1">** </span><span class="s4">2 </span><span class="s1">* </span><span class="s0">t </span><span class="s1">/ </span><span class="s0">a </span><span class="s1">** </span><span class="s4">2</span><span class="s1">)</span>
+    <span class="s2">return </span><span class="s4">1.0 </span><span class="s1">- </span><span class="s0">total</span>
+
+
+<span class="s2">def </span><span class="s0">time_to_fraction_cylinder</span><span class="s1">(</span><span class="s0">target_fraction</span><span class="s1">, </span><span class="s0">D</span><span class="s1">, </span><span class="s0">a</span><span class="s1">):</span>
+
+    <span class="s2">if not </span><span class="s1">(</span><span class="s4">0 </span><span class="s1">&lt; </span><span class="s0">target_fraction </span><span class="s1">&lt; </span><span class="s4">1</span><span class="s1">):</span>
+        <span class="s2">raise </span><span class="s0">ValueError</span><span class="s1">(</span><span class="s3">f&quot;target_fraction needs to be between 0 and 1, got </span><span class="s2">{</span><span class="s0">target_fraction</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+    <span class="s2">if </span><span class="s0">D </span><span class="s1">&lt;= </span><span class="s4">0</span><span class="s1">:</span>
+        <span class="s2">raise </span><span class="s0">ValueError</span><span class="s1">(</span><span class="s3">f&quot;D needs to be positive, got </span><span class="s2">{</span><span class="s0">D</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+    <span class="s2">def </span><span class="s0">f</span><span class="s1">(</span><span class="s0">t</span><span class="s1">):</span>
+        <span class="s2">return </span><span class="s0">fractional_uptake_cylinder</span><span class="s1">(</span><span class="s0">t</span><span class="s1">, </span><span class="s0">D</span><span class="s1">, </span><span class="s0">a</span><span class="s1">) - </span><span class="s0">target_fraction</span>
+    <span class="s0">t_hi </span><span class="s1">= </span><span class="s0">a </span><span class="s1">** </span><span class="s4">2 </span><span class="s1">/ </span><span class="s0">D</span>
+    <span class="s2">while </span><span class="s0">f</span><span class="s1">(</span><span class="s0">t_hi</span><span class="s1">) &lt; </span><span class="s4">0</span><span class="s1">:</span>
+        <span class="s0">t_hi </span><span class="s1">*= </span><span class="s4">2</span>
+    <span class="s2">return </span><span class="s0">brentq</span><span class="s1">(</span><span class="s0">f</span><span class="s1">, </span><span class="s4">1e-12</span><span class="s1">, </span><span class="s0">t_hi</span><span class="s1">)</span><hr class="ls0"><span class="s0">#%% 
+test_smiles </span><span class="s1">= {</span>
+    <span class="s3">&quot;phthalic acid&quot;</span><span class="s1">: </span><span class="s3">&quot;OC(=O)c1ccccc1C(=O)O&quot;</span><span class="s1">,</span>
+    <span class="s3">&quot;phthalate ion, no metal&quot;</span><span class="s1">: </span><span class="s3">&quot;[O-]C(=O)c1ccccc1C(=O)[O-]&quot;</span><span class="s1">,</span>
+    <span class="s3">&quot;copper(II) phthalate (with metal)&quot;</span><span class="s1">: </span><span class="s3">&quot;[Cu+2].[O-]C(=O)c1ccccc1C(=O)[O-]&quot;</span><span class="s1">,</span>
+<span class="s1">}</span>
+
+<span class="s2">for </span><span class="s0">name</span><span class="s1">, </span><span class="s0">smi </span><span class="s2">in </span><span class="s0">test_smiles</span><span class="s1">.</span><span class="s0">items</span><span class="s1">():</span>
+    <span class="s0">d </span><span class="s1">= </span><span class="s0">get_desc</span><span class="s1">(</span><span class="s0">smi</span><span class="s1">)</span>
+    <span class="s0">print</span><span class="s1">(</span><span class="s3">f&quot;</span><span class="s2">{</span><span class="s0">name</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+    <span class="s0">print</span><span class="s1">(</span><span class="s3">f&quot;   </span><span class="s2">{</span><span class="s0">d</span><span class="s2">}\n</span><span class="s3">&quot;</span><span class="s1">)</span><hr class="ls0"><span class="s0">#%% md 
+## Organic proxy 
+ 
+Since the organic part of copper phthalate is what affects the polymer's diffusion, a reasonable alternative is diethyl phthalate since it can be handled by RDKit and Piringer. It won't capture whatever effect the copper has, but it gives an estimate for how fast a phthalate-ish molecule moves through PETG. 
+ 
+The PETG is a fabric with ~0.5 mm diameter fibers (radius = 0.25 mm = 0.025 cm), roughly 90 C. Since this is a fiber, not a flat sheet, the calculation below uses the cylinder diffusion solution with a fixed fiber radius instead of scanning through plausible sheet thicknesses. <hr class="ls0">#%% 
+smiles </span><span class="s1">= </span><span class="s3">&quot;CCOC(=O)c1ccccc1C(=O)OCC&quot;</span>
+<span class="s0">polymer </span><span class="s1">= </span><span class="s3">&quot;PETG_approx&quot;</span>
+<span class="s0">T_celsius </span><span class="s1">= </span><span class="s4">90</span>
+<span class="s0">fiber_radius_cm </span><span class="s1">= </span><span class="s4">0.025</span>
+<span class="s0">d </span><span class="s1">= </span><span class="s0">get_desc</span><span class="s1">(</span><span class="s0">smiles</span><span class="s1">)</span>
+<span class="s0">print</span><span class="s1">(</span><span class="s3">&quot;Descriptors:&quot;</span><span class="s1">, </span><span class="s0">d</span><span class="s1">)</span>
+
+<span class="s0">D </span><span class="s1">= </span><span class="s0">piringer_diffusion_coefficient</span><span class="s1">(</span><span class="s0">d</span><span class="s1">[</span><span class="s3">&quot;molecular_weight&quot;</span><span class="s1">], </span><span class="s0">T_celsius</span><span class="s1">, </span><span class="s0">polymer</span><span class="s1">)</span>
+<span class="s0">print</span><span class="s1">(</span><span class="s3">f&quot;</span><span class="s2">\n</span><span class="s3">D at </span><span class="s2">{</span><span class="s0">T_celsius</span><span class="s2">} </span><span class="s3">C in </span><span class="s2">{</span><span class="s0">polymer</span><span class="s2">}</span><span class="s3">: </span><span class="s2">{</span><span class="s0">D</span><span class="s2">:</span><span class="s3">.3e</span><span class="s2">} </span><span class="s3">cm^2/s</span><span class="s2">\n</span><span class="s3">&quot;</span><span class="s1">)</span>
+
+<span class="s0">print</span><span class="s1">(</span><span class="s3">f&quot;Predicted uptake into a </span><span class="s2">{</span><span class="s0">fiber_radius_cm</span><span class="s1">*</span><span class="s4">2</span><span class="s1">*</span><span class="s4">10</span><span class="s2">:</span><span class="s3">.2f</span><span class="s2">} </span><span class="s3">mm diameter fiber:&quot;</span><span class="s1">)</span>
+<span class="s2">for </span><span class="s0">frac </span><span class="s2">in </span><span class="s1">[</span><span class="s4">0.10</span><span class="s1">, </span><span class="s4">0.50</span><span class="s1">, </span><span class="s4">0.95</span><span class="s1">]:</span>
+    <span class="s0">t </span><span class="s1">= </span><span class="s0">time_to_fraction_cylinder</span><span class="s1">(</span><span class="s0">frac</span><span class="s1">, </span><span class="s0">D</span><span class="s1">, </span><span class="s0">fiber_radius_cm</span><span class="s1">)</span>
+    <span class="s0">print</span><span class="s1">(</span><span class="s3">f&quot;  </span><span class="s2">{</span><span class="s0">int</span><span class="s1">(</span><span class="s0">frac</span><span class="s1">*</span><span class="s4">100</span><span class="s1">)</span><span class="s2">:</span><span class="s3">3d</span><span class="s2">}</span><span class="s3">% uptake at </span><span class="s2">{</span><span class="s0">t</span><span class="s1">/</span><span class="s4">60</span><span class="s2">:</span><span class="s3">8.1f</span><span class="s2">} </span><span class="s3">min  (</span><span class="s2">{</span><span class="s0">t</span><span class="s1">/</span><span class="s4">3600</span><span class="s2">:</span><span class="s3">6.2f</span><span class="s2">} </span><span class="s3">h)&quot;</span><span class="s1">)</span><hr class="ls0"><span class="s0">#%% md 
+## Concentration profile inside the fiber: Copper Phthalate <hr class="ls0">#%% 
+</span><span class="s2">from </span><span class="s0">scipy</span><span class="s1">.</span><span class="s0">special </span><span class="s2">import </span><span class="s0">j0</span><span class="s1">, </span><span class="s0">j1</span>
+
+<span class="s2">def </span><span class="s0">concentration_cylinder</span><span class="s1">(</span><span class="s0">r</span><span class="s1">, </span><span class="s0">t</span><span class="s1">, </span><span class="s0">D</span><span class="s1">, </span><span class="s0">a</span><span class="s1">, </span><span class="s0">Cs</span><span class="s1">=</span><span class="s4">1.0</span><span class="s1">, </span><span class="s0">n_terms</span><span class="s1">=</span><span class="s4">2000</span><span class="s1">):</span>
+    <span class="s0">alphas </span><span class="s1">= </span><span class="s0">jn_zeros</span><span class="s1">(</span><span class="s4">0</span><span class="s1">, </span><span class="s0">n_terms</span><span class="s1">)</span>
+    <span class="s0">r </span><span class="s1">= </span><span class="s0">np</span><span class="s1">.</span><span class="s0">asarray</span><span class="s1">(</span><span class="s0">r</span><span class="s1">, </span><span class="s0">dtype</span><span class="s1">=</span><span class="s0">float</span><span class="s1">)</span>
+    <span class="s0">total </span><span class="s1">= </span><span class="s0">np</span><span class="s1">.</span><span class="s0">zeros_like</span><span class="s1">(</span><span class="s0">r</span><span class="s1">)</span>
+    <span class="s2">for </span><span class="s0">alpha </span><span class="s2">in </span><span class="s0">alphas</span><span class="s1">:</span>
+        <span class="s0">total </span><span class="s1">+= (</span><span class="s0">j0</span><span class="s1">(</span><span class="s0">alpha </span><span class="s1">* </span><span class="s0">r </span><span class="s1">/ </span><span class="s0">a</span><span class="s1">) / (</span><span class="s0">alpha </span><span class="s1">* </span><span class="s0">j1</span><span class="s1">(</span><span class="s0">alpha</span><span class="s1">))) * </span><span class="s0">np</span><span class="s1">.</span><span class="s0">exp</span><span class="s1">(-</span><span class="s0">D </span><span class="s1">* </span><span class="s0">alpha </span><span class="s1">** </span><span class="s4">2 </span><span class="s1">* </span><span class="s0">t </span><span class="s1">/ </span><span class="s0">a </span><span class="s1">** </span><span class="s4">2</span><span class="s1">)</span>
+    <span class="s2">return </span><span class="s0">Cs </span><span class="s1">* (</span><span class="s4">1.0 </span><span class="s1">- </span><span class="s4">2.0 </span><span class="s1">* </span><span class="s0">total</span><span class="s1">)</span><hr class="ls0"><span class="s0">#%% 
+</span><span class="s2">import </span><span class="s0">matplotlib</span><span class="s1">.</span><span class="s0">pyplot </span><span class="s2">as </span><span class="s0">plt</span>
+
+<span class="s0">times_min </span><span class="s1">= [</span><span class="s4">10</span><span class="s1">, </span><span class="s4">30</span><span class="s1">, </span><span class="s4">63</span><span class="s1">, </span><span class="s4">120</span><span class="s1">, </span><span class="s4">300</span><span class="s1">, </span><span class="s4">600</span><span class="s1">]</span>
+
+<span class="s0">fig</span><span class="s1">, </span><span class="s0">ax </span><span class="s1">= </span><span class="s0">plt</span><span class="s1">.</span><span class="s0">subplots</span><span class="s1">(</span><span class="s4">1</span><span class="s1">, </span><span class="s4">1</span><span class="s1">, </span><span class="s0">figsize</span><span class="s1">=(</span><span class="s4">7</span><span class="s1">, </span><span class="s4">5</span><span class="s1">))</span>
+
+<span class="s0">r_range </span><span class="s1">= </span><span class="s0">np</span><span class="s1">.</span><span class="s0">linspace</span><span class="s1">(</span><span class="s4">0</span><span class="s1">, </span><span class="s0">fiber_radius_cm</span><span class="s1">, </span><span class="s4">300</span><span class="s1">)</span>
+<span class="s2">for </span><span class="s0">t_min </span><span class="s2">in </span><span class="s0">times_min</span><span class="s1">:</span>
+    <span class="s0">c </span><span class="s1">= </span><span class="s0">concentration_cylinder</span><span class="s1">(</span><span class="s0">r_range</span><span class="s1">, </span><span class="s0">t_min </span><span class="s1">* </span><span class="s4">60</span><span class="s1">, </span><span class="s0">D</span><span class="s1">, </span><span class="s0">fiber_radius_cm</span><span class="s1">)</span>
+    <span class="s0">ax</span><span class="s1">.</span><span class="s0">plot</span><span class="s1">(</span><span class="s0">r_range </span><span class="s1">/ </span><span class="s0">fiber_radius_cm</span><span class="s1">, </span><span class="s0">c</span><span class="s1">, </span><span class="s0">label</span><span class="s1">=</span><span class="s3">f&quot;</span><span class="s2">{</span><span class="s0">t_min</span><span class="s2">} </span><span class="s3">min&quot;</span><span class="s1">)</span>
+<span class="s0">ax</span><span class="s1">.</span><span class="s0">set_xlabel</span><span class="s1">(</span><span class="s3">&quot;radial position (r / fiber radius)  -  0 = center, 1 = surface&quot;</span><span class="s1">)</span>
+<span class="s0">ax</span><span class="s1">.</span><span class="s0">set_ylabel</span><span class="s1">(</span><span class="s3">&quot;relative concentration C/C_s&quot;</span><span class="s1">)</span>
+<span class="s0">ax</span><span class="s1">.</span><span class="s0">set_title</span><span class="s1">(</span><span class="s3">&quot;Concentration profile: center vs. surface, over time&quot;</span><span class="s1">)</span>
+<span class="s0">ax</span><span class="s1">.</span><span class="s0">legend</span><span class="s1">(</span><span class="s0">title</span><span class="s1">=</span><span class="s3">&quot;time&quot;</span><span class="s1">, </span><span class="s0">fontsize</span><span class="s1">=</span><span class="s4">8</span><span class="s1">)</span>
+
+<span class="s5"># Shows fiber cross-section as a disc colored by local concentration</span>
+<span class="s0">theta </span><span class="s1">= </span><span class="s0">np</span><span class="s1">.</span><span class="s0">linspace</span><span class="s1">(</span><span class="s4">0</span><span class="s1">, </span><span class="s4">2 </span><span class="s1">* </span><span class="s0">np</span><span class="s1">.</span><span class="s0">pi</span><span class="s1">, </span><span class="s4">200</span><span class="s1">)</span>
+<span class="s0">rr </span><span class="s1">= </span><span class="s0">np</span><span class="s1">.</span><span class="s0">linspace</span><span class="s1">(</span><span class="s4">0</span><span class="s1">, </span><span class="s0">fiber_radius_cm</span><span class="s1">, </span><span class="s4">150</span><span class="s1">)</span>
+<span class="s0">R</span><span class="s1">, </span><span class="s0">THETA </span><span class="s1">= </span><span class="s0">np</span><span class="s1">.</span><span class="s0">meshgrid</span><span class="s1">(</span><span class="s0">rr</span><span class="s1">, </span><span class="s0">theta</span><span class="s1">)</span>
+<span class="s0">X</span><span class="s1">, </span><span class="s0">Y </span><span class="s1">= </span><span class="s0">R </span><span class="s1">* </span><span class="s0">np</span><span class="s1">.</span><span class="s0">cos</span><span class="s1">(</span><span class="s0">THETA</span><span class="s1">), </span><span class="s0">R </span><span class="s1">* </span><span class="s0">np</span><span class="s1">.</span><span class="s0">sin</span><span class="s1">(</span><span class="s0">THETA</span><span class="s1">)</span>
+
+<span class="s0">snap_subset </span><span class="s1">= [</span><span class="s4">10</span><span class="s1">, </span><span class="s4">63</span><span class="s1">, </span><span class="s4">300</span><span class="s1">, </span><span class="s4">600</span><span class="s1">]</span>
+<span class="s0">fig2</span><span class="s1">, </span><span class="s0">axes2 </span><span class="s1">= </span><span class="s0">plt</span><span class="s1">.</span><span class="s0">subplots</span><span class="s1">(</span><span class="s4">1</span><span class="s1">, </span><span class="s0">len</span><span class="s1">(</span><span class="s0">snap_subset</span><span class="s1">), </span><span class="s0">figsize</span><span class="s1">=(</span><span class="s4">4 </span><span class="s1">* </span><span class="s0">len</span><span class="s1">(</span><span class="s0">snap_subset</span><span class="s1">), </span><span class="s4">4.2</span><span class="s1">))</span>
+<span class="s2">for </span><span class="s0">ax</span><span class="s1">, </span><span class="s0">t_min </span><span class="s2">in </span><span class="s0">zip</span><span class="s1">(</span><span class="s0">axes2</span><span class="s1">, </span><span class="s0">snap_subset</span><span class="s1">):</span>
+    <span class="s0">C </span><span class="s1">= </span><span class="s0">concentration_cylinder</span><span class="s1">(</span><span class="s0">R</span><span class="s1">, </span><span class="s0">t_min </span><span class="s1">* </span><span class="s4">60</span><span class="s1">, </span><span class="s0">D</span><span class="s1">, </span><span class="s0">fiber_radius_cm</span><span class="s1">)</span>
+    <span class="s0">pcm </span><span class="s1">= </span><span class="s0">ax</span><span class="s1">.</span><span class="s0">pcolormesh</span><span class="s1">(</span><span class="s0">X </span><span class="s1">* </span><span class="s4">10</span><span class="s1">, </span><span class="s0">Y </span><span class="s1">* </span><span class="s4">10</span><span class="s1">, </span><span class="s0">C</span><span class="s1">, </span><span class="s0">cmap</span><span class="s1">=</span><span class="s3">&quot;viridis&quot;</span><span class="s1">, </span><span class="s0">vmin</span><span class="s1">=</span><span class="s4">0</span><span class="s1">, </span><span class="s0">vmax</span><span class="s1">=</span><span class="s4">1</span><span class="s1">, </span><span class="s0">shading</span><span class="s1">=</span><span class="s3">&quot;auto&quot;</span><span class="s1">)</span>
+    <span class="s0">ax</span><span class="s1">.</span><span class="s0">set_aspect</span><span class="s1">(</span><span class="s3">&quot;equal&quot;</span><span class="s1">)</span>
+    <span class="s0">ax</span><span class="s1">.</span><span class="s0">set_title</span><span class="s1">(</span><span class="s3">f&quot;t = </span><span class="s2">{</span><span class="s0">t_min</span><span class="s2">} </span><span class="s3">min&quot;</span><span class="s1">)</span>
+    <span class="s0">ax</span><span class="s1">.</span><span class="s0">set_xlabel</span><span class="s1">(</span><span class="s3">&quot;mm&quot;</span><span class="s1">)</span>
+<span class="s0">fig2</span><span class="s1">.</span><span class="s0">colorbar</span><span class="s1">(</span><span class="s0">pcm</span><span class="s1">, </span><span class="s0">ax</span><span class="s1">=</span><span class="s0">axes2</span><span class="s1">, </span><span class="s0">label</span><span class="s1">=</span><span class="s3">&quot;relative concentration C/C_s&quot;</span><span class="s1">)</span>
+<span class="s0">fig2</span><span class="s1">.</span><span class="s0">suptitle</span><span class="s1">(</span><span class="s3">&quot;PETG fiber cross-section: diethyl phthalate concentration (surface --&gt; center)&quot;</span><span class="s1">, </span><span class="s0">y</span><span class="s1">=</span><span class="s4">1</span><span class="s1">)</span>
+
+<span class="s0">fig</span><span class="s1">.</span><span class="s0">tight_layout</span><span class="s1">()</span>
+<span class="s0">plt</span><span class="s1">.</span><span class="s0">show</span><span class="s1">()</span><hr class="ls0"><span class="s0">#%% md 
+## Copper sulfate vs. copper phthalate <hr class="ls0">#%% 
+salts </span><span class="s1">= {</span>
+    <span class="s3">&quot;copper sulfate&quot;</span><span class="s1">: </span><span class="s3">&quot;[Cu+2].[O-]S(=O)(=O)[O-]&quot;</span><span class="s1">,</span>
+    <span class="s3">&quot;copper phthalate&quot;</span><span class="s1">: </span><span class="s3">&quot;[Cu+2].[O-]C(=O)c1ccccc1C(=O)[O-]&quot;</span><span class="s1">,</span>
+<span class="s1">}</span>
+
+<span class="s0">results </span><span class="s1">= {}</span>
+<span class="s2">for </span><span class="s0">name</span><span class="s1">, </span><span class="s0">smi </span><span class="s2">in </span><span class="s0">salts</span><span class="s1">.</span><span class="s0">items</span><span class="s1">():</span>
+    <span class="s0">d </span><span class="s1">= </span><span class="s0">get_desc</span><span class="s1">(</span><span class="s0">smi</span><span class="s1">)</span>
+    <span class="s0">D </span><span class="s1">= </span><span class="s0">piringer_diffusion_coefficient</span><span class="s1">(</span><span class="s0">d</span><span class="s1">[</span><span class="s3">&quot;molecular_weight&quot;</span><span class="s1">], </span><span class="s0">T_celsius</span><span class="s1">, </span><span class="s0">polymer</span><span class="s1">)</span>
+    <span class="s0">results</span><span class="s1">[</span><span class="s0">name</span><span class="s1">] = (</span><span class="s0">d</span><span class="s1">, </span><span class="s0">D</span><span class="s1">)</span>
+
+    <span class="s0">print</span><span class="s1">(</span><span class="s3">f&quot;--- </span><span class="s2">{</span><span class="s0">name</span><span class="s2">} </span><span class="s3">---&quot;</span><span class="s1">)</span>
+    <span class="s0">print</span><span class="s1">(</span><span class="s3">f&quot;  descriptors: </span><span class="s2">{</span><span class="s0">d</span><span class="s2">}</span><span class="s3">&quot;</span><span class="s1">)</span>
+    <span class="s0">print</span><span class="s1">(</span><span class="s3">f&quot;  D = </span><span class="s2">{</span><span class="s0">D</span><span class="s2">:</span><span class="s3">.3e</span><span class="s2">} </span><span class="s3">cm^2/s&quot;</span><span class="s1">)</span>
+    <span class="s2">for </span><span class="s0">frac </span><span class="s2">in </span><span class="s1">[</span><span class="s4">0.10</span><span class="s1">, </span><span class="s4">0.50</span><span class="s1">, </span><span class="s4">0.95</span><span class="s1">]:</span>
+        <span class="s0">t </span><span class="s1">= </span><span class="s0">time_to_fraction_cylinder</span><span class="s1">(</span><span class="s0">frac</span><span class="s1">, </span><span class="s0">D</span><span class="s1">, </span><span class="s0">fiber_radius_cm</span><span class="s1">)</span>
+        <span class="s0">print</span><span class="s1">(</span><span class="s3">f&quot;  </span><span class="s2">{</span><span class="s0">int</span><span class="s1">(</span><span class="s0">frac</span><span class="s1">*</span><span class="s4">100</span><span class="s1">)</span><span class="s2">:</span><span class="s3">3d</span><span class="s2">}</span><span class="s3">% uptake at </span><span class="s2">{</span><span class="s0">t</span><span class="s1">/</span><span class="s4">60</span><span class="s2">:</span><span class="s3">8.1f</span><span class="s2">} </span><span class="s3">min  (</span><span class="s2">{</span><span class="s0">t</span><span class="s1">/</span><span class="s4">3600</span><span class="s2">:</span><span class="s3">6.2f</span><span class="s2">} </span><span class="s3">h)&quot;</span><span class="s1">)</span>
+    <span class="s0">print</span><span class="s1">()</span>
+
+<span class="s0">ratio </span><span class="s1">= </span><span class="s0">results</span><span class="s1">[</span><span class="s3">&quot;copper phthalate&quot;</span><span class="s1">][</span><span class="s4">1</span><span class="s1">] / </span><span class="s0">results</span><span class="s1">[</span><span class="s3">&quot;copper sulfate&quot;</span><span class="s1">][</span><span class="s4">1</span><span class="s1">]</span>
+<span class="s0">print</span><span class="s1">(</span><span class="s3">f&quot;D(copper phthalate) / D(copper sulfate) = </span><span class="s2">{</span><span class="s0">ratio</span><span class="s2">:</span><span class="s3">.2f</span><span class="s2">}  </span><span class="s3">&quot;</span>
+      <span class="s3">f&quot;--&gt; phthalate predicted to diffuse ~</span><span class="s2">{</span><span class="s4">1</span><span class="s1">/</span><span class="s0">ratio</span><span class="s2">:</span><span class="s3">.1f</span><span class="s2">}</span><span class="s3">x slower than sulfate&quot;</span><span class="s1">)</span><hr class="ls0"><span class="s0">#%% md 
+## Concentration profile inside the fiber: Copper Phthalate 
+ 
+Using the same times as the diethyl phthalate figure, so the two are directly comparable side by side. <hr class="ls0">#%% 
+D_sulfate </span><span class="s1">= </span><span class="s0">results</span><span class="s1">[</span><span class="s3">&quot;copper sulfate&quot;</span><span class="s1">][</span><span class="s4">1</span><span class="s1">]</span>
+
+<span class="s0">fig</span><span class="s1">, </span><span class="s0">ax </span><span class="s1">= </span><span class="s0">plt</span><span class="s1">.</span><span class="s0">subplots</span><span class="s1">(</span><span class="s4">1</span><span class="s1">, </span><span class="s4">1</span><span class="s1">, </span><span class="s0">figsize</span><span class="s1">=(</span><span class="s4">7</span><span class="s1">, </span><span class="s4">5</span><span class="s1">))</span>
+
+<span class="s0">r_range </span><span class="s1">= </span><span class="s0">np</span><span class="s1">.</span><span class="s0">linspace</span><span class="s1">(</span><span class="s4">0</span><span class="s1">, </span><span class="s0">fiber_radius_cm</span><span class="s1">, </span><span class="s4">300</span><span class="s1">)</span>
+<span class="s2">for </span><span class="s0">t_min </span><span class="s2">in </span><span class="s0">times_min</span><span class="s1">:</span>
+    <span class="s0">c </span><span class="s1">= </span><span class="s0">concentration_cylinder</span><span class="s1">(</span><span class="s0">r_range</span><span class="s1">, </span><span class="s0">t_min </span><span class="s1">* </span><span class="s4">60</span><span class="s1">, </span><span class="s0">D_sulfate</span><span class="s1">, </span><span class="s0">fiber_radius_cm</span><span class="s1">)</span>
+    <span class="s0">ax</span><span class="s1">.</span><span class="s0">plot</span><span class="s1">(</span><span class="s0">r_range </span><span class="s1">/ </span><span class="s0">fiber_radius_cm</span><span class="s1">, </span><span class="s0">c</span><span class="s1">, </span><span class="s0">label</span><span class="s1">=</span><span class="s3">f&quot;</span><span class="s2">{</span><span class="s0">t_min</span><span class="s2">} </span><span class="s3">min&quot;</span><span class="s1">)</span>
+<span class="s0">ax</span><span class="s1">.</span><span class="s0">set_xlabel</span><span class="s1">(</span><span class="s3">&quot;radial position (r / fiber radius)  --  0 = center, 1 = surface&quot;</span><span class="s1">)</span>
+<span class="s0">ax</span><span class="s1">.</span><span class="s0">set_ylabel</span><span class="s1">(</span><span class="s3">&quot;relative concentration C/C_s&quot;</span><span class="s1">)</span>
+<span class="s0">ax</span><span class="s1">.</span><span class="s0">set_title</span><span class="s1">(</span><span class="s3">&quot;Copper sulfate: concentration profile, center vs. surface&quot;</span><span class="s1">)</span>
+<span class="s0">ax</span><span class="s1">.</span><span class="s0">legend</span><span class="s1">(</span><span class="s0">title</span><span class="s1">=</span><span class="s3">&quot;time&quot;</span><span class="s1">, </span><span class="s0">fontsize</span><span class="s1">=</span><span class="s4">8</span><span class="s1">)</span>
+
+<span class="s0">fig2</span><span class="s1">, </span><span class="s0">axes2 </span><span class="s1">= </span><span class="s0">plt</span><span class="s1">.</span><span class="s0">subplots</span><span class="s1">(</span><span class="s4">1</span><span class="s1">, </span><span class="s0">len</span><span class="s1">(</span><span class="s0">snap_subset</span><span class="s1">), </span><span class="s0">figsize</span><span class="s1">=(</span><span class="s4">4 </span><span class="s1">* </span><span class="s0">len</span><span class="s1">(</span><span class="s0">snap_subset</span><span class="s1">), </span><span class="s4">4.2</span><span class="s1">))</span>
+<span class="s2">for </span><span class="s0">ax</span><span class="s1">, </span><span class="s0">t_min </span><span class="s2">in </span><span class="s0">zip</span><span class="s1">(</span><span class="s0">axes2</span><span class="s1">, </span><span class="s0">snap_subset</span><span class="s1">):</span>
+    <span class="s0">C </span><span class="s1">= </span><span class="s0">concentration_cylinder</span><span class="s1">(</span><span class="s0">R</span><span class="s1">, </span><span class="s0">t_min </span><span class="s1">* </span><span class="s4">60</span><span class="s1">, </span><span class="s0">D_sulfate</span><span class="s1">, </span><span class="s0">fiber_radius_cm</span><span class="s1">)</span>
+    <span class="s0">pcm </span><span class="s1">= </span><span class="s0">ax</span><span class="s1">.</span><span class="s0">pcolormesh</span><span class="s1">(</span><span class="s0">X </span><span class="s1">* </span><span class="s4">10</span><span class="s1">, </span><span class="s0">Y </span><span class="s1">* </span><span class="s4">10</span><span class="s1">, </span><span class="s0">C</span><span class="s1">, </span><span class="s0">cmap</span><span class="s1">=</span><span class="s3">&quot;viridis&quot;</span><span class="s1">, </span><span class="s0">vmin</span><span class="s1">=</span><span class="s4">0</span><span class="s1">, </span><span class="s0">vmax</span><span class="s1">=</span><span class="s4">1</span><span class="s1">, </span><span class="s0">shading</span><span class="s1">=</span><span class="s3">&quot;auto&quot;</span><span class="s1">)</span>
+    <span class="s0">ax</span><span class="s1">.</span><span class="s0">set_aspect</span><span class="s1">(</span><span class="s3">&quot;equal&quot;</span><span class="s1">)</span>
+    <span class="s0">ax</span><span class="s1">.</span><span class="s0">set_title</span><span class="s1">(</span><span class="s3">f&quot;t = </span><span class="s2">{</span><span class="s0">t_min</span><span class="s2">} </span><span class="s3">min&quot;</span><span class="s1">)</span>
+    <span class="s0">ax</span><span class="s1">.</span><span class="s0">set_xlabel</span><span class="s1">(</span><span class="s3">&quot;mm&quot;</span><span class="s1">)</span>
+<span class="s0">fig2</span><span class="s1">.</span><span class="s0">colorbar</span><span class="s1">(</span><span class="s0">pcm</span><span class="s1">, </span><span class="s0">ax</span><span class="s1">=</span><span class="s0">axes2</span><span class="s1">, </span><span class="s0">label</span><span class="s1">=</span><span class="s3">&quot;relative concentration C/C_s&quot;</span><span class="s1">)</span>
+<span class="s0">fig2</span><span class="s1">.</span><span class="s0">suptitle</span><span class="s1">(</span><span class="s3">&quot;PETG fiber cross-section: copper sulfate concentration (surface -&gt; center)&quot;</span><span class="s1">, </span><span class="s0">y</span><span class="s1">=</span><span class="s4">1</span><span class="s1">)</span>
+
+<span class="s0">fig</span><span class="s1">.</span><span class="s0">tight_layout</span><span class="s1">()</span>
+<span class="s0">plt</span><span class="s1">.</span><span class="s0">show</span><span class="s1">()</span></pre>
+</body>
+</html>

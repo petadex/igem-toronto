@@ -45,7 +45,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from parse_nr_headers import open_fasta  # noqa: E402  (same-directory helper, keeps parsing identical)
+from parse_nr_headers import COMPONENT_RE, open_fasta  # noqa: E402  (same-directory helper, keeps parsing identical)
 
 
 def load_hits(path):
@@ -171,6 +171,7 @@ def main():
 
     rec_id = 0
     n_unfolded = 0
+    n_bad_component = 0
     n_records = 0
     keep = False
     try:
@@ -190,9 +191,15 @@ def main():
                     else:
                         acc, ac = hit
                         header = line[1:].rstrip("\n").rstrip("\r")
-                        fields = header.split("|")
-                        query_id = fields[4] if len(fields) > 4 else ""
-                        component_id = fields[5] if len(fields) > 5 else ""
+                        # Right-anchored, for the same reason as parse_nr_headers.py: the
+                        # accession field can contain '|' (legacy nr identifiers), so the
+                        # last two fields are the only reliable way to reach query and
+                        # component. A left-anchored split leaks pid/bitscore into them.
+                        fields = header.rsplit("|", 5)
+                        query_id = fields[-2] if len(fields) >= 6 else ""
+                        component_id = fields[-1] if len(fields) >= 6 else ""
+                        if not COMPONENT_RE.match(component_id):
+                            n_bad_component += 1
                         key = f"{prefix}AF-{ac}-F1-model_{args.version}.cif"
                         fmap.write(
                             f"{rec_id}\t{query_id}\t{component_id}\t{acc}\t{ac}\t{key}\t{header}\n"
@@ -219,6 +226,7 @@ def main():
         "records": n_records,
         "folded_records": n_folded,
         "unfolded_records": n_unfolded,
+        "bad_component_ids": n_bad_component,
         "folded_pct": round(100.0 * n_folded / n_records, 2) if n_records else 0.0,
         "structures_downloaded": len(hits),
         "accessions_with_uniprot_mapping": len(all_mapped),
