@@ -47,7 +47,7 @@ def run_athena_query(query_string, output_location):
 
 def main():
     queries_dir = "resources/260629_issue28_automated_metadata/queries"
-    output_location = "s3://petabite/automated-metadata/athena-results/"
+    output_location = "s3://automated-metadata/athena-results/"
     
     if not os.path.exists(queries_dir):
         print(f"Queries directory {queries_dir} not found. Please run query generator first.")

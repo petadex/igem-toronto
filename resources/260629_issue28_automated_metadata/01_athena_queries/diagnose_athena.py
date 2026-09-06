@@ -16,7 +16,7 @@ def check_query_status(execution_id):
     return data["QueryExecution"]["Status"]["State"], data["QueryExecution"]["Status"].get("StateChangeReason", "")
 
 def run_athena_query(query_string):
-    output_location = "s3://petabite/automated-metadata/athena-results/"
+    output_location = "s3://automated-metadata/athena-results/"
     payload = {
         "QueryString": query_string,
         "QueryExecutionContext": {"Database": "default"},
