@@ -1,0 +1,3 @@
+variant,database_mib,page_count,page_size,integrity_check,sequence_rows,reference_rows,annotation_rows,homology_hit_rows
+no_bioplastics_metadata,39.69140625,10161,4096,ok,121326,0,0,0
+bioplastics_metadata,40.05078125,10253,4096,ok,121326,323,534,28

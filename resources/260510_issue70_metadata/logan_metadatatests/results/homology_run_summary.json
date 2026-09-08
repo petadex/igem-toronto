@@ -1,0 +1,17 @@
+{
+  "diamond_version": "diamond version 2.1.11",
+  "query_sequences": 121326,
+  "raw_alignment_rows": 51,
+  "candidate_alignment_rows": 28,
+  "sequences_with_candidate_similarity": 18,
+  "runtime_seconds": 3.624155965999762,
+  "query_fasta_sha256": "105cc59b55a97e1999e5dbcdb7365aac71dd29ed7c0486decf77a67af9e563e2",
+  "reference_fasta_sha256": "e59e7ca9a3ef1cb280b6e5af933c1356fc2771cc0c309b3f6e936a245c6c3a3c",
+  "raw_output_sha256": "9cb81a20284133e0e632768264a9f258a43e1201def1082ae951ae98fa76c4d3",
+  "thresholds": {
+    "evalue_max": 1e-05,
+    "identity_min_pct": 30.0,
+    "aligned_aa_min": 50,
+    "subject_coverage_min": 0.5
+  }
+}
