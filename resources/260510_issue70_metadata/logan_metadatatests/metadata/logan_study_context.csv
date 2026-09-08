@@ -1,0 +1,10 @@
+run_accession,study_accession,study_title,scientific_name,tax_id,library_source,library_strategy,library_layout,context_class,selection_term
+DRR001152,PRJDA68269,Canis lupus familiaris Transcriptome project,Canis lupus familiaris,9615,TRANSCRIPTOMIC,RNA-Seq,SINGLE,background_control,
+DRR000584,PRJDA50789,Botryococcus braunii BOT22 transcriptome project,Botryococcus braunii,38881,TRANSCRIPTOMIC,EST,SINGLE,background_control,
+DRR001026,PRJDA67119,Oryza sativa Japonica Group strain:Nipponbare Transcriptome or Gene expression,Oryza sativa Japonica Group,39947,TRANSCRIPTOMIC,RNA-Seq,SINGLE,background_control,
+DRR001104,PRJDA63487,Pinctada fucata utokyo_mb transcriptome project,Pinctada fucata,50426,TRANSCRIPTOMIC,EST,SINGLE,background_control,
+DRR000185,PRJDA42805,Whole SNPs analysis of ciprofloxacin resistance among B. anthracis strains,Bacillus anthracis,1392,GENOMIC,WGS,SINGLE,background_control,
+DRR001199,PRJDB2651,454 libraries of PCR products for T cell receptors in regulatory and conventional CD4-expressing T lymphocytes,Mus musculus,10090,TRANSCRIPTOMIC,AMPLICON,SINGLE,background_control,
+DRR821254,PRJDB39034,Multi-omics reveals the response of anaerobic microorganisms to microplastic pressure with different aging states (PRJCA043806),sludge metagenome,1592332,GENOMIC,OTHER,PAIRED,plastic_context,microplastic
+DRR821257,PRJDB39034,Multi-omics reveals the response of anaerobic microorganisms to microplastic pressure with different aging states (PRJCA043806),sludge metagenome,1592332,GENOMIC,OTHER,PAIRED,plastic_context,microplastic
+DRR821260,PRJDB39034,Multi-omics reveals the response of anaerobic microorganisms to microplastic pressure with different aging states (PRJCA043806),sludge metagenome,1592332,GENOMIC,OTHER,PAIRED,plastic_context,microplastic
