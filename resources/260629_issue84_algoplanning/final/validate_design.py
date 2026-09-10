@@ -43,6 +43,16 @@ IUPAC = {"A": "A", "C": "C", "G": "G", "T": "T",
 
 ENZYME_SITE = {"bsmbi": "CGTCTC", "esp3i": "CGTCTC", "bsai": "GGTCTC"}
 BACKBONE_OVERHANGS = ("CGGA", "GGTG")
+# The five iGEM Type IIS fusion sites (top strand).  Reserved by the iGEM wet-lab
+# protocol, so an internal junction may not collide with one.  Re-listed here
+# rather than imported: this harness re-derives everything independently, and a
+# shared constant would let one typo pass both the designer and its check.
+IGEM_RESERVED_OVERHANGS = ("GGAG", "TACT", "AATG", "GCTT", "GCGA")
+# Banned whichever enzyme does the assembly, so a downstream Golden Gate with
+# either enzyme stays available.  Both unconditional: --gg-enzyme selects which
+# one realises the junctions, not which sites are allowed to appear.
+ALWAYS_FORBIDDEN_SITES = ("CGTCTC",     # BsmBI / Esp3I
+                          "GGTCTC")     # BsaI
 # Low-usage E. coli codons (Kane 1995 / the set Rosetta and RIL supplement).
 RARE_ECOLI = {"AGA": "Arg", "AGG": "Arg", "CGA": "Arg", "CGG": "Arg",
               "ATA": "Ile", "CTA": "Leu", "CCC": "Pro", "GGA": "Gly",
@@ -136,7 +146,10 @@ def check_overhangs(R, S, frags, cuts, notes):
         R.add("1. GG overhangs", "SKIP", "K=1, no internal junctions")
         return
 
-    reserved = () if S["args"].get("shared_backbone_overhangs") else BACKBONE_OVERHANGS
+    # --shared-backbone-overhangs releases OUR backbone pair only; the iGEM
+    # fusion sites belong to a protocol we do not control and stay reserved.
+    reserved = IGEM_RESERVED_OVERHANGS + (
+        () if S["args"].get("shared_backbone_overhangs") else BACKBONE_OVERHANGS)
 
     # -- uniformity: the overhang only exists if EVERY variant spells it ----- #
     bad_unif = []
@@ -240,7 +253,10 @@ def check_frame(R, frags):
 def check_forbidden(R, S, frags):
     enz = S["args"].get("gg_enzyme", "bsmbi")
     site = ENZYME_SITE.get(enz, "CGTCTC")
-    sites = (site, revcomp(site))
+    # The assembly enzyme's site plus the unconditionally banned ones (BsaI),
+    # each on both strands.
+    sites = tuple(sorted({s for x in (site,) + ALWAYS_FORBIDDEN_SITES
+                          for s in (x, revcomp(x))}))
 
     bad = [f"fragment {f+1} oligo {i+1}"
            for f, units in enumerate(frags)
@@ -248,7 +264,8 @@ def check_forbidden(R, S, frags):
     R.add("2a. no forbidden site within any oligo",
           "FAIL" if bad else "PASS",
           "; ".join(bad) if bad else
-          f"{sum(len(u) for u in frags)} oligos clear of {site}/{revcomp(site)}")
+          f"{sum(len(u) for u in frags)} oligos clear of all "
+          f"{len(sites)}: {'/'.join(sites)}")
 
     # A 6-nt site spans at most one junction, so checking every ADJACENT PAIR
     # covers every assembled full-length sequence -- and it covers all of them,
@@ -559,6 +576,8 @@ def check_reproducible(R, S, run_dir, python_exe):
     for k, flag in flags.items():
         if a.get(k) is not None:
             cmd += [flag, str(a[k])]
+    if a.get("cut_search"):
+        cmd += ["--cut-search", str(a["cut_search"])]
     if a.get("shared_backbone_overhangs"):
         cmd.append("--shared-backbone-overhangs")
     if a.get("rank_seqs_per_kb"):

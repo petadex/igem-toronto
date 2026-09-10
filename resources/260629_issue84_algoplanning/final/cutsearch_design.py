@@ -295,7 +295,33 @@ def read_aligned_cores(path):
 # =========================================================================== #
 
 BACKBONE_OVERHANGS = frozenset({"CGGA", "GGTG"})
+
+# The iGEM Type IIS assembly standard fixes five fusion sites along a transcription
+# unit: GGAG before the promoter, TACT promoter|5'UTR, AATG 5'UTR|CDS, GCTT
+# CDS|terminator, GCGA after the terminator.  (Those are top-strand; the
+# complements ATGA/TTAC/CGAA that appear alongside them in the iGEM diagram are
+# the same five sites read on the other strand, not five more.)  The wet lab
+# protocol depends on them, so an internal junction must not collide with one --
+# and "collide" means the same one-mismatch cross-reactivity that already applies
+# to the backbone pair, not just an exact match.  On cluster 1 this removes 13 of
+# 101 legal sites and 27% of the (site, token) options, which is affordable.
+IGEM_RESERVED_OVERHANGS = frozenset({"GGAG", "TACT", "AATG", "GCTT", "GCGA"})
+
+RESERVED_OVERHANGS = BACKBONE_OVERHANGS | IGEM_RESERVED_OVERHANGS
 GG_OH_LEN = 4
+
+# Banned regardless of which enzyme performs the assembly.  BsmBI/Esp3I does our
+# assembly and BsaI is the other workhorse Type IIS enzyme in Golden Gate;
+# keeping BOTH sites absent means the finished constructs stay usable in a
+# downstream assembly with either one instead of foreclosing that option.
+#
+# Listed here rather than derived from --gg-enzyme on purpose.  An earlier
+# version banned only the selected enzyme's site, so `--gg-enzyme bsai` would
+# have left CGTCTC free -- the site of the enzyme actually cutting these
+# fragments.  Both are unconditional now, and --gg-enzyme only decides which one
+# realises the junctions.
+ALWAYS_FORBIDDEN_SITES = frozenset({"CGTCTC",           # BsmBI / Esp3I
+                                    "GGTCTC"})          # BsaI
 
 
 def constant_columns(aligned):
@@ -1248,6 +1274,7 @@ def build_report(args, results, rec, aligned, weights, L, examples, bad,
                 out.append(f"  col {p:>4}:  {label} {tok[0]}")
         if args.chemistry == "gg":
             out.append(f"  [backbone overhangs {' | '.join(sorted(BACKBONE_OVERHANGS))}"
+                       f" + iGEM {' | '.join(sorted(IGEM_RESERVED_OVERHANGS))}"
                        f" reserved -- excluded from internal junctions]")
         out.append("")
     out.append("HEADLINE:")
@@ -1389,18 +1416,40 @@ def main():
                     help="Type IIS enzyme whose site is banned everywhere")
     ap.add_argument("--shared-backbone-overhangs", action="store_true",
                     help="gg: allow the reserved backbone overhangs internally")
+    ap.add_argument("--cut-search", choices=["dfs", "dp"], default="dfs",
+                    help="dfs = the bounded branch-and-bound in place_cuts "
+                         "(default, reproduces every earlier run); dp = the exact "
+                         "k-best DP + junction CSP in dp_cutsearch.py")
     ap.add_argument("--out-dir", default="algoruns")
     args = ap.parse_args()
 
-    global FORBIDDEN_SITES, USE_CODON_USAGE, DEG_TABLE
+    global FORBIDDEN_SITES, USE_CODON_USAGE, DEG_TABLE, place_cuts
     if args.no_codon_usage:
         USE_CODON_USAGE = False
         DEG_TABLE = _build_degenerate_table()
         _codon_cache.clear()
+
+    # The assembly enzyme's own site, plus anything banned unconditionally.
     site = {"bsmbi": "CGTCTC", "esp3i": "CGTCTC", "bsai": "GGTCTC"}[args.gg_enzyme]
-    FORBIDDEN_SITES = frozenset({site, revcomp(site)})
-    reserved = (BACKBONE_OVERHANGS if args.chemistry == "gg"
-                and not args.shared_backbone_overhangs else frozenset())
+    FORBIDDEN_SITES = frozenset(
+        s for x in ({site} | ALWAYS_FORBIDDEN_SITES) for s in (x, revcomp(x)))
+
+    # --shared-backbone-overhangs releases OUR backbone pair only.  The iGEM
+    # fusion sites are fixed by a protocol we do not control, so they stay
+    # reserved either way.
+    if args.chemistry != "gg":
+        reserved = frozenset()
+    elif args.shared_backbone_overhangs:
+        reserved = IGEM_RESERVED_OVERHANGS
+    else:
+        reserved = RESERVED_OVERHANGS
+
+    # evaluate_K resolves `place_cuts` as a module global at call time, so
+    # rebinding it here swaps the search for the whole run.  Imported lazily:
+    # dp_cutsearch imports this module, and a top-level import would be circular.
+    if args.cut_search == "dp":
+        import dp_cutsearch
+        place_cuts = dp_cutsearch.dp_cut_search
 
     seqs = read_aligned_cores(args.aln_fasta)
     aligned = [s for s, _ in seqs]
