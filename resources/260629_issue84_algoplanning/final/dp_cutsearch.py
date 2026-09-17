@@ -141,7 +141,7 @@ class PairFilter:
 # whole reason the DP/CSP split works.
 # =========================================================================== #
 
-def _kbest_paths(aligned, L, K, min_block, sites, beam, max_layer_cols):
+def _kbest_paths(aligned, L, K, min_block, sites, beam, max_fragment_position_cols):
     """All complete segmentations the beam can see, cheapest first.
 
     Returns [(cost, (p1, ..., p_{K-1}), (i1, ..., i_{K-1})), ...] with the second
@@ -150,18 +150,18 @@ def _kbest_paths(aligned, L, K, min_block, sites, beam, max_layer_cols):
     S = len(pos)
 
     def width_ok(w):
-        return w >= min_block and (max_layer_cols is None or w <= max_layer_cols)
+        return w >= min_block and (max_fragment_position_cols is None or w <= max_fragment_position_cols)
 
-    # layer[i] = up to `beam` (cost, cuts_tuple, idx_tuple) for reaching site i
+    # fragment position[i] = up to `beam` (cost, cuts_tuple, idx_tuple) for reaching site i
     # having placed the current number of cuts.  Rebuilt in place per level.
-    layer = [[] for _ in range(S)]
+    fragment_position = [[] for _ in range(S)]
     for i, p in enumerate(pos):
         if not width_ok(p):
             continue
         # forward room: K-1 blocks still to place after this cut
         if L - p < (K - 1) * min_block:
             continue
-        layer[i] = [(math.log(U.distinct_count(aligned, 0, p)), (p,), (i,))]
+        fragment_position[i] = [(math.log(U.distinct_count(aligned, 0, p)), (p,), (i,))]
 
     for j in range(2, K):                       # placing the j-th cut
         nxt = [[] for _ in range(S)]
@@ -171,29 +171,29 @@ def _kbest_paths(aligned, L, K, min_block, sites, beam, max_layer_cols):
                 continue
             cand = []
             for h in range(i):
-                if not layer[h]:
+                if not fragment_position[h]:
                     continue
                 w = p - pos[h]
                 if w < min_block:
                     continue
-                if max_layer_cols is not None and w > max_layer_cols:
+                if max_fragment_position_cols is not None and w > max_fragment_position_cols:
                     continue                    # pos ascends, but earlier h are WIDER
                 step = math.log(U.distinct_count(aligned, pos[h], p))
-                for c, cuts, idxs in layer[h]:
+                for c, cuts, idxs in fragment_position[h]:
                     cand.append((c + step, cuts + (p,), idxs + (i,)))
             if cand:
                 nxt[i] = heapq.nsmallest(beam, cand, key=lambda r: r[0])
-        layer = nxt
+        fragment_position = nxt
 
     out = []
     for i, p in enumerate(pos):
-        if not layer[i]:
+        if not fragment_position[i]:
             continue
         w = L - p
         if not width_ok(w):
             continue
         close = math.log(U.distinct_count(aligned, p, L))
-        for c, cuts, idxs in layer[i]:
+        for c, cuts, idxs in fragment_position[i]:
             out.append((c + close, cuts, idxs))
     out.sort(key=lambda r: r[0])
     return out
@@ -205,7 +205,7 @@ def _kbest_paths(aligned, L, K, min_block, sites, beam, max_layer_cols):
 
 def dp_cut_search(aligned, L, K, min_block, const, chemistry, arm_codons,
                   reserved, node_budget=None, n_keep=1, pool_factor=10,
-                  max_layer_cols=None, beam=None, beam_max=8192, stats=None):
+                  max_fragment_position_cols=None, beam=None, beam_max=8192, stats=None):
     """Drop-in replacement for `place_cuts` with the same return contract.
 
     Returns (candidates, truncated) with candidates = [(cost, cuts, tokens), ...]
@@ -221,7 +221,7 @@ def dp_cut_search(aligned, L, K, min_block, const, chemistry, arm_codons,
         stats = new_stats()
 
     if K == 1:
-        if max_layer_cols is not None and L > max_layer_cols:
+        if max_fragment_position_cols is not None and L > max_fragment_position_cols:
             return [], False
         return [(0.0, [], [])], False
 
@@ -239,7 +239,7 @@ def dp_cut_search(aligned, L, K, min_block, const, chemistry, arm_codons,
     while True:
         stats["dp_passes"] += 1
         t0 = time.time()
-        paths = _kbest_paths(aligned, L, K, min_block, sites, beam, max_layer_cols)
+        paths = _kbest_paths(aligned, L, K, min_block, sites, beam, max_fragment_position_cols)
         stats["dp_seconds"] += time.time() - t0
         stats["paths_seen"] = len(paths)
 

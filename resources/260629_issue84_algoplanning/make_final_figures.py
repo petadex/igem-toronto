@@ -8,7 +8,7 @@ Every nucleotide count here is a POST-PROCESSING count: the length of a construc
 as it would be ordered, `CGTCTC + spacer + insert + spacer + GAGACG`, computed by
 calling make_order.py's own `build_inserts` and `pick_spacer` rather than by
 re-deriving the layout.  The designer's own `nt_ordered` is a flat 24 nt/oligo
-estimate and is NOT used: the true overhead is 20/18/20 nt per layer, so on
+estimate and is NOT used: the true overhead is 20/18/20 nt per fragment position, so on
 cluster 1 at K=3 that estimate over-charges by 246 nt.
 
 `summary.json` records the post-processed design for the recommended K only, so
@@ -125,7 +125,7 @@ def configure(sargs):
     return reserved
 
 
-def price(design_layers, tokens, five_pad="", b5="CGGA", b3="GGTG"):
+def price(design_fragment_positions, tokens, five_pad="", b5="CGGA", b3="GGTG"):
     """Construct length for every oligo, through make_order.py's own layout.
 
     Returns (lengths, insert_nt, n_spacer_failures).  A spacer failure means no
@@ -133,13 +133,13 @@ def price(design_layers, tokens, five_pad="", b5="CGGA", b3="GGTG"):
     sites; it has never happened, and is surfaced rather than swallowed."""
     design = {"fragments": [[{"oligo": u.oligo(), "variants": u.variants,
                               "nt": u.nt} for u in units]
-                            for units in design_layers],
+                            for units in design_fragment_positions],
               "junctions": [list(t) for t in tokens]}
     inserts, _left, _right = MO.build_inserts(design, five_pad, b5, b3)
 
     lengths, insert_nt, fails = [], 0, 0
-    for layer in inserts:
-        for ins in layer:
+    for fragment_position in inserts:
+        for ins in fragment_position:
             sp, _sp2 = MO.pick_spacer(ins)
             if sp is None:
                 fails += 1
@@ -164,7 +164,7 @@ def measure(run_dir, k_max=None):
     const = U.constant_columns(aligned)
     overhead = (a["oligo_overhead_nt"] if a["oligo_overhead_nt"] is not None
                 else (24 if a["chemistry"] == "gg" else 0))
-    max_layer_cols = (a["max_oligo_nt"] // 3) if a["max_oligo_nt"] else None
+    max_fragment_position_cols = (a["max_oligo_nt"] // 3) if a["max_oligo_nt"] else None
 
     clock = Clock()
     instrument(clock)
@@ -179,7 +179,7 @@ def measure(run_dir, k_max=None):
                          a["chemistry"], a["arm_codons"], reserved, L,
                          a["max_junk_pct"] / 100.0, a["widen_candidates"],
                          n_candidates=a["cut_candidates"],
-                         max_layer_cols=max_layer_cols,
+                         max_fragment_position_cols=max_fragment_position_cols,
                          node_budget=a["cut_node_budget"],
                          max_library=a["max_library"], max_nt=a["max_nt"],
                          oligo_overhead=overhead,
@@ -190,12 +190,12 @@ def measure(run_dir, k_max=None):
             print("  K=%2d  no valid segmentation" % K)
             continue
 
-        lengths, insert_nt, fails = price(d["layers"], d["tokens"])
+        lengths, insert_nt, fails = price(d["fragment_positions"], d["tokens"])
         rows.append({
             "K": K,
             "cuts": list(d["cuts"]),
             "oligos": d["oligos"],
-            "layer_oligos": [len(units) for units in d["layers"]],
+            "fragment_position_oligos": [len(units) for units in d["fragment_positions"]],
             "coding_nt": d["nt"],
             "ordered_nt": sum(lengths),
             "insert_nt": insert_nt,
@@ -222,11 +222,13 @@ def measure(run_dir, k_max=None):
                  clock.cut, clock.greedy, clock.greedy_calls))
         sys.stdout.flush()
 
+    lib, chim, codon = _library_stats_from_dir(run_dir)
     return {"run_dir": os.path.abspath(run_dir), "args": a, "L": L,
             "n_cores": len(aligned), "total_weight": sum(weights),
             "recommended_K": S["recommended_K"], "rows": rows,
             "naive": naive_baseline(aligned, weights),
-            "ordered": ordered_truth(run_dir)}
+            "ordered": ordered_truth(run_dir),
+            "library_rec": lib, "chimeras": chim, "codon_variants": codon}
 
 
 def naive_baseline(aligned, weights):
@@ -241,6 +243,8 @@ def naive_baseline(aligned, weights):
             "ordered_nt": sum(lens) + per_gene * len(lens),
             "per_gene_overhead_nt": per_gene,
             "longest_nt": max(lens) + per_gene,
+            # per-construct ordered lengths, for the length-distribution figure
+            "lengths": sorted(n_ + per_gene for n_ in lens),
             # not deduplicated: what ordering all the natural sequences costs
             "ordered_nt_all_seqs": (sum(n * w for n, w in zip(lens, weights))
                                     + per_gene * sum(weights))}
@@ -257,7 +261,38 @@ def ordered_truth(run_dir):
     return {"constructs": len(rows),
             "ordered_nt": sum(int(r["length_nt"]) for r in rows),
             "added_nt": sum(int(r["added_nt_total"]) for r in rows),
-            "longest_nt": max(int(r["length_nt"]) for r in rows)}
+            "longest_nt": max(int(r["length_nt"]) for r in rows),
+            # per-construct ordered lengths, for the length-distribution figure
+            "lengths": sorted(int(r["length_nt"]) for r in rows)}
+
+
+def data_from_run(run_dir):
+    """Assemble just enough for fig2 straight from a finished, post-processed run
+    -- WITHOUT re-running the K sweep.  fig2 only compares the recommended design
+    against naive, and every number it needs is already on disk: the recommended
+    row is in summary.json's frontier, the designed construct lengths are in
+    order/constructs.csv, and the naive lengths come from the alignment.  fig3 and
+    fig5 still need the per-K sweep; this is not enough for them."""
+    with open(os.path.join(run_dir, "summary.json")) as fh:
+        S = json.load(fh)
+    a = S["args"]
+    aln = (S["input"] if os.path.exists(S["input"])
+           else os.path.join(HERE, "final", a["aln_fasta"]))
+    seqs = U.read_aligned_cores(aln)
+    aligned = [s for s, _ in seqs]
+    weights = [w for _, w in seqs]
+    recK = S["recommended_K"]
+    rec = next(r for r in S["frontier"] if r["K"] == recK)
+    ordered = ordered_truth(run_dir)
+    if ordered is None:
+        raise SystemExit(
+            "no order/constructs.csv in %s -- run make_order.py first" % run_dir)
+    lib, chim, codon = _library_stats_from_dir(run_dir)
+    return {"run_dir": os.path.abspath(run_dir), "args": a, "L": len(aligned[0]),
+            "n_cores": len(aligned), "total_weight": sum(weights),
+            "recommended_K": recK, "rows": [rec],
+            "naive": naive_baseline(aligned, weights), "ordered": ordered,
+            "library_rec": lib, "chimeras": chim, "codon_variants": codon}
 
 
 def _rec_row(data):
@@ -295,6 +330,54 @@ def crosscheck(data):
 # Figure 2 -- naive vs designed
 # =========================================================================== #
 
+def _lengths(data):
+    """(naive, designed) per-construct ordered lengths.  Uses the cached arrays
+    when present, else reconstructs them from the run directory so an older cache
+    still draws without a full re-measure."""
+    naive = data["naive"].get("lengths")
+    des = (data["ordered"] or {}).get("lengths")
+    if naive is not None and des is not None:
+        return naive, des
+    rd = data["run_dir"]
+    with open(os.path.join(rd, "order", "constructs.csv"), newline="") as fh:
+        des = sorted(int(r["length_nt"]) for r in csv.DictReader(fh))
+    with open(os.path.join(rd, "summary.json")) as fh:
+        S = json.load(fh)
+    aln = (S["input"] if os.path.exists(S["input"])
+           else os.path.join(HERE, "final", S["args"]["aln_fasta"]))
+    seqs = U.read_aligned_cores(aln)
+    per = SITE_NT + len("CGGA") + len("GGTG")
+    naive = sorted(3 * sum(1 for c in s if c != "-") + per for s, _ in seqs)
+    return naive, des
+
+
+def _library_stats_from_dir(run_dir):
+    """(library_size, chimeras, codon_variants) for the recommended design, by
+    enumerating the library the emitted oligos can build.  A chimera reuses oligos
+    from DIFFERENT cores; a codon variant reuses one core's oligos with a
+    degenerate codon flipped.  Reuses sample_library so the definition is one."""
+    import sample_library as SL
+    with open(os.path.join(run_dir, "summary.json")) as fh:
+        S = json.load(fh)
+    aln = (S["input"] if os.path.exists(S["input"])
+           else os.path.join(HERE, "final", S["args"]["aln_fasta"]))
+    cores = SL.read_named_cores(aln)
+    L = len(cores[0][1])
+    bounds = [0] + list(S.get("cuts", [])) + [L]
+    rows = SL.build_library(S["fragments"], bounds, cores, L)
+    by_core = {seq for _name, seq in cores}
+    chim = sum(1 for a, _p, owned in rows if a not in by_core and not owned)
+    codon = sum(1 for a, _p, owned in rows if a not in by_core and owned)
+    return len(rows), chim, codon
+
+
+def _library_stats(data):
+    """Cached library breakdown, reconstructed from the run dir for older caches."""
+    if "chimeras" in data:
+        return data["library_rec"], data["chimeras"], data["codon_variants"]
+    return _library_stats_from_dir(data["run_dir"])
+
+
 def fig2(data, out):
     n = data["naive"]
     rec = _rec_row(data)
@@ -303,75 +386,116 @@ def fig2(data, out):
     des_add = truth["added_nt"] if truth else rec["ordered_nt"] - rec["coding_nt"]
     des_cod = des_nt - des_add
     des_n = truth["constructs"] if truth else rec["oligos"]
+    naive_len, des_len = _lengths(data)
+    lib, chim, _codon = _library_stats(data)
 
-    fig = plt.figure(figsize=(10.4, 4.9), facecolor=SURFACE)
-    gs = fig.add_gridspec(1, 3, width_ratios=[1.25, 0.8, 1.05], wspace=0.45,
-                          left=0.07, right=0.97, top=0.78, bottom=0.24)
+    fig = plt.figure(figsize=(16.6, 4.9), facecolor=SURFACE)
+    gs = fig.add_gridspec(1, 4, width_ratios=[1.05, 0.85, 1.45, 0.9],
+                          wspace=0.42, left=0.045, right=0.955, top=0.82,
+                          bottom=0.23)
+    x = [0, 1]
 
     # (a) nucleotides ordered, split coding vs assembly overhead
-    ax = fig.add_subplot(gs[0, 0], facecolor=SURFACE)
-    x = [0, 1]
+    axA = fig.add_subplot(gs[0, 0], facecolor=SURFACE)
     cod = [n["coding_nt"], des_cod]
     add = [n["overhead_nt"], des_add]
-    ax.bar(x, cod, width=0.52, color=[BLUE, ORANGE], zorder=3)
-    ax.bar(x, add, width=0.52, bottom=cod, color=[BLUE, ORANGE], alpha=0.42,
-           linewidth=2, edgecolor=SURFACE, zorder=3)
+    axA.bar(x, cod, width=0.52, color=[BLUE, ORANGE], zorder=3)
+    axA.bar(x, add, width=0.52, bottom=cod, color=[BLUE, ORANGE], alpha=0.42,
+            linewidth=2, edgecolor=SURFACE, zorder=3)
     for xi, c, a_ in zip(x, cod, add):
-        ax.text(xi, c + a_ + n["ordered_nt"] * 0.03, format(c + a_, ","),
-                ha="center", color=INK, fontsize=11, fontweight="bold")
+        axA.text(xi, c + a_ + n["ordered_nt"] * 0.03, format(c + a_, ","),
+                 ha="center", color=INK, fontsize=11, fontweight="bold")
     saving = 100.0 * (n["ordered_nt"] - des_nt) / n["ordered_nt"]
-    ax.annotate("", xy=(0.72, des_nt), xytext=(0.72, n["ordered_nt"]),
-                arrowprops=dict(arrowstyle="-|>", color=INK2, lw=1.6))
-    ax.text(0.66, (des_nt + n["ordered_nt"]) / 2, "-%.0f%%" % saving, ha="right",
-            va="center", color=INK, fontsize=14, fontweight="bold")
-    ax.set_ylim(0, n["ordered_nt"] * 1.22)
-    ax.set_title("nucleotides ordered", color=INK, fontsize=11, loc="left", pad=8)
-    ax.set_ylabel("nt", color=INK2)
-    _style(ax, x, ["naive\none gene per core",
-                   "designed\nK = %d fragments" % rec["K"]])
-    ax.yaxis.set_major_formatter(
+    axA.annotate("", xy=(0.72, des_nt), xytext=(0.72, n["ordered_nt"]),
+                 arrowprops=dict(arrowstyle="-|>", color=INK2, lw=1.6))
+    axA.text(0.66, (des_nt + n["ordered_nt"]) / 2, "-%.0f%%" % saving,
+             ha="right", va="center", color=INK, fontsize=14, fontweight="bold")
+    axA.set_ylim(0, n["ordered_nt"] * 1.22)
+    axA.set_title("Fig 1. Nucleotides Ordered", color=INK, fontsize=11,
+                  fontweight="bold", loc="left", pad=8)
+    axA.set_ylabel("nt", color=INK2)
+    _style(axA, x, ["naive\none gene per core",
+                    "designed,\n%d fragment positions" % rec["K"]])
+    axA.yaxis.set_major_formatter(
         mticker.FuncFormatter(lambda v, _: "%dk" % (v / 1000)))
-    fig.text(0.07, 0.055,
-             "solid = coding sequence,  pale = BsmBI sites and spacers\n"
-             "%s nt naive vs %s nt designed: the overhead\n"
-             "is not where the money goes" % (format(n["overhead_nt"], ","),
-                                              format(des_add, ",")),
-             color=INK3, fontsize=8.5, va="bottom")
 
     # (b) pieces to order -- the design orders MORE, and that is the trade
-    ax = fig.add_subplot(gs[0, 1], facecolor=SURFACE)
-    ax.bar(x, [n["genes"], des_n], width=0.52, color=[BLUE, ORANGE], zorder=3)
+    axB = fig.add_subplot(gs[0, 1], facecolor=SURFACE)
+    top_b = max(n["genes"], des_n)
+    axB.bar(x, [n["genes"], des_n], width=0.52, color=[BLUE, ORANGE], zorder=3)
     for xi, v in zip(x, [n["genes"], des_n]):
-        ax.text(xi, v + des_n * 0.035, "%d" % v, ha="center", color=INK,
-                fontsize=11, fontweight="bold")
-    ax.set_ylim(0, des_n * 1.30)
-    ax.set_title("pieces to order", color=INK, fontsize=11, loc="left", pad=8)
-    ax.set_ylabel("constructs", color=INK2)
-    _style(ax, x, ["naive", "designed"])
-    fig.text(0.455, 0.055,
-             "+%d pieces, but they assemble:\n%d constructs build all %d cores,\n"
-             "rather than %d being them"
-             % (des_n - n["genes"], des_n, rec["n_cores_encoded"], n["genes"]),
-             color=INK3, fontsize=8.5, va="bottom")
+        axB.text(xi, v + top_b * 0.035, "%d" % v, ha="center", color=INK,
+                 fontsize=11, fontweight="bold")
+    axB.set_ylim(0, top_b * 1.30)
+    axB.set_title("Fig 2. Fragments Ordered", color=INK, fontsize=11,
+                  fontweight="bold", loc="left", pad=8)
+    axB.set_ylabel("constructs", color=INK2)
+    _style(axB, x, ["naive", "designed"])
 
-    # (c) the saving costs no coverage -- one number, so no chart
-    ax = fig.add_subplot(gs[0, 2], facecolor=SURFACE)
-    ax.axis("off")
-    ax.text(0.0, 0.84, "100%", color=ORANGE, fontsize=42, fontweight="bold",
-            va="center")
-    ax.text(0.0, 0.56, "of natural sequences covered,\nby both routes",
-            color=INK, fontsize=11, va="center")
-    ax.text(0.0, 0.22,
-            "%d/%d unique cores,\n%d/%d natural sequences.\n\n"
-            "Without deduplicating,\nthe naive route is %s nt."
-            % (rec["n_cores_encoded"], data["n_cores"], rec["encoded_weight"],
-               data["total_weight"], format(n["ordered_nt_all_seqs"], ",")),
-            color=INK3, fontsize=8.5, va="center")
+    # (c) length distribution -- naive genes are long and uniform, designed
+    #     fragments are shorter and varied because they assemble
+    axC = fig.add_subplot(gs[0, 2], facecolor=SURFACE)
+    hi = max(max(naive_len), max(des_len))
+    bins = list(range(0, int(hi) + 60, 40))
+    axC.hist(naive_len, bins=bins, color=BLUE, alpha=0.55, zorder=3,
+             label="naive (%d genes)" % len(naive_len))
+    axC.hist(des_len, bins=bins, color=ORANGE, alpha=0.7, zorder=3,
+             label="designed (%d fragments)" % len(des_len))
+    axC.set_title("Fig 3. Fragment Lengths", color=INK, fontsize=11,
+                  fontweight="bold", loc="left", pad=8)
+    axC.set_xlabel("construct length (nt)", color=INK2)
+    axC.set_ylabel("count", color=INK2)
+    axC.legend(frameon=False, fontsize=8.5, labelcolor=INK2, loc="upper left")
+    _grid(axC)
 
-    fig.suptitle("What the design saves -- cluster %s, after post-processing"
-                 % data.get("cluster", "1"),
-                 color=INK, fontsize=13, fontweight="bold", x=0.07, ha="left",
-                 y=0.93)
+    # (d) coverage -- how many natural sequences each route reproduces
+    axD = fig.add_subplot(gs[0, 3], facecolor=SURFACE)
+    tot = data["total_weight"]
+    cov = rec["encoded_weight"]
+    axD.bar(x, [tot, cov], width=0.52, color=[BLUE, ORANGE], zorder=3)
+    for xi, v in zip(x, [tot, cov]):
+        axD.text(xi, v + tot * 0.035, "%d" % v, ha="center", color=INK,
+                 fontsize=11, fontweight="bold")
+    axD.set_ylim(0, tot * 1.25)
+    axD.set_title("Fig 4. Sequence Coverage", color=INK, fontsize=11,
+                  fontweight="bold", loc="left", pad=8)
+    axD.set_ylabel("natural sequences", color=INK2)
+    _style(axD, x, ["naive\n100%",
+                    "designed\n%.0f%%" % (100.0 * cov / tot)])
+
+    # captions sit just under the graphs they describe
+    yc = 0.085
+    a = axA.get_position()
+    fig.text((a.x0 + a.x1) / 2, yc,
+             "solid = coding sequence,\npale = BsmBI sites and spacers",
+             color=INK3, fontsize=11, va="center", ha="center")
+    b, c, d = axB.get_position(), axC.get_position(), axD.get_position()
+    fig.text((b.x1 + c.x0) / 2, yc,
+             "Designed fragments are assembled\nto produce full cores",
+             color=INK3, fontsize=11, va="center", ha="center")
+    fig.text((d.x0 + d.x1) / 2, yc,
+             "Designed has a library size of %s,\nincluding %s chimera proteins"
+             % (format(lib, ","), format(chim, ",")),
+             color=INK3, fontsize=11, va="center", ha="center")
+
+    fig.suptitle("Sequence Purchasing Algorithm: IsPETase 90pid Cluster Results",
+                 color=INK, fontsize=14, fontweight="bold", x=0.035, ha="left",
+                 y=0.94)
+
+    # the run's parameters, along the very bottom
+    ar = data["args"]
+    cap = ar.get("max_oligo_nt")
+    frag = ("fragment ≤ %d nt coding (≤ %d ordered)" % (cap, cap + 20)
+            if cap else "no fragment-length cap")
+    lib = format(ar["max_library"], ",") if ar.get("max_library") else "none"
+    ntc = format(ar["max_nt"], ",") if ar.get("max_nt") else "none"
+    fig.text(0.5, 0.015,
+             "run parameters:   library ≤ %s   ·   nt ordered ≤ %s"
+             "   ·   %s   ·   K ≤ %d   ·   seed %d   ·   "
+             "%s chemistry   ·   %s cut search   ·   recommended K = %d"
+             % (lib, ntc, frag, ar["k_max"], ar["seed"], ar["chemistry"],
+                ar.get("cut_search", "dp"), rec["K"]),
+             color=INK3, fontsize=8, ha="center", va="bottom")
     _save(fig, out, "fig2_naive_vs_designed.png")
 
 
@@ -525,7 +649,7 @@ def fig5(data, out):
     for r in rows:
         calls = max(1, r["greedy_calls"])
         per_call.append(r["sec_greedy"] / calls)
-        units = r["oligos"] / float(r["K"])        # mean units in one layer
+        units = r["oligos"] / float(r["K"])        # mean units in one fragment position
         bound.append(n * n * r["K"] * (units + L + n))
         real.append(n * r["n_cores_encoded"] * (units + L + n))
 
@@ -553,7 +677,7 @@ def fig5(data, out):
     ax.legend(frameon=False, fontsize=9, labelcolor=INK2, loc="upper right")
     _grid(ax)
     fig.text(0.55, 0.045,
-             "n = %d cores, L = %d columns, u = units per layer.  This fits "
+             "n = %d cores, L = %d columns, u = units per fragment position.  This fits "
              "within %.0f%%.\nThe stated worst case $n^2K(u{+}L{+}n)$ does not: "
              "its constant varies %.0fx,\nbecause a higher K buys fewer cores "
              "before the library cap stops it."
@@ -593,10 +717,12 @@ def _grid(ax):
 
 
 def _save(fig, out, name):
-    path = os.path.join(out, name)
-    fig.savefig(path, dpi=200, facecolor=SURFACE)
+    base = name[:-4] if name.endswith(".png") else name
+    for ext in ("png", "svg"):
+        path = os.path.join(out, "%s.%s" % (base, ext))
+        fig.savefig(path, dpi=200, facecolor=SURFACE)
+        print("  wrote %s" % path)
     plt.close(fig)
-    print("  wrote %s" % path)
 
 
 def main():
@@ -615,6 +741,11 @@ def main():
                     help="measurement cache (default <out>/cluster<N>/figdata.json)")
     ap.add_argument("--from-cache", action="store_true",
                     help="redraw from the cache instead of re-running the sweep")
+    ap.add_argument("--fig2-only", action="store_true",
+                    help="build ONLY fig2, straight from the run directory with "
+                         "no K sweep (seconds).  fig2 needs only the recommended "
+                         "design, which is already on disk; fig3/fig5 still need "
+                         "the sweep.  Requires make_order.py to have been run.")
     ap.add_argument("--k-max", type=int, default=None,
                     help="stop the sweep early (default: the run's own k_max)")
     args = ap.parse_args()
@@ -622,6 +753,13 @@ def main():
     out = os.path.join(args.out, "cluster%s" % args.cluster)
     os.makedirs(out, exist_ok=True)
     cache = args.cache or os.path.join(out, "figdata.json")
+
+    if args.fig2_only:
+        print("fig2 only -- reading %s (no sweep)" % args.run_dir)
+        data = data_from_run(args.run_dir)
+        data["cluster"] = args.cluster
+        fig2(data, out)
+        return
 
     if args.from_cache:
         with open(cache) as fh:

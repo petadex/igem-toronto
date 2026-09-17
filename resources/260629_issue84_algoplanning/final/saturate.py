@@ -35,7 +35,7 @@ def rand_segs(K, n, rng):
 def run(c):
     d = U.greedy(aligned, weights, c[1], c[2], L, "gg", 1.0, 3, max_library=LIBCAP)
     if d is None: return None
-    return d["W"], sum(u.nt for units in d["layers"] for u in units)
+    return d["W"], sum(u.nt for units in d["fragment_positions"] for u in units)
 
 print(f"library cap {LIBCAP}, {len(SITES)} legal sites, "
       f"{sum(weights)} natural sequences total")

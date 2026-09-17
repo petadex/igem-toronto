@@ -302,11 +302,11 @@ def check_coverage(R, S, frags, cuts, aln, notes):
     # translate each oligo back to per-column amino-acid sets, from the DNA
     exps = []
     for units in frags:
-        layer = []
+        fragment_position = []
         for u in units:
-            layer.append((tuple(u.get("cols", ())),
+            fragment_position.append((tuple(u.get("cols", ())),
                           [aa_set_of(c) for c in codons(u["oligo"])]))
-        exps.append(layer)
+        exps.append(fragment_position)
 
     covered, weight = [], 0
     for idx, (hdr, seq, w) in enumerate(aln):
@@ -398,7 +398,7 @@ def check_codons(R, S, frags, cuts, aln, notes):
 def check_library_size(R, S, frags, cap=2_000_000):
     rep = [r for r in S["frontier"] if r["K"] == S["recommended_K"]][0]
     claimed = rep["library"]
-    per_layer = []
+    per_fragment_position = []
     for units in frags:
         seqs = set()
         for u in units:
@@ -413,18 +413,18 @@ def check_library_size(R, S, frags, cap=2_000_000):
                 return
             for combo in itertools.product(*sets):
                 seqs.add("".join(combo))
-        per_layer.append(sorted(seqs))
+        per_fragment_position.append(sorted(seqs))
     total = 1
-    for s in per_layer:
+    for s in per_fragment_position:
         total *= len(s)
     if total > cap:
         R.add("6. reported library size vs true distinct proteins", "WARN",
               f"product is {total:,}; skipped enumeration above {cap:,}")
         return
-    whole = {"".join(c) for c in itertools.product(*per_layer)}
+    whole = {"".join(c) for c in itertools.product(*per_fragment_position)}
     status = "PASS" if len(whole) <= claimed else "FAIL"
     R.add("6. reported library size vs true distinct proteins", status,
-          f"reported |L_O| = {claimed:,} (product of per-layer counts, an upper "
+          f"reported |L_O| = {claimed:,} (product of per-fragment position counts, an upper "
           f"bound); true distinct proteins = {len(whole):,}"
           + ("" if len(whole) == claimed else
              f" -- {claimed - len(whole):,} collisions, so the cap is "

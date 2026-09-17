@@ -8,7 +8,7 @@ with degenerate codons, so the two levers were never priced against each other.
 Here they are the SAME lever.
 
   KEY SIMPLIFICATION -- there is no separate "discrete" code path.
-  A layer's contents are UNITS.  A unit is a list of per-column amino-acid sets.
+  A fragment position's contents are UNITS.  A unit is a list of per-column amino-acid sets.
     * a literal natural piece      = a unit whose sets are all singletons
     * a degenerate oligo           = a unit with some sets of size > 1
   So the two moves the search can make are:
@@ -30,7 +30,7 @@ STAGE 1  CONTEXT       Precompute everything needed to PRICE a move in O(1):
 STAGE 2  SEARCH        For each candidate segmentation, ONE greedy: seed from the
                        heaviest real core, then repeatedly add the natural core
                        with the cheapest junk per newly-encoded natural sequence
-                       -- taking, per layer, whichever of {reuse, widen, add} is
+                       -- taking, per fragment position, whichever of {reuse, widen, add} is
                        cheapest.  Stop when no core can be added without breaching
                        the junk cap.  Works on amino-acid sets; DNA enters only as
                        a sliding-window check that a widened codon cannot spell a
@@ -47,11 +47,11 @@ DEFINITIONS (as written up in the notebook)
   L_T  target library of unique cores, weighted by w(s) = how many natural ORFs
        collapsed onto that core (the `_n<k>` FASTA suffix).
   L_O  protein library the ordered DNA produces = the cartesian product across
-       fragments of each layer's producible pieces.
+       fragments of each fragment position's producible pieces.
   covered   core s is covered iff every one of its K pieces is producible.
   coverage  weighted:   sum w(s) over covered / sum w(s) over all.
   counting junk  UNweighted:  1 - |L_T & L_O| / |L_O|.   This is the cap.
-  (|L_O| is computed as the product of per-layer piece counts, an upper bound --
+  (|L_O| is computed as the product of per-fragment position piece counts, an upper bound --
    two piece-tuples can concatenate to the same protein when an indel shifts
    material across a cut -- so reported junk is conservative.)
 
@@ -425,7 +425,7 @@ def tokens_conflict(a, b, chemistry):
 # the stage-2 search is the arbiter, so cuts are finally judged by the coverage
 # they actually achieve under the cap rather than by a proxy computed before we
 # know what we will buy.  The proxy is still how candidates are RANKED: minimise
-# the product of per-layer distinct piece counts (== the library at full
+# the product of per-fragment position distinct piece counts (== the library at full
 # coverage), which is additive in logs, i.e. a shortest path (RASPP/SwiftLib).
 # =========================================================================== #
 
@@ -456,21 +456,21 @@ def distinct_count(aligned, a, b):
     return hit
 
 
-def layer_widths(cuts, L):
+def fragment_position_widths(cuts, L):
     b = [0] + list(cuts) + [L]
     return [b[i + 1] - b[i] for i in range(len(b) - 1)]
 
 
 def place_cuts(aligned, L, K, min_block, const, chemistry, arm_codons, reserved,
                node_budget=2_000_000, n_keep=1, pool_factor=10,
-               max_layer_cols=None):
+               max_fragment_position_cols=None):
     """The cheapest `n_keep`-ish K-1 cut sets for this K.
 
     Returns (candidates, truncated) with candidates = [(proxy_cost, cuts, tokens),
     ...] cheapest first, or ([], truncated) when no segmentation exists.
 
     CHANGED vs unified_design.py, which returned only the single cheapest set:
-    the proxy ranked here (product of per-layer distinct piece counts) is a
+    the proxy ranked here (product of per-fragment position distinct piece counts) is a
     FULL-COVERAGE quantity that the design never actually builds, so handing the
     greedy one segmentation let a proxy decide something it cannot see.  We now
     keep a pool and let stage 2 arbitrate -- which is what this module always
@@ -487,7 +487,7 @@ def place_cuts(aligned, L, K, min_block, const, chemistry, arm_codons, reserved,
     at the old 400k budget this fired silently at K=4 on cluster 1 and returned
     a worse segmentation (cost 9.663) than an exhaustive search (9.512)."""
     if K == 1:
-        if max_layer_cols is not None and L > max_layer_cols:
+        if max_fragment_position_cols is not None and L > max_fragment_position_cols:
             return [], False
         return [(0.0, [], [])], False
 
@@ -525,7 +525,7 @@ def place_cuts(aligned, L, K, min_block, const, chemistry, arm_codons, reserved,
             w = L - last
             if w < min_block:
                 return
-            if max_layer_cols is not None and w > max_layer_cols:
+            if max_fragment_position_cols is not None and w > max_fragment_position_cols:
                 return
             offer(cost + math.log(distinct_count(aligned, last, L)), cuts, tokens)
             return
@@ -535,7 +535,7 @@ def place_cuts(aligned, L, K, min_block, const, chemistry, arm_codons, reserved,
             p, toks = sites[ci]
             if p - last < min_block:
                 continue
-            if max_layer_cols is not None and p - last > max_layer_cols:
+            if max_fragment_position_cols is not None and p - last > max_fragment_position_cols:
                 break            # sites ascend in p, so every later p is wider too
             if L - p < (K - len(cuts) - 1) * min_block:
                 continue
@@ -568,7 +568,7 @@ def legal_sites(L, min_block, const, chemistry, arm_codons, reserved):
 
 
 def random_segmentations(aligned, L, K, min_block, const, chemistry, arm_codons,
-                         reserved, n, rng, max_layer_cols=None, max_tries=50_000):
+                         reserved, n, rng, max_fragment_position_cols=None, max_tries=50_000):
     """Uniformly sample valid cut sets, under EXACTLY the constraints the DFS
     obeys -- same min_block spacing, same per-site Level-1 filtering, same
     set-level orthogonality.  Random therefore cannot place two cuts closer than
@@ -595,7 +595,7 @@ def random_segmentations(aligned, L, K, min_block, const, chemistry, arm_codons,
         widths = [b[i + 1] - b[i] for i in range(len(b) - 1)]
         if min(widths) < min_block:
             continue
-        if max_layer_cols is not None and max(widths) > max_layer_cols:
+        if max_fragment_position_cols is not None and max(widths) > max_fragment_position_cols:
             continue
         toks, ok = [], True
         for i in pick:
@@ -617,17 +617,17 @@ def random_segmentations(aligned, L, K, min_block, const, chemistry, arm_codons,
 def diversify(cands, n_keep, L, bucket_cols=10):
     """Pick `n_keep` candidates SPREAD over segmentation shape, not the n_keep
     cheapest -- those are near-duplicates (`[63,83]`, `[63,84]`, `[62,83]` ...)
-    that all give the greedy the same design.  Bucket by widest layer, then take
+    that all give the greedy the same design.  Bucket by widest fragment position, then take
     the cheapest unused candidate from each bucket in turn.
 
-    Widest layer is the right axis because it decides the longest oligo, which is
+    Widest fragment position is the right axis because it decides the longest oligo, which is
     what synthesis actually constrains, and because the proxy is systematically
-    biased toward one huge layer plus narrow ones."""
+    biased toward one huge fragment position plus narrow ones."""
     if len(cands) <= n_keep:
         return cands
     buckets = defaultdict(list)
     for c in cands:
-        buckets[max(layer_widths(c[1], L)) // bucket_cols].append(c)
+        buckets[max(fragment_position_widths(c[1], L)) // bucket_cols].append(c)
     order = sorted(buckets)
     out, i = [], 0
     while len(out) < n_keep and any(buckets[k] for k in order):
@@ -643,7 +643,7 @@ def diversify(cands, n_keep, L, bucket_cols=10):
 #
 # A UNIT is one ordered oligo.  It covers a set of alignment columns (its gap
 # pattern) and carries one amino-acid set per column.  Two cores can share a unit
-# only if they have the SAME gap pattern in that layer, because a degenerate
+# only if they have the SAME gap pattern in that fragment position, because a degenerate
 # codon can encode "V or I" but cannot encode "residue or nothing".
 # =========================================================================== #
 
@@ -734,7 +734,7 @@ def _repair_sites(cols, sets, pins, codons, exp):
     return not iupac_may_contain_site("".join(codons))
 
 
-def layer_view(core, a, b):
+def fragment_position_view(core, a, b):
     """(cols, residues) -- the columns this core actually occupies in [a, b) and
     the residues it puts there.  The cols tuple IS the gap pattern."""
     cols, res = [], []
@@ -749,8 +749,8 @@ def layer_view(core, a, b):
 # STAGE 2 -- the unified greedy.
 # =========================================================================== #
 
-def cross_junction_site(layers):
-    """True if some pair of adjacent-layer oligos could spell a forbidden site
+def cross_junction_site(fragment_positions):
+    """True if some pair of adjacent-fragment position oligos could spell a forbidden site
     ACROSS their boundary.
 
     build_unit() only ever sees one unit at a time, so a site straddling a
@@ -762,27 +762,27 @@ def cross_junction_site(layers):
     result.  Checking it here lets evaluate_K discard the candidate and take
     another, which turns "we checked and it was clean" into "the search cannot
     return one".  A 6-nt site needs at most 5 nt either side of the boundary."""
-    for f in range(len(layers) - 1):
-        for a in layers[f]:
+    for f in range(len(fragment_positions) - 1):
+        for a in fragment_positions[f]:
             oa = a.oligo()[-5:]
-            for b in layers[f + 1]:
+            for b in fragment_positions[f + 1]:
                 if iupac_may_contain_site(oa + b.oligo()[:5]):
                     return True
     return False
 
 
-def layer_total(units):
+def fragment_position_total(units):
     return sum(u.variants for u in units)
 
 
-def library_size(layers):
+def library_size(fragment_positions):
     lib = 1
-    for units in layers:
-        lib *= max(1, layer_total(units))
+    for units in fragment_positions:
+        lib *= max(1, fragment_position_total(units))
     return lib
 
 
-def _covered_in_layer(units, view):
+def _covered_in_fragment_position(units, view):
     for u in units:
         if u.covers(*view):
             return True
@@ -790,7 +790,7 @@ def _covered_in_layer(units, view):
 
 
 def move_options(units, view, pins, widen_candidates):
-    """How this layer could accommodate a core, cheapest first.
+    """How this fragment position could accommodate a core, cheapest first.
     Returns [(delta_variants, delta_nt, kind, index, unit_or_None), ...].
 
       kind 'reuse' -- already producible, free
@@ -801,7 +801,7 @@ def move_options(units, view, pins, widen_candidates):
     'widen' wins ties on nucleotides, so a degenerate encoding is preferred
     whenever it costs no more junk -- without that preference being hard-coded."""
     cols, residues = view
-    if _covered_in_layer(units, view):
+    if _covered_in_fragment_position(units, view):
         return [(0, 0, "reuse", -1, None)]
 
     opts = []
@@ -856,12 +856,12 @@ def greedy(aligned, weights, cuts, tokens, L, chemistry, max_junk_frac,
     K = len(bounds) - 1
     pins = _pins_by_column(cuts, tokens, chemistry)
 
-    views = [[layer_view(aligned[i], bounds[f], bounds[f + 1]) for f in range(K)]
+    views = [[fragment_position_view(aligned[i], bounds[f], bounds[f + 1]) for f in range(K)]
              for i in range(n)]
 
-    layers = [[] for _ in range(K)]
-    # cov[f] = set of cores layer f can already produce.  Only ever grows, and
-    # only in the layer we touched, so coverage never needs a full recompute.
+    fragment_positions = [[] for _ in range(K)]
+    # cov[f] = set of cores fragment position f can already produce.  Only ever grows, and
+    # only in the fragment position we touched, so coverage never needs a full recompute.
     cov = [set() for _ in range(K)]
 
     seed = max(range(n), key=lambda i: (weights[i], -i))
@@ -870,19 +870,19 @@ def greedy(aligned, weights, cuts, tokens, L, chemistry, max_junk_frac,
                        pins[f])
         if u is None:
             return None
-        layers[f].append(u)
-        _absorb(layers[f], views, f, cov[f], n)
+        fragment_positions[f].append(u)
+        _absorb(fragment_positions[f], views, f, cov[f], n)
 
     covered = _intersect(cov, n)
     W = sum(weights[i] for i in covered)
-    lib = library_size(layers)
-    traj = [_snapshot(layers, covered, W, lib)]
+    lib = library_size(fragment_positions)
+    traj = [_snapshot(fragment_positions, covered, W, lib)]
     stopped_by = "no improving move"
 
     while True:
         base_junk = lib - len(covered)
-        cur_oligos = sum(len(u) for u in layers)
-        cur_nt = (sum(u.nt for units in layers for u in units)
+        cur_oligos = sum(len(u) for u in fragment_positions)
+        cur_nt = (sum(u.nt for units in fragment_positions for u in units)
                   + oligo_overhead * cur_oligos)
         blocked = {"junk": 0, "library": 0, "nt": 0}
         best = None
@@ -891,7 +891,7 @@ def greedy(aligned, weights, cuts, tokens, L, chemistry, max_junk_frac,
                 continue
             plan, ok = [], True
             for f in range(K):
-                opts = move_options(layers[f], views[c][f], pins[f], widen_candidates)
+                opts = move_options(fragment_positions[f], views[c][f], pins[f], widen_candidates)
                 if not opts:
                     ok = False
                     break
@@ -901,8 +901,8 @@ def greedy(aligned, weights, cuts, tokens, L, chemistry, max_junk_frac,
 
             new_lib = 1
             for f in range(K):
-                new_lib *= max(1, layer_total(layers[f]) + plan[f][0])
-            new_cov = _hypothetical_coverage(layers, cov, plan, views, n, K)
+                new_lib *= max(1, fragment_position_total(fragment_positions[f]) + plan[f][0])
+            new_cov = _hypothetical_coverage(fragment_positions, cov, plan, views, n, K)
             new_W = sum(weights[i] for i in new_cov)
             gain = new_W - W
             if gain <= 0:
@@ -939,35 +939,35 @@ def greedy(aligned, weights, cuts, tokens, L, chemistry, max_junk_frac,
         for f in range(K):
             dv, _dn, kind, idx, unit = plan[f]
             if kind == "add":
-                layers[f].append(unit)
+                fragment_positions[f].append(unit)
             elif kind == "widen":
-                layers[f][idx] = unit
-            _absorb(layers[f], views, f, cov[f], n)
+                fragment_positions[f][idx] = unit
+            _absorb(fragment_positions[f], views, f, cov[f], n)
         covered = _intersect(cov, n)
         W = sum(weights[i] for i in covered)
-        lib = library_size(layers)
-        traj.append(_snapshot(layers, covered, W, lib))
+        lib = library_size(fragment_positions)
+        traj.append(_snapshot(fragment_positions, covered, W, lib))
 
-    return {"layers": layers, "cov": cov, "covered": covered, "W": W,
+    return {"fragment_positions": fragment_positions, "cov": cov, "covered": covered, "W": W,
             "library": lib, "trajectory": traj, "pins": pins,
             "cuts": list(cuts), "tokens": list(tokens), "K": K,
             "stopped_by": stopped_by,
-            "nt_with_overhead": (sum(u.nt for units in layers for u in units)
+            "nt_with_overhead": (sum(u.nt for units in fragment_positions for u in units)
                                  + oligo_overhead
-                                 * sum(len(u) for u in layers))}
+                                 * sum(len(u) for u in fragment_positions))}
 
 
 def _absorb(units, views, f, cov_f, n):
-    """Recompute which cores this layer can produce.  Free recombinants and cores
+    """Recompute which cores this fragment position can produce.  Free recombinants and cores
     picked up incidentally by a widened codon are absorbed here at no cost."""
     for i in range(n):
         if i in cov_f:
             continue
-        if _covered_in_layer(units, views[i][f]):
+        if _covered_in_fragment_position(units, views[i][f]):
             cov_f.add(i)
 
 
-def _hypothetical_coverage(layers, cov, plan, views, n, K):
+def _hypothetical_coverage(fragment_positions, cov, plan, views, n, K):
     """Coverage if `plan` were applied, without mutating anything."""
     out = None
     for f in range(K):
@@ -982,7 +982,7 @@ def _hypothetical_coverage(layers, cov, plan, views, n, K):
                     cf.add(i)
                 elif kind == "widen":
                     # the replaced unit is gone, but every other unit remains
-                    for j, u in enumerate(layers[f]):
+                    for j, u in enumerate(fragment_positions[f]):
                         if j != idx and u.covers(*views[i][f]):
                             cf.add(i)
                             break
@@ -997,17 +997,17 @@ def _intersect(cov, n):
     return out
 
 
-def _snapshot(layers, covered, W, lib):
-    oligos = sum(len(u) for u in layers)
+def _snapshot(fragment_positions, covered, W, lib):
+    oligos = sum(len(u) for u in fragment_positions)
     return {"oligos": oligos, "library": lib, "junk": lib - len(covered),
             "junk_pct": 100.0 * (lib - len(covered)) / lib if lib else 0.0,
             "covered_cores": len(covered), "covered_weight": W,
-            "nt": sum(u.nt for units in layers for u in units)}
+            "nt": sum(u.nt for units in fragment_positions for u in units)}
 
 
 def _pins_by_column(cuts, tokens, chemistry):
     """Junction overhangs are realised by PINNING the codons either side of the
-    cut.  Returns one {column: codon} map per layer."""
+    cut.  Returns one {column: codon} map per fragment position."""
     K = len(cuts) + 1
     pins = [dict() for _ in range(K)]
     if chemistry != "gg":
@@ -1043,8 +1043,8 @@ def assemble_examples(design, aligned, L, k=3):
     for i in sorted(design["covered"])[:k]:
         dna, ok = [], True
         for f in range(K):
-            cols, res = layer_view(aligned[i], bounds[f], bounds[f + 1])
-            unit = next((u for u in design["layers"][f] if u.covers(cols, res)), None)
+            cols, res = fragment_position_view(aligned[i], bounds[f], bounds[f + 1])
+            unit = next((u for u in design["fragment_positions"][f] if u.covers(cols, res)), None)
             if unit is None:
                 ok = False
                 break
@@ -1067,14 +1067,14 @@ def assemble_examples(design, aligned, L, k=3):
 
 def design_metrics(d, aligned, weights, L):
     total_w = sum(weights)
-    oligos = sum(len(u) for u in d["layers"])
-    nt = sum(u.nt for units in d["layers"] for u in units)
+    oligos = sum(len(u) for u in d["fragment_positions"])
+    nt = sum(u.nt for units in d["fragment_positions"] for u in units)
     return total_w, oligos, nt
 
 
 def evaluate_K(aligned, weights, K, min_block, const, chemistry, arm_codons,
                reserved, L, max_junk_frac, widen_candidates,
-               n_candidates=1, max_layer_cols=None, node_budget=2_000_000,
+               n_candidates=1, max_fragment_position_cols=None, node_budget=2_000_000,
                max_library=None, max_nt=None, oligo_overhead=0,
                proxy_candidates=5, seed=0, exhaustive_max=150):
     """Run the greedy on EVERY candidate segmentation and keep the design that
@@ -1102,7 +1102,7 @@ def evaluate_K(aligned, weights, K, min_block, const, chemistry, arm_codons,
     cands, truncated = place_cuts(aligned, L, K, min_block, const, chemistry,
                                   arm_codons, reserved, node_budget=node_budget,
                                   n_keep=n_proxy,
-                                  max_layer_cols=max_layer_cols)
+                                  max_fragment_position_cols=max_fragment_position_cols)
     if not cands and n_random == 0:
         return None
     n_pool = len(cands)
@@ -1116,7 +1116,7 @@ def evaluate_K(aligned, weights, K, min_block, const, chemistry, arm_codons,
         seen = {tuple(c[1]) for c in cands}
         rc = random_segmentations(aligned, L, K, min_block, const, chemistry,
                                   arm_codons, reserved, n_random, rng,
-                                  max_layer_cols=max_layer_cols)
+                                  max_fragment_position_cols=max_fragment_position_cols)
         rc = [c for c in rc if tuple(c[1]) not in seen]
         tagged += [("random", i, c) for i, c in enumerate(rc, start=1)]
     if not tagged:
@@ -1130,10 +1130,10 @@ def evaluate_K(aligned, weights, K, min_block, const, chemistry, arm_codons,
                     oligo_overhead=oligo_overhead)
         if cd is None:
             continue
-        if cross_junction_site(cd["layers"]):
+        if cross_junction_site(cd["fragment_positions"]):
             n_site_rejected += 1
             continue
-        nt_c = sum(u.nt for units in cd["layers"] for u in units)
+        nt_c = sum(u.nt for units in cd["fragment_positions"] for u in units)
         key = (-cd["W"], nt_c)             # most sequences, then fewest nt
         if best is None or key < best[0]:
             best = (key, cd, arm, arm_rank, proxy_cost)
@@ -1153,12 +1153,12 @@ def evaluate_K(aligned, weights, K, min_block, const, chemistry, arm_codons,
         "winner_arm_rank": win_rank,
         "winner_proxy_cost": win_proxy,
         "proxy_favourite_won": win_arm == "proxy" and win_rank == 1,
-        "layer_widths": layer_widths(d["cuts"], L),
+        "fragment_position_widths": fragment_position_widths(d["cuts"], L),
     })
     total_w = sum(weights)
-    oligos = sum(len(u) for u in d["layers"])
-    nt = sum(u.nt for units in d["layers"] for u in units)
-    deg = sum(1 for units in d["layers"] for u in units
+    oligos = sum(len(u) for u in d["fragment_positions"])
+    nt = sum(u.nt for units in d["fragment_positions"] for u in units)
+    deg = sum(1 for units in d["fragment_positions"] for u in units
               for c in u.codons for b in c if len(IUPAC[b]) > 1)
     d.update({
         "n_cores_encoded": len(d["covered"]),
@@ -1174,7 +1174,7 @@ def evaluate_K(aligned, weights, K, min_block, const, chemistry, arm_codons,
         "degenerate_bases": deg,
         "seqs_per_oligo": d["W"] / max(1, oligos),
         "seqs_per_kb": 1000.0 * d["W"] / max(1, nt),
-        "longest_oligo_nt": max(u.nt for units in d["layers"] for u in units),
+        "longest_oligo_nt": max(u.nt for units in d["fragment_positions"] for u in units),
         "stopped_by": d.get("stopped_by"),
         "nt_ordered": d.get("nt_with_overhead", nt),
     })
@@ -1255,12 +1255,12 @@ def build_report(args, results, rec, aligned, weights, L, examples, bad,
     out.append("segments: " + "  |  ".join(f"[{bounds[i]},{bounds[i+1]})"
                                            for i in range(rec["K"])))
     out.append("")
-    for f, units in enumerate(rec["layers"]):
+    for f, units in enumerate(rec["fragment_positions"]):
         ndeg = sum(1 for u in units for c in u.codons for b in c if len(IUPAC[b]) > 1)
         widened = sum(1 for u in units if any(len(e) > 1 for e in u.exp))
         out.append(f"  fragment {f+1}: {len(units)} oligos "
                    f"({widened} carrying degenerate codons, {ndeg} degenerate bases), "
-                   f"{layer_total(units)} producible pieces, "
+                   f"{fragment_position_total(units)} producible pieces, "
                    f"{sum(u.nt for u in units):,} nt")
     out.append("")
     if rec["tokens"] and rec["tokens"][0][0] is not None:
@@ -1324,7 +1324,7 @@ def save_run(out_root, stem, args, results, rec, aligned, L, report, examples):
                       ("K", "n_cores_encoded", "encoded_weight", "library", "junk",
                        "junk_pct", "oligos", "nt", "degenerate_bases",
                        "seqs_per_oligo", "seqs_per_kb", "coverage_pct",
-                       "longest_oligo_nt", "layer_widths", "candidates_pooled",
+                       "longest_oligo_nt", "fragment_position_widths", "candidates_pooled",
                        "candidates_tried", "cut_search_truncated",
                        "winner_arm", "winner_arm_rank", "n_proxy", "n_random",
                        "candidate_mode", "seed", "stopped_by", "nt_ordered",
@@ -1336,12 +1336,12 @@ def save_run(out_root, stem, args, results, rec, aligned, L, report, examples):
                         "degenerate_columns": [i for i, e in enumerate(u.exp)
                                                if len(e) > 1],
                         "encodes": ["".join(sorted(e)) for e in u.exp]}
-                       for u in units] for units in rec["layers"]],
+                       for u in units] for units in rec["fragment_positions"]],
     }
     with open(os.path.join(run, "summary.json"), "w") as fh:
         json.dump(summary, fh, indent=2)
 
-    for f, units in enumerate(rec["layers"], start=1):
+    for f, units in enumerate(rec["fragment_positions"], start=1):
         with open(os.path.join(run, f"fragment{f}.fasta"), "w") as fh:
             for i, u in enumerate(units, start=1):
                 fh.write(f">frag{f}_oligo{i}_var{u.variants}\n{u.oligo()}\n")
@@ -1387,7 +1387,7 @@ def main():
     ap.add_argument("--arm-codons", type=int, default=6,
                     help="hr only: constant residues each side of a cut")
     ap.add_argument("--widen-candidates", type=int, default=3,
-                    help="how many nearest units to consider widening per layer")
+                    help="how many nearest units to consider widening per fragment position")
     ap.add_argument("--cut-candidates", type=int, default=50,
                     help="TOTAL candidate segmentations per K to run the greedy "
                          "on, split between the two generators")
@@ -1403,7 +1403,7 @@ def main():
                     help="if a K has no more segmentations than this, enumerate "
                          "them all instead of sampling (applies at K<=2)")
     ap.add_argument("--max-oligo-nt", type=int, default=None,
-                    help="reject any segmentation whose widest layer exceeds this "
+                    help="reject any segmentation whose widest fragment position exceeds this "
                          "many nt (e.g. 300 for oligo pools); default unlimited")
     ap.add_argument("--cut-node-budget", type=int, default=2_000_000,
                     help="DFS node budget for cut placement; runs that hit it are "
@@ -1464,12 +1464,12 @@ def main():
     for K in range(1, args.k_max + 1):
         if K > 1 and K * args.min_block_cols > L:
             break
-        max_layer_cols = (args.max_oligo_nt // 3) if args.max_oligo_nt else None
+        max_fragment_position_cols = (args.max_oligo_nt // 3) if args.max_oligo_nt else None
         r = evaluate_K(aligned, weights, K, args.min_block_cols, const,
                        args.chemistry, args.arm_codons, reserved, L,
                        max_junk_frac, args.widen_candidates,
                        n_candidates=args.cut_candidates,
-                       max_layer_cols=max_layer_cols,
+                       max_fragment_position_cols=max_fragment_position_cols,
                        node_budget=args.cut_node_budget,
                        max_library=args.max_library, max_nt=args.max_nt,
                        oligo_overhead=overhead,
