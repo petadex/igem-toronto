@@ -67,7 +67,7 @@ The full 2.7M-sequence dataset is 90% Bacteria, 8.7% Eukaryota, 1.1% Archaea. Fo
 
 - **Scope**: Bacteria + Archaea only (91% of data). Eukaryota excluded due to variable NCBI rank positioning making clean phylum extraction unreliable.
 - **Strategy**: Equal sampling per phylum rather than proportional, to ensure all phyla are evaluable. Proportional analysis is deferred to the full run.
-- **Floor/cap**: Phyla with <50 sequences excluded entirely. Phyla with 50–999 sequences taken in full. Phyla with ≥1,000 sequences capped at 1,000.
+- **Floor/cap**: Phyla with &lt;50 sequences excluded entirely. Phyla with 50–999 sequences taken in full. Phyla with ≥1,000 sequences capped at 1,000.
 - **Label normalisation**: `Proteobacteria` merged into `Pseudomonadota` (NCBI rename, 2021).
 - **Phylum extraction**: NCBI lineage strings are semicolon-delimited. Some lineages insert a superclade between domain and phylum (e.g., `Bacteria; Pseudomonadati; Pseudomonadota; ...`). A known-superclade lookup handles this.
 

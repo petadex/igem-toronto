@@ -138,8 +138,8 @@ for idx in ds.list_indices():
     print({k: v for k, v in idx.items() if k != 'fragment_ids'})
 "`
 
-{'name': 'protein_hash_idx', 'type': 'BTree', 'uuid': 'fdb71a9d-37fb-4edb-b1d1-5611914f9bb8', 'fields': ['protein_hash'], 'version': 1, 'base_id': None}
-{'name': 'header_idx', 'type': 'BTree', 'uuid': '29097da6-6d4e-4e15-8818-28e4926544f5', 'fields': ['header'], 'version': 2, 'base_id': None}
+\{'name': 'protein_hash_idx', 'type': 'BTree', 'uuid': 'fdb71a9d-37fb-4edb-b1d1-5611914f9bb8', 'fields': ['protein_hash'], 'version': 1, 'base_id': None\}
+\{'name': 'header_idx', 'type': 'BTree', 'uuid': '29097da6-6d4e-4e15-8818-28e4926544f5', 'fields': ['header'], 'version': 2, 'base_id': None\}
 
 This output reveals that the structures are indexed in a BTree, which is sufficient info to design the script.
 

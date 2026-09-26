@@ -416,7 +416,7 @@ prediction, its Atlas counterpart, and the centroid ORFid from Step 2b's `centro
 
 | Metric | Shape / range | Where it's stored | What it tells you |
 |---|---|---|---|
-| **pLDDT** (predicted lDDT-Cα) | per-residue, 0–100 | CIF **B-factor** + `metrics/<id>.json` → `confidence.per_residue_plddt` (2 dp) | Per-residue *local* confidence — how reliable each residue's local geometry is. **>90** very high (side chains trustworthy); **70–90** confident backbone; **50–70** low, treat cautiously; **<50** likely disordered/unreliable. |
+| **pLDDT** (predicted lDDT-Cα) | per-residue, 0–100 | CIF **B-factor** + `metrics/<id>.json` → `confidence.per_residue_plddt` (2 dp) | Per-residue *local* confidence — how reliable each residue's local geometry is. **>90** very high (side chains trustworthy); **70–90** confident backbone; **50–70** low, treat cautiously; **&lt;50** likely disordered/unreliable. |
 | **mean pLDDT** | scalar, 0–100 | `tracker.csv:mean_plddt` + json `confidence.mean_plddt` | Chain-average of pLDDT — a single global confidence number for ranking/filtering whole models. |
 | **pTM** (predicted TM-score) | scalar, 0–1 | `tracker.csv:ptm` + json `confidence.ptm` | Global *fold/topology* confidence — estimated TM-score vs. the true structure. **>0.5** means the overall fold is probably correct; higher = more confident topology. Computed from the PAE. |
 | **PAE** (Predicted Aligned Error) | L×L, Ångströms | json `confidence.pae` (**`null`** when the model emitted none) | Pairwise confidence. Entry (i, j) = expected position error at residue *j* when aligned on residue *i*. Low off-diagonal blocks ⇒ two regions/domains are confidently placed *relative to each other*; high ⇒ each domain may be fine internally but their arrangement is uncertain. Best signal for inter-domain confidence and for carving out rigid domains. |
@@ -486,7 +486,7 @@ We have the ESMC6B base and the PETadex MSAs. We want to use ESMFold2, which tak
 
     Rationale for this is that you just want to directly minimize leakage.
 
-    Doesn't make as much sense, since <40pid would be much too low for most PETases. Also, we don't need a fully novel fold for this initial benchmark. This is why it wasn't really considered for this first test set.
+    Doesn't make as much sense, since &lt;40pid would be much too low for most PETases. Also, we don't need a fully novel fold for this initial benchmark. This is why it wasn't really considered for this first test set.
 
 **This has been completed!**
 

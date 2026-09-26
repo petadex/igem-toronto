@@ -139,7 +139,7 @@ To define $J_r$,
 
 We need to formalize this better:
 
-F = {x⁽¹⁾,…,x⁽ᴹ⁾}, with c codon positions. A candidate oligo O assigns to each codon position c three base distributions (p_{c,1}, p_{c,2}, p_{c,3}) over {A,C,G,T}.
+F = \{x⁽¹⁾,…,x⁽ᴹ⁾\}, with c codon positions. A candidate oligo O assigns to each codon position c three base distributions (p_\{c,1\}, p_\{c,2\}, p_\{c,3\}) over \{A,C,G,T\}.
 
 Per-position amino-acid distribution (this is where the genetic code enters):
 
@@ -412,7 +412,7 @@ Successor to `fragment_split.py`. It implements the three decisions from the Tue
 | change | rationale |
 |---|---|
 | K fixed at 3 -> **any K = 1..12** (RASPP/SwiftLib DP places the K-1 cuts; the tool sweeps all K and prints a frontier) | Tuesday decision *"don't limit the number of fragments"*; wet lab realistically supports 1-12 junctions. Lets us actually **test** whether few fragments is best (it is - see results). |
-| hard library-size budget -> **junk as a % of the produced library** (`--max-junk-pct`, default 80) | Tuesday decision *"hard cutoff on the % of the junk"*. A fraction is comparable across designs and far easier to reason about than an absolute library size. It acts as a feasibility constraint: greedily add cores by cheapest junk-per-new-sequence **while** the design's junk fraction stays <= cutoff; stop when no core fits. |
+| hard library-size budget -> **junk as a % of the produced library** (`--max-junk-pct`, default 80) | Tuesday decision *"hard cutoff on the % of the junk"*. A fraction is comparable across designs and far easier to reason about than an absolute library size. It acts as a feasibility constraint: greedily add cores by cheapest junk-per-new-sequence **while** the design's junk fraction stays &lt;= cutoff; stop when no core fits. |
 | recommends by **sequences-per-oligo** ("a few extra full-length seqs per order"), not max coverage | team philosophy *"smaller gains for less junk"*. Also, maximizing coverage trivially returns K=1 (synthesize every gene = 0% junk by construction), so it was useless as a recommender. |
 | reports the concrete headline number: **X/N unique cores, W/T natural sequences encoded** | requested: always state how much of the cluster the encoding actually produces. |
 | `--chemistry gg`/`hr` are now **real and self-contained**, not placeholders | see section 3 - the whole point of making the algorithm not depend on GGAssembler. |
@@ -433,7 +433,7 @@ The old plan called GGAssembler "the back end" we would hand fragments to. That 
 - **Level 1 (per site, a per-edge property).** `gg`: a 4-nt BsaI overhang must sit in immutable (constant) flanking codons and be individually high-fidelity (non-palindromic, balanced GC). Because we synthesize the constant fragments, a site offers a *set* of achievable overhangs via synonymous codons. `hr`: a constant homology-arm window of `>= --arm-codons` residues must straddle the cut.
 - **Level 2 (per set - the part that is NOT a per-edge property).** `gg`: the chosen overhangs must be mutually orthogonal (not identical, and not within 1 mismatch of each other's reverse complement - the single-mismatch ligation that dominates GGA infidelity). This is exactly GGAssembler's "rainbow" constraint. We enforce it **during** an exact DFS that carries the chosen overhangs along the path, so it is impossible for the tool to emit a cross-reacting set. `hr`: homology arms must be mutually distinct (near-identical arms mis-recombine).
 
-Fidelity is a transparent, literature-grounded **model** (Potapov 2018 / Pryor 2020: <=1-mismatch ligation dominates infidelity, palindromes self-ligate, extreme-GC overhangs ligate poorly). The exact empirical NEB 256x256 ligation table can be dropped into `_overhang_ok`/`_gg_conflict` without touching the algorithm.
+Fidelity is a transparent, literature-grounded **model** (Potapov 2018 / Pryor 2020: &lt;=1-mismatch ligation dominates infidelity, palindromes self-ligate, extreme-GC overhangs ligate poorly). The exact empirical NEB 256x256 ligation table can be dropped into `_overhang_ok`/`_gg_conflict` without touching the algorithm.
 
 > **Result: every `gg`/`hr` design the tool returns is buildable as-is** - each junction carries a validated, individually high-fidelity overhang/arm, and the whole set is mutually orthogonal/distinct by construction. GGAssembler is now **optional** (only to squeeze codon cost further via DLX exact-cover); it is **not required for correctness**.
 
