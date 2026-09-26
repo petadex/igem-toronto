@@ -1,0 +1,46 @@
+name: Compile notebooks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "notebooks/*.ipynb"
+      - "notebooks/compile_notebook.py"
+      - "resources/**"
+      - ".github/workflows/compile-notebooks.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: compile-notebooks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install nbconvert
+        run: pip install nbconvert
+
+      - name: Compile all notebooks
+        run: python notebooks/compile_notebook.py --all
+
+      - name: Commit compiled output
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898319+github-actions[bot]@users.noreply.github.com"
+          git add notebooks/compiled
+          if git diff --cached --quiet; then
+            echo "No changes to compiled notebooks."
+          else
+            git commit -m "Recompile notebooks [skip ci]"
+            git push
+          fi
