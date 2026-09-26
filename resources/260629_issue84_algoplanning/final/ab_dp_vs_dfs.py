@@ -19,12 +19,12 @@ import dp_cutsearch as D
 
 
 def dp_shim(aligned, L, K, min_block, const, chemistry, arm_codons, reserved,
-            node_budget=2_000_000, n_keep=1, pool_factor=10, max_layer_cols=None):
+            node_budget=2_000_000, n_keep=1, pool_factor=10, max_fragment_position_cols=None):
     """place_cuts' exact call signature, backed by the DP/CSP search."""
     return D.dp_cut_search(aligned, L, K, min_block, const, chemistry,
                            arm_codons, reserved, n_keep=n_keep,
                            pool_factor=pool_factor,
-                           max_layer_cols=max_layer_cols)
+                           max_fragment_position_cols=max_fragment_position_cols)
 
 
 def run_arm(name, aligned, weights, L, const, args, reserved, overhead):
@@ -40,7 +40,7 @@ def run_arm(name, aligned, weights, L, const, args, reserved, overhead):
             r = U.evaluate_K(aligned, weights, K, args.min_block_cols, const,
                              "gg", 6, reserved, L, 1.0, 3,
                              n_candidates=args.cut_candidates,
-                             max_layer_cols=None,
+                             max_fragment_position_cols=None,
                              node_budget=args.cut_node_budget,
                              max_library=args.max_library,
                              max_nt=args.max_nt,
@@ -61,10 +61,10 @@ def frontier(name, results, rec, secs, total_w, n):
     print()
     print("  %s -- %.1f s" % (name, secs))
     print("     K  cores      natseq      library  junk%%  oligos   nt ord  "
-          "longest  seqs/oligo  stopped by         winner     oligos per layer")
+          "longest  seqs/oligo  stopped by         winner     oligos per fragment position")
     for r in results:
         mark = "  <==" if rec is not None and r is rec else ""
-        per_layer = [len(u) for u in r["layers"]]
+        per_fragment_position = [len(u) for u in r["fragment_positions"]]
         print("    %2d  %2d/%-3d  %4d/%-4d  %11s  %5.1f  %5d  %7s  %5dnt  "
               "%9.2f  %-17s  %-11s %s%s"
               % (r["K"], r["n_cores_encoded"], n, r["encoded_weight"], total_w,
@@ -73,7 +73,7 @@ def frontier(name, results, rec, secs, total_w, n):
                  r["longest_oligo_nt"], r["seqs_per_oligo"],
                  str(r.get("stopped_by"))[:17],
                  "%s#%s" % (r.get("winner_arm"), r.get("winner_arm_rank")),
-                 per_layer, mark))
+                 per_fragment_position, mark))
 
 
 def main():
