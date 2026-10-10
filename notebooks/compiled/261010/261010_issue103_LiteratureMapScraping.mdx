@@ -30,8 +30,7 @@ S3 files :
 
 ### Data Accessed: YYYY-MM-DD
 ```bash
-# commands used to pull input data
-aws s3 cp s3://petadex/original_pdfs/ ./
+
 ```
 
 ## Introduction
@@ -58,8 +57,8 @@ The compute environment relies on a custom Selenium and Chromium scraper setup f
 Initial DOIs and accessions are compiled via the PAZy API, PETadex NR database and targeted database article searches.
 
 ```bash
-# Accessed: YYYY-MM-DD
-# <command used to generate or download input data>
+
+
 ```
 
 ### Processing Steps
@@ -83,7 +82,7 @@ Initial DOIs and accessions are compiled via the PAZy API, PETadex NR database a
 - Convert the retrieved corpus of [~4,600] full-text articles into a final set of structured JSONS.
 
 ```bash
-# Uploaded: YYYY-MM-DD
+
 aws s3 cp structured_literature_corpus.json s3://petadex/docling_sectioned_text_jsons/
 ```
 
