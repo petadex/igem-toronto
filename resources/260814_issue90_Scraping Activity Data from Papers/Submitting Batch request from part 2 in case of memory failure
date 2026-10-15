@@ -1,0 +1,89 @@
+import os
+import time
+import boto3
+
+
+# CONFIGURATION
+
+LOCAL_BATCH_JSONL = r"C:\Users\somna\Downloads\extracted_metadata_V2_schema_CSVs_Evidence\pass2_chunked_input.jsonl"
+
+# AWS CREDENTIALS (Hardcoded for temporary session)
+MODEL_ID = "us.anthropic.claude-sonnet-4-6" 
+REGION_NAME = "us-east-1"
+BUCKET_NAME = "batch-extraction-217113048582-us-east-1-an"
+ROLE_ARN = "arn:aws:iam::217113048582:role/igem-bio-extraction-bedrock-batch-role"
+
+
+
+# AWS CREDENTIALS (Hardcoded for temporary session)
+AWS_ACCESS_KEY = "Thats What She Said"
+AWS_SECRET_KEY = "No, no, no, no, no, no, no, no DON'T DO THAT. I THOUGHT WE WERE HAVING A NICE DATE"
+AWS_SESSION_TOKEN = "Life is like a box of chocolates. You never know what you're gonna get." 
+
+
+# AWS CLIENTS
+
+s3_client = boto3.client(
+    "s3", 
+    region_name=REGION_NAME,
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    aws_session_token=AWS_SESSION_TOKEN
+)
+
+bedrock_client = boto3.client(
+    "bedrock", 
+    region_name=REGION_NAME,
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    aws_session_token=AWS_SESSION_TOKEN
+)
+
+def upload_and_submit():
+    if not os.path.exists(LOCAL_BATCH_JSONL):
+        print(f"Error: Could not find the file at {LOCAL_BATCH_JSONL}")
+        return
+
+    print(f"Found input file: {LOCAL_BATCH_JSONL}")
+    print(f"File size: {os.path.getsize(LOCAL_BATCH_JSONL) / (1024 * 1024):.2f} MB")
+
+    # 1. Upload to S3
+    s3_key = f"input/pass2_chunked_input_{int(time.time())}.jsonl"
+    print(f"Uploading file to S3 bucket '{BUCKET_NAME}' as '{s3_key}'...")
+    s3_client.upload_file(LOCAL_BATCH_JSONL, BUCKET_NAME, s3_key)
+    
+    s3_input_uri = f"s3://{BUCKET_NAME}/{s3_key}"
+    s3_output_uri = f"s3://{BUCKET_NAME}/output/pass2_results_{int(time.time())}/"
+    
+    # 2. Submit Bedrock Job
+    job_name = f"pass2-chunked-job-{int(time.time())}"
+    print(f"Submitting Batch Model Invocation Job '{job_name}' to Bedrock...")
+    
+    response = bedrock_client.create_model_invocation_job(
+        jobName=job_name,
+        roleArn=ROLE_ARN,
+        modelId=MODEL_ID,
+        inputDataConfig={
+            "s3InputDataConfig": {
+                "s3Uri": s3_input_uri
+            }
+        },
+        outputDataConfig={
+            "s3OutputDataConfig": {
+                "s3Uri": s3_output_uri
+            }
+        }
+    )
+    
+    job_arn = response.get("jobArn")
+    print("\n" + "="*60)
+    print("SUCCESS: AWS Bedrock Batch Job Successfully Submitted!")
+    print("="*60)
+    print(f"Job Name:   {job_name}")
+    print(f"Job ARN:    {job_arn}")
+    print(f"Input S3:   {s3_input_uri}")
+    print(f"Output S3:  {s3_output_uri}")
+    print("="*60 + "\n")
+
+if __name__ == "__main__":
+    upload_and_submit()

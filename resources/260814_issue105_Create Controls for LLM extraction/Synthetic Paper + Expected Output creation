@@ -1,0 +1,124 @@
+import os
+import json
+import re
+from pathlib import Path
+
+# --- CONFIGURATION ---
+INPUT_DIR = r"C:\Users\somna\Downloads\Bot_100_Primary_Proteins_JSONs"
+RAW_OPUS_OUTPUT_DIR = r"C:\Users\somna\source\repos\Controls for LLMs\Synthetic paper generator\sonnet_raw_outputs"
+SYNTHESIZED_DIR = r"C:\Users\somna\Downloads\100 synthesized sonnet papers"
+GROUND_TRUTH_DIR = r"C:\Users\somna\Downloads\output sonnet jsons for the hallucination detector"
+
+def extract_json_from_text(text: str) -> dict:
+    """Extracts valid JSON object from raw LLM text, handling markdown fences and surrounding text."""
+    text = text.strip()
+    
+    # Strip markdown code blocks if present
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+        
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Fallback to regex greedy match for root JSON object
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+        raise ValueError("Could not locate valid JSON in raw file.")
+
+def filter_references(content_array: list) -> list:
+    """Removes bibliography and reference sections from the content array."""
+    exclude_keywords = ["reference", "bibliography"]
+    return [
+        sec for sec in content_array 
+        if not any(kw in sec.get("section", "").lower() for kw in exclude_keywords)
+    ]
+
+def stitch_and_distribute():
+    os.makedirs(SYNTHESIZED_DIR, exist_ok=True)
+    os.makedirs(GROUND_TRUTH_DIR, exist_ok=True)
+    
+    input_path = Path(INPUT_DIR)
+    raw_output_path = Path(RAW_OPUS_OUTPUT_DIR)
+    
+    processed_count = 0
+    failed_count = 0
+    
+    for raw_file in raw_output_path.glob("opus_raw_*.json"):
+        original_filename = raw_file.name.replace("opus_raw_", "")
+        original_filepath = input_path / original_filename
+        
+        if not original_filepath.exists():
+            print(f"Warning: Original file {original_filename} not found in input directory. Skipping.")
+            failed_count += 1
+            continue
+            
+        # 1. Read and parse raw Opus output
+        with open(raw_file, "r", encoding="utf-8") as f:
+            raw_text = f.read()
+            
+        try:
+            opus_data = extract_json_from_text(raw_text)
+        except Exception as e:
+            print(f"Error parsing raw output for {raw_file.name}: {e}")
+            failed_count += 1
+            continue
+            
+        # 2. Read original paper JSON
+        with open(original_filepath, "r", encoding="utf-8") as f:
+            original_paper = json.load(f)
+            
+        cleaned_content = filter_references(original_paper.get("content", []))
+        
+        # 3. Create new content array with 'Opus output' inserted at position 0
+        new_content = [
+            {
+                "section": "Opus output",
+                "text": json.dumps(opus_data, indent=2)
+            }
+        ]
+        new_content.extend(cleaned_content)
+        
+        # 4. Safely apply modifications
+        # Shift target_section_index by +1 because 'Opus output' was inserted at index 0
+        for mod in opus_data.get("modifications", []):
+            original_idx = mod.get("target_section_index")
+            if original_idx is None:
+                continue
+                
+            shifted_idx = original_idx + 1
+            text_to_add = mod.get("text_to_add", "")
+            
+            # Safe boundary check: append to section if index exists, otherwise append to last section
+            if 0 <= shifted_idx < len(new_content):
+                existing_text = new_content[shifted_idx].get("text", "")
+                new_content[shifted_idx]["text"] = f"{existing_text}\n\n[SYNTHETIC INSERTION]: {text_to_add}"
+            elif len(new_content) > 1:
+                # Target section index exceeded document length; append to final content section
+                existing_text = new_content[-1].get("text", "")
+                new_content[-1]["text"] = f"{existing_text}\n\n[SYNTHETIC INSERTION]: {text_to_add}"
+                
+        original_paper["content"] = new_content
+        
+        # 5. Save synthesized paper
+        synth_out_path = Path(SYNTHESIZED_DIR) / original_filename
+        with open(synth_out_path, "w", encoding="utf-8") as f:
+            json.dump(original_paper, f, indent=4, ensure_ascii=False)
+            
+        # 6. Save ground truth JSON for hallucination detector
+        gt_out_path = Path(GROUND_TRUTH_DIR) / f"GT_{original_filename}"
+        with open(gt_out_path, "w", encoding="utf-8") as f:
+            json.dump(opus_data.get("ground_truth", {}), f, indent=4, ensure_ascii=False)
+            
+        processed_count += 1
+        print(f"Successfully processed: {original_filename}")
+
+    print(f"\nProcessing Complete. Total Processed: {processed_count} | Total Failed: {failed_count}")
+
+if __name__ == "__main__":
+    stitch_and_distribute()

@@ -1,0 +1,15 @@
+{
+  "positive_controls": 25,
+  "expected_reference_recovered": 25,
+  "exact_sequence_pipeline_recovery_rate": 1.0,
+  "negative_controls": 25,
+  "artificial_decoys_with_candidate_hit": 0,
+  "artificial_decoy_hit_rate": 0.0,
+  "control_scope": "Pipeline plumbing check using exact codon-encoded references and shuffled artificial decoys; not biological sensitivity or specificity.",
+  "thresholds": {
+    "evalue_max": 1e-05,
+    "identity_min_pct": 30.0,
+    "aligned_aa_min": 50,
+    "subject_coverage_min": 0.5
+  }
+}

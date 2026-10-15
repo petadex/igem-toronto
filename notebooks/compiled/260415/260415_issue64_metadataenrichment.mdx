@@ -1,0 +1,174 @@
+---
+    title: 260415_issue64_metadataenrichment
+    section: "Dry Lab"
+    path: "/dry-lab/issue/64"
+    navTitle: "Issue 64"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+## Experiment Title
+
+Lead     : `<Dennis / Pixeldom04>`
+
+Issue    : [Github Issue #64](https://github.com/petadex/igem-toronto/issues/64) — Metadata Enrichment
+
+Start    : `2026-04-15`
+
+Complete : `2026-04-15`
+
+Files    : `~/igem-toronto/files/260415_issue64_metadataenrichment/` — local working directory (active analysis, intermediate outputs)
+
+S3 files : `s3://petadex/sra/` — remote archive (final outputs, shared with team)
+
+1. /petadex/sra_metadata/ (postgres table containing the 8.2 million libraries/runs and their associated metadata)
+2. s3://petadex/sra/petadex_unique_runs.csv (input file, the original 8.2 million library accessions)
+3. s3://petadex/sra/petadex_metadata_dedup.csv (Deduplicated rows, a single metadata row to correspond with each library)
+4. s3://petadex/sra/petadex_metadata_raw.csv (11.4 million rows, contains the raw metadata after joining metadata with libraries)
+5. s3://petadex/sra/petadex_biosamples.csv (single column csv with header "biosample" and contains the 6.8 million biosamples that are linked to the 8.2 million libraries)
+
+---
+
+### Data Accessed: 2026-04-15
+```bash
+# commands used to pull input data
+aws s3 cp s3://petadex/sra/ ./
+```
+
+## Introduction
+
+The Petadex dataset contains 8,283,908 unique sequencing run accessions (SRR/ERR/DRR) collected from the Serratus/Logan ecosystem. These run IDs by themselves lack the descriptive context (organism, platform, library strategy, BioProject/BioSample linkage, sampling geography, ecoregion) required for downstream ecological and taxonomic analyses in Petadex.
+
+This experiment enriches each run accession with (1) SRA run-level metadata mirrored in the Serratus `logan.sra` table (~31M rows), and (2) geographic/ecological annotations from `logan.biosample_geographical_location` (~68M rows, PostGIS-encoded coordinates plus WWF biome and ISO country). The enriched table is loaded into the Petadex Postgres database as `sra_metadata` so that every run in Petadex is joinable to its sample-of-origin metadata.
+
+Inspection of the input file (originally named `petadex_unique_libraries.csv`) confirmed the accessions are Run-level (SRR/ERR/DRR), not Experiment or library-level, so they join directly to `logan.sra.acc` without hierarchy traversal.
+
+## Objectives
+
+1. Retrieve SRA run-level metadata for all 8.28M Petadex run accessions from the Serratus `logan.sra` table.
+2. Retrieve geographic and ecological annotations (lat/lon, elevation, country, biome) for the associated BioSamples from `logan.biosample_geographical_location`, deduplicated to one best row per run.
+3. Join the two sources locally and load the enriched table into Petadex Postgres as `sra_metadata`, keyed by run accession.
+
+---
+
+## Materials and Methods
+
+### System Initialization
+
+- macOS (darwin 24.6.0), zsh.
+- `psql` (PostgreSQL client) for remote queries against the Serratus Aurora read-replica.
+- `duckdb` (via `brew install duckdb`) for local joins over multi-GB CSVs.
+- `awscli` for S3 transfers.
+- Working directory: `~/igem-toronto/files/260415_issue64_metadataenrichment/`.
+
+### Data Initialization
+
+Input run list pulled from the Petadex S3 bucket:
+
+```bash
+# Accessed: 2026-04-15
+aws s3 cp s3://petadex/sra/petadex_unique_runs.csv ./
+# 8,283,908 runs — SRR: 5,966,657 | ERR: 2,177,626 | DRR: 139,625
+```
+
+Serratus databases accessed via the documented public reader on the read-only replica. Note the wiki's primary endpoint was unreachable; the working endpoint (from the wiki's psql example) was:
+
+```
+Host: serratus-aurora-20210406.cluster-ro-ccz9y6yshbls.us-east-1.rds.amazonaws.com
+User: public_reader  Password: serratus  Port: 5432
+Databases used: logan (sra, biosample_geographical_location)
+```
+
+The `summary.srarun` table (7.68M rows) was evaluated first but rejected — it only covers Serratus-analyzed runs and does not span the 8.28M Petadex set. The `logan.sra` mirror (30.99M rows) provides near-complete coverage.
+
+### Processing Steps
+
+**1. Export SRA metadata (chunked by accession prefix to avoid RDS timeouts).** `public_reader` is read-only and cannot create temp tables, so all filtering was client-side.
+
+```bash
+psql "postgresql://public_reader:serratus@serratus-aurora-20210406.cluster-ro-ccz9y6yshbls.us-east-1.rds.amazonaws.com:5432/logan"
+\copy (SELECT * FROM sra WHERE acc LIKE 'DRR%') TO 'sra_drr.csv' CSV HEADER   -- 424,062
+\copy (SELECT * FROM sra WHERE acc LIKE 'ERR%') TO 'sra_err.csv' CSV HEADER   -- 7,967,578
+\copy (SELECT * FROM sra WHERE acc LIKE 'SRR%') TO 'sra_srr.csv' CSV HEADER   -- 22,595,307
+```
+
+**2. Identify required BioSamples** (6,810,054 unique — SAMN 5.00M / SAME 1.68M / SAMD 0.12M) by joining the Petadex runs to the SRA exports in DuckDB, producing `petadex_biosamples.csv`.
+
+**3. Export geo/ecological annotations.** `biosample_geographical_location` stores coordinates as PostGIS WKB, requiring `ST_X`/`ST_Y`. Full-table export timed out, so a prefix-partitioning strategy was used (target ≤ ~1.5M rows/chunk). An `export_geo.sh` driver script produced 66 CSVs (1 SAMD + 12 SAMEA2–14 + 1 SAMEA15-19 + 10 SAMEA110–119 + 42 SAMN00–41) via:
+
+```sql
+\copy (SELECT DISTINCT accession, ST_Y(lat_lon) AS latitude, ST_X(lat_lon) AS longitude,
+       elevation, country, biome, confidence
+       FROM biosample_geographical_location WHERE accession LIKE '<PREFIX>%') TO '<out>.csv' CSV HEADER
+```
+
+**4. Local join in DuckDB** — inner-join Petadex runs to SRA (keeps only runs found in the mirror), left-join geo (keeps runs lacking geo annotation):
+
+```sql
+COPY (
+  SELECT s.*, g.latitude, g.longitude, g.elevation, g.country, g.biome, g.confidence
+  FROM read_csv_auto('petadex_unique_runs.csv') m
+  JOIN (SELECT * FROM read_csv_auto('metadata/sra_drr.csv')
+        UNION ALL SELECT * FROM read_csv_auto('metadata/sra_err.csv')
+        UNION ALL SELECT * FROM read_csv_auto('metadata/sra_srr.csv')) s ON s.acc = m.run_id
+  LEFT JOIN (SELECT accession, latitude, longitude, elevation, country, biome, confidence
+             FROM read_csv_auto('geo_sam*.csv')) g ON s.biosample = g.accession
+) TO 'petadex_metadata_raw.csv' (HEADER);
+```
+
+**5. Deduplicate** to one row per run, keeping the highest-`confidence` geo annotation:
+
+```sql
+COPY (
+  WITH ranked AS (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY acc ORDER BY confidence DESC NULLS LAST) rn
+    FROM read_csv_auto('petadex_metadata_raw.csv'))
+  SELECT * EXCLUDE (rn) FROM ranked WHERE rn = 1
+) TO 'petadex_metadata_dedup.csv' (HEADER);
+```
+
+**6. Load into Petadex Postgres** as `sra_metadata` (PK = `acc`; 31 columns including lat/lon, elevation, country, biome, confidence):
+
+```bash
+psql -h petadex.ccz9y6yshbls.us-east-1.rds.amazonaws.com -U <user> -d petadex
+# CREATE TABLE sra_metadata (...); — schema matches logan.sra + geo columns
+\COPY sra_metadata FROM 'petadex_metadata_dedup.csv' WITH (FORMAT csv, HEADER true, NULL '');
+-- COPY 8273194
+```
+
+Note: use `-h/-U/-d` flags rather than a URI when the password contains `!` (zsh history expansion).
+
+**Handoff to S3:**
+
+```bash
+# Uploaded: 2026-04-15
+aws s3 cp petadex_metadata_dedup.csv  s3://petadex/sra/
+aws s3 cp petadex_metadata_raw.csv    s3://petadex/sra/
+aws s3 cp petadex_biosamples.csv      s3://petadex/sra/
+```
+
+## Results & Discussion
+
+**Key metric**: 8,273,194 / 8,283,908 Petadex runs (99.87%) were successfully matched to SRA metadata and loaded into `petadex.sra_metadata`.
+
+**Coverage breakdown (deduplicated output, n = 8,273,194):**
+- Runs with SRA metadata: 8,273,194 (99.87% of input)
+- Runs with lat/lon coordinates: 4,225,246 (51.1%)
+- Runs with country annotation: 3,870,657 (46.8%)
+- Unmatched runs: ~10,714 (0.13%) — likely accessions added to SRA after the Logan mirror's last refresh.
+
+**Intermediate join (pre-dedup):** 11,473,145 rows for 8,273,194 unique runs — the ~1.4× inflation reflects multiple `attribute_name` entries per BioSample in `biosample_geographical_location`, collapsed by `ROW_NUMBER() ... ORDER BY confidence DESC`.
+
+**Observations:**
+- `summary.srarun` (7.68M rows, Serratus-analyzed only) is insufficient for Petadex; `logan.sra` (31M) is the correct source.
+- Read-only `public_reader` + RDS query timeouts forced a client-side, prefix-partitioned export pattern. Chunks ≤ ~1.5M rows exported reliably; the full-table attempt timed out.
+- `biosample_geographical_location.lat_lon` is PostGIS WKB, not numeric — `ST_X`/`ST_Y` are mandatory on export.
+- Geo coverage (~51%) is substantially lower than metadata coverage (~99.9%), reflecting sparse sample-level geotagging upstream rather than a pipeline gap.
+
+**Follow-up questions:**
+- Can the ~10,714 unmatched runs be recovered by re-querying SRA directly (ENA/NCBI EFetch) rather than via Logan?
+- Should the ~49% of runs lacking coordinates be enriched via free-text parsing of `geo_loc_name_sam` (country/locality strings) where the structured lat/lon is missing?
+- How frequently should `sra_metadata` be refreshed, and should the refresh be driven off Logan snapshot dates or off NCBI SRA release timestamps?

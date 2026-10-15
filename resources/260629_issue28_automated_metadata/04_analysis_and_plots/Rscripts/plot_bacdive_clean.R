@@ -8,7 +8,7 @@ library(scales)
 
 # Define paths
 data_file <- "resources/260629_issue28_automated_metadata/data/bacdive_clean.csv"
-output_dir <- "plots"
+output_dir <- "resources/260629_issue28_automated_metadata/plots"
 
 if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)

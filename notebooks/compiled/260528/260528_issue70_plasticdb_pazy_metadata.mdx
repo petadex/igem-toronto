@@ -1,0 +1,207 @@
+---
+    title: 260528_issue70_plasticdb_pazy_metadata
+    section: "Dry Lab"
+    path: "/dry-lab/issue/70"
+    navTitle: "Issue 70"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+## PlasticDB + PAZy Metadata Analysis
+
+Lead     : `Dennis / Pixeldom04`
+
+Issue    : [Github Issue #70](https://github.com/petadex/igem-toronto/issues/70) — Metadata Analysis of different species under PAZy and PlasticDB
+
+Start    : `2026-05-28`
+
+Complete : `2026-05-28`
+
+Files    : `~/igem-toronto/resources/260528_issue70_plasticdb_pazy_metadata/` — local working directory (data, scripts, outputs)
+
+S3 files : `s3://petadex/plasticdb/` — remote archive (final outputs, shared with team)
+
+1. `data/plasticdb_microorganisms.tsv` — PlasticDB full TSV download (2,535 entries)
+2. `data/pazy_proteins.csv` — PAZy biochemically characterised enzyme table (24 entries)
+3. `outputs/plasticdb_scored.csv` — PlasticDB with evidence quality scores appended
+4. `outputs/research_gaps.csv` — per-plastic gap score table
+
+---
+
+### Data Accessed: 2026-05-28
+```bash
+# PlasticDB TSV (downloaded by data_loader.py from https://plasticdb.org/static/degraders_list.tsv)
+# PAZy CSV (scraped by data_loader.py from https://www.pazy.eu/proteins)
+# Local copies saved to resources/260528_issue70_plasticdb_pazy_metadata/data/
+```
+
+## Introduction
+
+Plastic pollution is one of the defining environmental challenges of the 21st century. Two complementary databases catalogue the biological response to this problem: **PlasticDB** (plasticdb.org) curates all published reports of microorganisms capable of degrading synthetic polymers, while **PAZy** (pazy.eu) tracks only enzymes that have been thoroughly biochemically characterised — the "gold standard" subset where the molecular mechanism is known. Together they define both the breadth of biodegradation capacity observed in nature and the depth at which it has been molecularly resolved.
+
+This experiment performs a comprehensive metadata analysis of both databases. The goal is to map the taxonomic, geographic, and substrate landscape of plastic-degrading microorganisms, quantify evidence quality across the corpus, identify plastics and environments that are under-studied, and flag organisms with high novelty potential for future characterisation. A cross-database comparison between PlasticDB and PAZy highlights the research-to-characterisation gap — where abundant evidence exists but the responsible enzymes have yet to be purified and assayed.
+
+This analysis directly informs which organisms and plastic types are highest priority for the iGEM Toronto pipeline: candidates with broad substrate range, sparse molecular evidence, and recent isolation are the most tractable targets for enzyme discovery and engineering.
+
+## Objectives
+
+1. Profile the taxonomic diversity and geographic distribution of plastic-degrading species across PlasticDB.
+2. Quantify evidence quality across entries and identify tiers (Low / Medium / High / Excellent).
+3. Characterise per-plastic substrate coverage and identify research gaps by plastic type.
+4. Compare PlasticDB and PAZy to quantify the characterisation frontier — organisms with strong empirical evidence but no biochemically validated enzyme.
+5. Score organisms by novelty potential to generate a prioritised candidate list for downstream molecular work.
+
+---
+
+## Materials and Methods
+
+### System Initialization
+
+- macOS (darwin 24.6.0), zsh, Python 3.11.
+- Dependencies: `pandas`, `numpy`, `scipy`, `scikit-learn`, `plotly`, `streamlit`, `beautifulsoup4`, `requests`.
+- Working directory: `~/igem-toronto/resources/260528_issue70_plasticdb_pazy_metadata/`.
+
+### Data Initialization
+
+PlasticDB data was downloaded by `scripts/data_loader.py::load_plasticdb()` from the public TSV endpoint. PAZy enzyme data was scraped from the PAZy proteins page by `scripts/data_loader.py::load_pazy()`. Both datasets were cached locally under `data/`.
+
+```bash
+# Accessed: 2026-05-28
+# PlasticDB: https://plasticdb.org/static/degraders_list.tsv  → data/plasticdb_microorganisms.tsv
+# PAZy:      https://www.pazy.eu/proteins                    → data/pazy_proteins.csv
+```
+
+### Processing Steps
+
+**1. Data loading and cleaning** (`scripts/data_loader.py`). PlasticDB columns were normalised (snake_case), boolean flags derived (`has_sequence`, `has_enzyme`, `has_genbank`, `analytical_grade`, `extrapolated_from_enzyme`), and genus extracted from the organism name. PAZy rows were read as-is (24 well-curated entries).
+
+**2. Evidence quality scoring** (`scripts/analysis.py::evidence_quality_score()`). Each PlasticDB entry received a composite score (0–100) from five components:
+- Has protein sequence in GenBank (+30 pts)
+- Has GenBank ID (+20 pts)
+- Has enzyme annotation (+20 pts)
+- Analytical-grade plastic used (+15 pts)
+- Degradation not extrapolated from enzyme (+15 pts)
+
+Entries were binned into four tiers: Low (0–20), Medium (21–50), High (51–80), Excellent (81–100).
+
+**3. Taxonomic diversity analysis** (`scripts/analysis.py::taxonomic_diversity()`). Shannon diversity index computed at genus level. Top genera and singleton (single-entry) genera identified.
+
+**4. Temporal and geographic trends** (`scripts/analysis.py::temporal_trend_analysis()`, `geographic_distribution()`). Year-over-year entry counts, rolling 3-year averages, and cumulative growth computed. Isolation location parsed and aggregated by country.
+
+**5. Research gap analysis** (`scripts/analysis.py::research_gap_analysis()`). A gap score per plastic type was computed from: low sequence coverage, high extrapolation rate, absence of recent entries (post-2020), and small species count. Output saved to `outputs/research_gaps.csv`.
+
+**6. Cross-database comparison** (`scripts/analysis.py::cross_database_comparison()`). PlasticDB and PAZy overlapped on shared plastic types and shared organism names. The characterisation gap was quantified as species in PlasticDB with enzyme evidence that are absent from PAZy.
+
+**7. Novelty potential scoring** (`scripts/novel_discovery.py::compute_novelty_potential()`). Each organism was scored on: plastic breadth (number of polymer types degraded), taxonomic rarity (singleton genus), recency (year of first isolation), and evidence gap (has enzyme annotation but no sequence). Top candidates flagged for phylogenetic gap analysis and underexplored environment detection.
+
+**8. Interactive dashboard** (`metadatatests/plastic-biodegradation-analysis/app.py`). All analyses surfaced via a Streamlit app (8 pages: Overview, Taxonomy, Plastic Substrates, Geography & Time, Research Gaps, Novel Discovery, Cross-Database, Data Explorer).
+
+```bash
+# Run dashboard
+cd metadatatests/plastic-biodegradation-analysis
+streamlit run app.py --server.port 5000
+```
+
+```bash
+# Reproduce outputs
+cd resources/260528_issue70_plasticdb_pazy_metadata
+python main.py
+```
+
+## Results & Discussion
+
+### PlasticDB Overview
+
+**Key metrics**: 2,535 total entries spanning 933 unique species across 70 plastic types, covering publications from 1974 to 2025.
+
+- Entries with protein sequence: 527 / 2,535 (20.8%)
+- Entries with enzyme annotation: 1,992 / 2,535 (78.6%)
+- Entries with GenBank ID: not enumerated here; see scored output
+
+### Taxonomic Landscape
+
+**Top 10 genera by number of entries:**
+
+| Genus | Entries |
+|---|---|
+| *Pseudomonas* | 205 |
+| *Bacillus* | 179 |
+| *Aspergillus* | 177 |
+| *Streptomyces* | 110 |
+| *Fusarium* | 94 |
+| *Penicillium* | 66 |
+| Uncultured | 56 |
+| *Amycolatopsis* | 55 |
+| *Rhodococcus* | 37 |
+| *Cladosporium* | 36 |
+
+The dominance of *Pseudomonas*, *Bacillus*, and *Aspergillus* reflects their tractability as lab organisms and broad metabolic versatility, not necessarily the true environmental distribution. A substantial fraction (~56 entries) are uncultured organisms identified from metagenomics.
+
+### Plastic Substrate Coverage
+
+**Top 15 plastics by number of entries:**
+
+| Plastic | Entries |
+|---|---|
+| PU (Polyurethane) | 394 |
+| LDPE (Low-density polyethylene) | 320 |
+| PCL (Polycaprolactone) | 291 |
+| PET (Polyethylene terephthalate) | 247 |
+| PHB (Polyhydroxybutyrate) | 223 |
+| PLA (Polylactic acid) | 171 |
+| PE (Polyethylene) | 124 |
+| PHA (Polyhydroxyalkanoate) | 86 |
+| HDPE | 62 |
+| PBSA | 57 |
+| PS | 57 |
+| PBAT | 52 |
+| PBS | 50 |
+| PP | 49 |
+| PES | 43 |
+
+Commodity plastics (LDPE, PE, HDPE, PP, PS, PVC) account for the majority of global plastic waste by mass, yet their degradation evidence is dominated by low-quality (extrapolated or culture-collection) entries. Biodegradable polyesters (PLA, PCL, PHB, PBSA) are better characterised at the molecular level.
+
+### Geographic and Temporal Distribution
+
+**Top isolation countries**: India (272 entries), Japan (195), South Korea (160), France (117), Thailand (75). Asian labs drive the majority of the corpus, particularly for soil and compost isolates.
+
+**Entries by decade:**
+
+| Decade | Entries |
+|---|---|
+| 1970s | 5 |
+| 1980s | 24 |
+| 1990s | 228 |
+| 2000s | 329 |
+| 2010s | 726 |
+| 2020s | 1,222 |
+
+The field is growing rapidly — the 2020s alone account for ~48% of all entries despite being only 5 years in. This reflects both increased awareness of plastic pollution and falling sequencing costs enabling metagenomic discovery.
+
+**Top isolation environments**: Culture collection (501), Soil (474), Plastic waste dumping site (135), Landfill (109), Marine (99), Coastline (89), Compost (70).
+
+The large "Culture collection" category is a limitation: these entries lack provenance metadata and cannot be mapped geographically or ecologically.
+
+### Evidence Quality
+
+**Evidence method breakdown (top types)**: Clear zone assay (661), Spectrophotometry (154), Weight loss (83), Combined multi-method (65), HPLC (63). Clear zone assays are qualitative and offer the weakest molecular resolution; the 20.8% with protein sequences represent the highest-confidence tier.
+
+### Cross-Database Comparison (PlasticDB vs PAZy)
+
+**PAZy** covers 24 enzymes from 21 organisms across **9 plastic types**: PET, PHA, PHB, PCL, PLA, PU, Nylon, PBSA, PES. All PAZy plastic types are a subset of PlasticDB — PAZy adds no unique plastic types, confirming it is a characterisation-depth layer on top of PlasticDB rather than an independent discovery resource.
+
+The gap is stark: PlasticDB has 933 species across 70 plastic types; PAZy has 21 organisms across 9. For PET alone, PlasticDB records 247 entries but PAZy lists only 10 PET-active enzymes — the molecular basis of degradation is established for a small minority of organisms even in the best-studied substrate.
+
+### Novelty Potential and Research Gaps
+
+Gap analysis (see `outputs/research_gaps.csv`) identifies commodity plastics with sparse recent literature and low sequence coverage as the highest-priority targets: HDPE, PP, PS, and PVC all have substantial entry counts but very low fractions with protein sequences. Underexplored environments include marine sediment, deep soil, and plant-associated microbiomes.
+
+The top novelty-scored organisms combine: degradation of ≥3 plastic types, singleton-genus taxonomic status (not represented elsewhere in PlasticDB), recent isolation (post-2015), and no deposited sequence despite having an enzyme annotation.
+
+**Follow-up questions:**
+- Can the 56 uncultured/metagenomic entries be traced to specific BioProjects for sequence retrieval?
+- For the research-gap plastics (HDPE, PP, PS, PVC), are there systematic differences in isolation environment or evidence method compared to well-characterised polyesters?
+- Which of the top novelty-scored organisms have sequences deposited in NCBI under accessions not yet linked in PlasticDB?

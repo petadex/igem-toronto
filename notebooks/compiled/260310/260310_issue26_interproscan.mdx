@@ -1,0 +1,103 @@
+---
+    title: 260310_issue26_interproscan
+    section: "Dry Lab"
+    path: "/dry-lab/issue/26"
+    navTitle: "Issue 26"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+## Experiment Title
+
+Lead     : `<Dennis Zhu / Pixeldom04>`
+
+Issue    : [Github Issue #26](https://github.com/petadex/igem-toronto/issues/26) - Run Interproscan on Family Centroids
+
+Start    : `2026-03-10`
+
+Complete : `2026-03-13`
+
+Files    : `~/resources/260310_issue26_interproscan/` — local working directory (active analysis, intermediate outputs)
+
+S3 files : `s3://petadex/interproscan/` — remote archive (final outputs, shared with team)
+
+---
+
+### Data Accessed: 2024-03-14
+```bash
+aws s3 cp s3://petadex/interproscan/all_results.tsv ./
+```
+
+## Introduction
+
+Petadex organizes viral proteins into ~64,730 sequence clusters, each represented by a centroid (family representative). While these families capture sequence-level diversity, they currently lack functional annotation — it is not known what protein domains or biochemical roles each family corresponds to.
+
+InterProScan integrates multiple protein signature databases (Pfam, PANTHER, TIGRFAM, Gene3D, SUPERFAMILY, CDD, etc.) to assign domain annotations to input sequences. By running InterProScan against all family centroids, we can characterize each petadex family with known domain architectures, enabling downstream functional filtering, search, and comparative analysis across the database.
+
+## Objectives
+
+1. Extract all 64,730 family centroid sequences from petadex as FASTA files
+2. Run InterProScan 5 on all centroids to assign domain/signature annotations across supported databases (Pfam, PANTHER, TIGRFAM, Gene3D, SUPERFAMILY, CDD)
+3. Parse InterProScan output (TSV) and load annotations into the petadex database
+4. Report annotation coverage — what fraction of families received at least one domain hit
+
+---
+
+## Materials and Methods
+
+### System Initialization
+
+InterProScan 5.72-103.0 was run on a remote Amazon Linux 2 server. Full installation and setup instructions are in [`interproscan_amazon_linux2.md`](../files/260310_issue26_interproscan/interproscan_amazon_linux2.md).
+
+### Data Initialization
+
+Family sequences were extracted from the petadex database using [`extract_families.py`](../files/260310_issue26_interproscan/extract_families.py). The script queries `enzyme_taxonomy` and `enzyme_fastaa` and writes per-family FASTA files to `output/<family_id>/sequences.fasta` for all families with 4–500 members.
+
+```bash
+# Accessed: 2026-03-10
+python3 extract_families.py
+# Families to process: 64,730
+```
+
+### Chunking and Running InterProScan
+
+Sequences were split into chunks of 5,000 using [`split_fasta.sh`](../files/260310_issue26_interproscan/split_fasta.sh), then InterProScan was run on each chunk via [`run_iprscan.sh`](../files/260310_issue26_interproscan/run_iprscan.sh). Databases: `Pfam, TIGRFAM, CDD, SUPERFAMILY, Gene3D, PANTHER`.
+
+```bash
+bash split_fasta.sh all_sequences.fasta fasta_chunks/ 5000
+bash run_iprscan.sh   # merges results to iprscan_results/all_results.tsv
+```
+
+Results were uploaded to S3 on completion:
+
+```bash
+# Uploaded: 2026-03-13
+aws s3 cp iprscan_results/all_results.tsv s3://petadex/interproscan/all_results.tsv
+```
+
+## Results & Discussion
+
+InterProScan was run successfully on all 64,730 family centroids. Results were parsed from TSV output and loaded into the petadex database.
+
+**Annotation coverage**: 64,728 / 64,730 families (99.997%) received at least one domain hit across all integrated databases.
+
+**Top databases by families annotated**:
+- Gene3D: 64,544 families annotated
+- SUPERFAMILY: 64,485 families annotated
+- Pfam: 64,420 families annotated
+- PANTHER: 63,467 families annotated
+- CDD: 4,569 families annotated
+- NCBIfam: 1,441 families annotated
+
+**Observations**:
+- Annotation coverage is exceptionally high (>99.99%) — only 2 families received no hits from any database.
+- Structural databases (Gene3D, SUPERFAMILY) achieved marginally broader coverage than sequence-based databases (Pfam, PANTHER), consistent with the greater sensitivity of profile-based structural classification at distant evolutionary relationships.
+- CDD and NCBIfam annotated far fewer families (~4,569 and ~1,441 respectively), reflecting their narrower scope.
+
+**Follow-up questions**:
+- Can unannotated families be grouped by structural prediction (e.g. ESM2 embeddings or AlphaFold) to identify novel domain families?
+- Should GO term and pathway annotations be surfaced directly in the petadex search UI?
+- How does annotation coverage compare across viral taxa — are certain virus groups systematically unannotated?

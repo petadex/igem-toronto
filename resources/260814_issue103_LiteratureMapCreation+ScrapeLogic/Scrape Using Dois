@@ -1,0 +1,333 @@
+import os
+import csv
+import time
+import random
+import re
+import pyautogui
+import undetected_chromedriver as uc
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+
+
+INPUT_CSV = r"C:\Users\somna\Downloads\remaining_to_scrape3 - remaining_to_scrape1.csv"
+DOWNLOAD_DIR = r"C:\Users\somna\Downloads\literature_map_pdfs"
+ERROR_LOG_CSV = os.path.join(DOWNLOAD_DIR, "failed_dois_log.csv")
+
+SEARCH_INPUT_SELECTOR = "input#main-search-bar"
+SEARCH_BUTTON_SELECTOR = "button[aria-label='Submit search']"
+BUTTON_SELECTOR = "button[aria-label='Download PDF']"
+
+if not os.path.exists(DOWNLOAD_DIR):
+    os.makedirs(DOWNLOAD_DIR)
+
+# Helper Functions
+def handle_browser_crash(driver):
+    """
+    Checks if the Chrome renderer crashed (Out of Memory / Aw Snap).
+    Uses a try/except because a dead renderer often causes Selenium to throw an exception.
+    """
+    try:
+        # If the renderer died, calling driver.title will either show the crash title 
+        # or throw a WebDriverException.
+        title = driver.title
+        if "Aw, Snap!" in title or "Out of Memory" in title or "crashed" in title.lower():
+            print("    [!] 'Out of Memory' screen detected. Forcing page reload...")
+            driver.refresh()
+            time.sleep(5)
+            return True
+    except Exception:
+        # If Selenium completely lost connection to the tab, we fallback to PyAutoGUI
+        print("    [!] Renderer disconnected (likely OOM crash). Forcing Ctrl+R...")
+        pyautogui.hotkey('ctrl', 'r')
+        time.sleep(6)
+        return True
+        
+    return False
+def sanitize_doi(doi):
+    safe = str(doi).strip().lower().replace("/", "_").replace(":", "-")
+    return re.sub(r'[<>:"|?*\\]', "_", safe)
+
+def log_failed_doi(doi, reason):
+    file_exists = os.path.isfile(ERROR_LOG_CSV)
+    with open(ERROR_LOG_CSV, "a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["doi", "error_reason", "timestamp"])
+        writer.writerow([doi, reason, time.strftime("%Y-%m-%d %H:%M:%S")])
+
+def get_current_files(directory):
+    if not os.path.exists(directory):
+        return set()
+    return set(os.listdir(directory))
+
+def wait_for_new_download(directory, before_files, timeout=30):
+    print(f"    -> Polling directory for new file up to {timeout} seconds...")
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        current_files = get_current_files(directory)
+        new_files = current_files - before_files
+        valid_files = [f for f in new_files if not f.endswith('.crdownload') and not f.endswith('.tmp')]
+        if valid_files:
+            latest_file = max([os.path.join(directory, f) for f in valid_files], key=os.path.getctime)
+            print(f"    [+] Success! Download detected: {os.path.basename(latest_file)}")
+            return latest_file
+        time.sleep(1)
+    print("    [!] Download polling timed out.")
+    return None
+
+def set_cdp_download_directory(driver, target_dir):
+    driver.execute_cdp_cmd("Page.setDownloadBehavior", {
+        "behavior": "allow",
+        "downloadPath": os.path.abspath(target_dir)
+    })
+
+def handle_science_direct_bot_check(driver):
+    bot_check_indicators = [
+        "//*[contains(text(), 'Please confirm you are a human')]",
+        "//*[contains(text(), 'Verify you are human')]"
+    ]
+    is_bot_page = False
+    for xpath in bot_check_indicators:
+        if driver.find_elements(By.XPATH, xpath):
+            is_bot_page = True
+            break
+            
+    if is_bot_page:
+        print("    [*] Bot verification page detected. Attempting bypass...")
+        time.sleep(2)
+        try:
+            checkbox = driver.find_element(By.XPATH, "//label[contains(., 'Verify you are human')]//input[@type='checkbox']")
+            driver.execute_script("arguments[0].click();", checkbox)
+            print("    [*] Successfully clicked verification checkbox via HTML.")
+            time.sleep(5)
+        except Exception:
+            print("    [*] HTML checkbox blocked. Trying PyAutoGUI fallback...")
+            pyautogui.moveTo(684, 357, duration=0.6)
+            pyautogui.click()
+            time.sleep(5)
+
+# Main Stuff
+def main():
+    print("Initiating Library Search Scraper Pipeline...\n")
+    
+    # 1. Load targets from CSV
+    targets = []
+    if os.path.exists(INPUT_CSV):
+        with open(INPUT_CSV, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                doi = row.get("DOI")
+                if doi and str(doi).strip():
+                    targets.append(str(doi).strip())
+    else:
+        print(f"CRITICAL ERROR: Could not find {INPUT_CSV}")
+        return
+
+    print(f"Loaded {len(targets)} valid DOIs for processing.\n")
+
+    # 2. Setup Chrome Options
+    prefs = {
+        "download.default_directory": os.path.abspath(DOWNLOAD_DIR),
+        "download.prompt_for_download": False,
+        "plugins.always_open_pdf_externally": True,
+        "profile.default_content_setting_values.popups": 1 
+    }
+    options = uc.ChromeOptions()
+    options.add_experimental_option("prefs", prefs)
+    
+    print("Booting Stealth Browser (v148)...")
+    driver = uc.Chrome(version_main=150, options=options)
+    set_cdp_download_directory(driver, DOWNLOAD_DIR)
+    
+    # 3. Manual Authentication Handoff
+    driver.get("https://librarysearch.library.utoronto.ca")
+    main_window = driver.current_window_handle
+    
+    print("\n" + "="*60)
+    print("WAITING FOR MANUAL AUTHENTICATION...")
+    print("1. Log in completely via UToronto WebLogin / MFA.")
+    print("2. Ensure you are on the main search page.")
+    print("3. Return to this terminal and press ENTER.")
+    print("="*60 + "\n")
+    input("Press ENTER when you are logged in and ready... ")
+
+    successful = 0
+    papers_processed = 0
+
+    # 4. Master Evaluation Loop
+    for i, doi in enumerate(targets, 1):
+        safe_name = sanitize_doi(doi)
+        expected_file = os.path.join(DOWNLOAD_DIR, f"{safe_name}.pdf")
+
+        if os.path.exists(expected_file):
+            print(f"[{i}/{len(targets)}] Skipping DOI (Already exists in folder): {doi}")
+            continue 
+            
+        print(f"\n[{i}/{len(targets)}] Searching UofT Library for DOI: {doi}")
+        papers_processed += 1
+        
+        # BROWSER HEALTH CHECK
+        # Close any lingering popups/tabs from the last loop before checking health
+        if len(driver.window_handles) > 1:
+            for window in driver.window_handles[1:]:
+                driver.switch_to.window(window)
+                driver.close()
+            driver.switch_to.window(main_window)
+            
+        handle_browser_crash(driver)
+        
+
+        try:
+            driver.get("https://librarysearch.library.utoronto.ca")
+            time.sleep(2)
+            
+            search_input = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, SEARCH_INPUT_SELECTOR)))
+            search_input.clear()
+            search_input.send_keys(doi)
+            driver.find_element(By.CSS_SELECTOR, SEARCH_BUTTON_SELECTOR).click()
+            
+            try:
+                WebDriverWait(driver, 20).until(
+                    lambda d: d.find_elements(By.CSS_SELECTOR, BUTTON_SELECTOR) or 
+                              d.find_elements(By.XPATH, "//*[contains(text(), 'No Records Found')]")
+                )
+            except TimeoutException:
+                print("    [!] Timeout waiting for search results to render.")
+                log_failed_doi(doi, "Timeout waiting for search results")
+                continue
+
+            if driver.find_elements(By.XPATH, "//*[contains(text(), 'No Records Found')]"):
+                print("    [!] No Records Found for this DOI.")
+                log_failed_doi(doi, "No Records Found")
+                continue
+
+            buttons = driver.find_elements(By.CSS_SELECTOR, BUTTON_SELECTOR)
+            if not buttons:
+                print("    [!] Search succeeded but no 'Download PDF' button available on the first result.")
+                log_failed_doi(doi, "No PDF button on canvas")
+                continue
+
+            target_button = buttons[0]
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", target_button)
+            time.sleep(1.5)
+
+            files_before_click = get_current_files(DOWNLOAD_DIR)
+            pre_click_windows = driver.window_handles
+            
+            try:
+                target_button.click()
+            except Exception as e:
+                print(f"    [!] Error clicking download button: {e}")
+                log_failed_doi(doi, "Failed to click canvas button")
+                continue
+
+            time.sleep(3)
+            post_click_windows = driver.window_handles
+            downloaded_file_path = None
+
+            if len(post_click_windows) == len(pre_click_windows):
+                print("    [*] No new tab opened. Expecting background download...")
+                downloaded_file_path = wait_for_new_download(DOWNLOAD_DIR, files_before_click, timeout=30)
+                
+                time.sleep(1)
+                pyautogui.moveTo(147, 610, duration=0.5)
+                pyautogui.click()
+                time.sleep(1)
+            else:
+                new_tab = [window for window in post_click_windows if window not in pre_click_windows][0]
+                driver.switch_to.window(new_tab)
+                time.sleep(2)
+                current_url = driver.current_url.lower()
+                print(f"    [*] Opened target URL link context: {current_url}")
+                
+                handle_science_direct_bot_check(driver)
+
+                if "epdf" in current_url or "viewer" in current_url:
+                    print("    [*] EPUB/Viewer detected. Waiting for document renderer...")
+                    try:
+                        WebDriverWait(driver, 20).until(
+                            lambda d: d.execute_script("return document.readyState") == "complete"
+                        )
+                    except TimeoutException:
+                        pass
+                    
+                    time.sleep(4)
+                    print("    [*] Firing PyAutoGUI automated fallback clicks...")
+                    pyautogui.moveTo(1880, 123, duration=0.5)
+                    pyautogui.click()
+                    time.sleep(1.5)
+                    
+                    pyautogui.moveTo(1850, 353, duration=0.5)
+                    pyautogui.click()
+                    
+                    downloaded_file_path = wait_for_new_download(DOWNLOAD_DIR, files_before_click, timeout=30)
+                
+                else:
+                    print("    [*] Publisher landing page detected. Scanning for secondary targets...")
+                    alt_buttons = driver.find_elements(By.XPATH, "//*[self::button or self::a][@id='new-download-btn' or contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download') or contains(translate(@title, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download')]")
+                    pdf_links = driver.find_elements(By.XPATH, "//a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'pdf')]")
+                    
+                    if alt_buttons:
+                        print("    [*] Found alternative download button. Clicking...")
+                        driver.execute_script("arguments[0].click();", alt_buttons[0])
+                        handle_science_direct_bot_check(driver)
+                        downloaded_file_path = wait_for_new_download(DOWNLOAD_DIR, files_before_click, timeout=30)
+                    elif pdf_links:
+                        print("    [*] Found direct PDF text link. Clicking...")
+                        driver.execute_script("arguments[0].click();", pdf_links[0])
+                        handle_science_direct_bot_check(driver)
+                        downloaded_file_path = wait_for_new_download(DOWNLOAD_DIR, files_before_click, timeout=30)
+                    else:
+                        print("    [*] No clear secondary download buttons found. Waiting for background trigger...")
+                        downloaded_file_path = wait_for_new_download(DOWNLOAD_DIR, files_before_click, timeout=30)
+
+                driver.close()
+                driver.switch_to.window(main_window)
+                time.sleep(1)
+
+            if downloaded_file_path and os.path.exists(downloaded_file_path):
+                try:
+                    os.rename(downloaded_file_path, expected_file)
+                    print(f"    [SUCCESS] File securely renamed to: {os.path.basename(expected_file)}")
+                    successful += 1
+                except Exception as e:
+                    print(f"    [!] Download succeeded but rename failed: {e}")
+            else:
+                print("    [X] Download pipeline failed or timed out.")
+                log_failed_doi(doi, "Pipeline failed to detect new file")
+
+        except Exception as e:
+            error_msg = str(e)[:100].replace('\n', ' ')
+            print(f"    [!] Critical error processing paper: {error_msg}")
+            log_failed_doi(doi, error_msg)
+            pyautogui.moveTo(1230, 552, duration=0.5)
+            pyautogui.click()
+            time.sleep(1.5)
+
+
+            if len(driver.window_handles) > 1:
+                for window in driver.window_handles:
+                    if window != main_window:
+                        driver.switch_to.window(window)
+                        driver.close()
+                driver.switch_to.window(main_window)
+
+        jitter = random.randint(4, 8)
+        print(f"    -> Cooldown... waiting {jitter}s.")
+        time.sleep(jitter)
+
+        if papers_processed > 0 and papers_processed % 75 == 0:
+            break_time = random.randint(300, 600)
+            print("\n" + "="*60)
+            print(f"    [COFFEE BREAK] Reached {papers_processed} continuous checks.")
+            print(f"    Pausing for {break_time // 60} minutes and {break_time % 60} seconds to clear rate-limits...")
+            print("="*60 + "\n")
+            time.sleep(break_time)
+
+    driver.quit()
+    print(f"\n--- MISSION COMPLETE. Secured {successful} new papers! ---")
+
+if __name__ == "__main__":
+    main()

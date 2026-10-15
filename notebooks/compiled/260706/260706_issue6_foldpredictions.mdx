@@ -1,0 +1,525 @@
+---
+    title: 260706_issue6_foldpredictions
+    section: "Dry Lab"
+    path: "/dry-lab/issue/6"
+    navTitle: "Issue 6"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+## Petadex Centroid Structural Predictions
+
+Lead     : `AlexLeonardos`
+
+Issue    : [Github Issue #6](https://github.com/petadex/igem-toronto/issues/) — _Generate a structural prediction for each family centroid_
+
+Start    : `2026-07-06`
+
+Complete : `N/A`
+
+Files    : `~/igem-toronto/resources/260706_issue6_foldpredictions/` — folding script
+
+S3 files : `s3://petadex-protein-structures/esmfold2-centroids/` - eventual path for these structures.
+
+## Step 1: Access the Centroids
+
+For this analysis, we will be folding the 60pid (family) centroids. To do this, we need to get the centroid IDs, and then filter for them in the ORFs file.
+
+#### Step 1a: Get the centroid IDs.
+
+
+```python
+-- Connect with the PostgreSQL CLI (Windows path to the client used here):
+--   & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -h <PETADEX_RDS_HOST> -p 5432 -U readonly_user -d petadex
+
+-- Get the family cluster ORFIDs.
+SELECT DISTINCT "centroid_orf_id"
+FROM "60pid_family_clusters";
+
+-- There are 1,814,296 of them to fold.
+-- Note: to do 90pid, this just changes the table name to "90pid_family_clusters" and the number of ORFIDs to fold is 18,172,960.
+
+-- Export them to a file. \copy runs CLIENT-side, so the path is on this machine and is relative to
+-- wherever psql was launched -- launch it from the repo root, and mkdir the (gitignored) data/ dir first:
+--   mkdir resources\260706_issue6_foldpredictions\data
+-- ORDER BY makes the export deterministic, so re-runs diff cleanly.
+\copy (SELECT DISTINCT "centroid_orf_id" FROM "60pid_family_clusters" ORDER BY 1) TO 'resources/260706_issue6_foldpredictions/data/centroid_orfids_60pid.csv' CSV HEADER
+```
+
+#### Step 1b: Emit the ORFid list + the WSL fetch command
+
+Same shape as issue 6a — the centroid ORFids only identify the sequences, so they still have to be
+pulled out of the ORFs file. Reads the `\copy` export, writes the **bare ORFids** (one per line) that
+`seqkit grep -f` consumes, and prints the ready-to-run WSL one-liner.
+
+Everything big lands in `resources/260706_issue6_foldpredictions/data/` — that path is gitignored
+(`resources/*/data/`), which matters here because the output FASTA is ~1 GB, unlike 6a's 121-sequence
+subset that was small enough to commit.
+
+OUT: `data/centroid_orfids_60pid.txt` (+ the printed WSL command → produces `data/centroids_60pid.fasta`)
+
+
+```python
+import csv
+from pathlib import Path
+
+S3_ORFS = "s3://petadex/logan/petadex.catalytic_orfs.v1.1.fa"   # 108.6 GiB, public (--no-sign-request)
+
+# locate repo root (dir containing resources/) from wherever the kernel started
+REPO = Path.cwd()
+while not (REPO / "resources").exists() and REPO != REPO.parent:
+    REPO = REPO.parent
+RES  = REPO / "resources" / "260706_issue6_foldpredictions"
+DATA = RES / "data"                                   # gitignored -- the ~1 GB artifacts live here
+DATA.mkdir(exist_ok=True)
+
+SQL_CSV   = DATA / "centroid_orfids_60pid.csv"        # psql \copy output (header: centroid_orf_id)
+IDS_TXT   = DATA / "centroid_orfids_60pid.txt"        # bare ORFids for seqkit grep (this nb writes it)
+OUT_FASTA = DATA / "centroids_60pid.fasta"            # the WSL command writes this
+
+assert SQL_CSV.exists(), f"run the \\copy in Step 1a first -- expected {SQL_CSV}"
+
+# the \copy export is one column with a header row; keep only the numeric rows
+ids = []
+with open(SQL_CSV, newline="") as fh:
+    for row in csv.reader(fh):
+        if row and row[0].strip().strip('"').isdigit():
+            ids.append(int(row[0].strip().strip('"')))
+targets = sorted(set(ids))
+IDS_TXT.write_text("".join(f"{o}\n" for o in targets), encoding="utf-8")
+print(f"{len(ids)} rows -> {len(targets)} unique centroid ORFids -> {IDS_TXT}   (exists: {IDS_TXT.exists()})")
+
+# --- ready-to-run WSL command (real /mnt/<drive> paths) ---
+def to_wsl(p):
+    p = str(p)
+    return f"/mnt/{p[0].lower()}" + p[2:].replace("\\", "/")
+
+print(f"\n# in WSL, verify the ids file is visible first:\n#   wc -l {to_wsl(IDS_TXT)}\n")
+print("Then run:\n")
+print("\n".join([
+    f"aws s3 cp {S3_ORFS} - --no-sign-request \\",
+    "  | pv -s 109g \\",
+    f"  | seqkit grep --id-regexp '^([^|]+)' -f {to_wsl(IDS_TXT)} \\",
+    "  | awk '/^>/{split(substr($0,2),a,\"|\"); print \">orf\" a[1]; next} {print}' \\",
+    f"  > {to_wsl(OUT_FASTA)}",
+]))
+```
+
+#### Step 1c: Fetch the centroid ORFs in WSL
+
+WSL Package Versions:
+- aws: aws-cli/1.45.28 Python/3.12.3 Linux/6.18.33.2-microsoft-standard-WSL2 botocore/1.43.28
+- pv: 1.8.5
+- seqkit: v2.3.0
+
+Run the command printed above in a **WSL** shell (needs `aws`, `pv`, `seqkit`). It:
+- `aws s3 cp ... - --no-sign-request` → streams the public ORFs file to stdout, no sign-in;
+- `seqkit grep --id-regexp '^([^|]+)' -f centroid_orfids_60pid.txt` → keeps only records whose ORFid
+  (first `|`-field) is a centroid;
+- `awk ...` → rewrites `>3|7QJM|||||/95-371` to `>orf3`, so the folded outputs stay ORFid-keyed and
+  join back to the cluster table.
+
+The result (~1 GB) stays out of git. Once verified, mirror it to S3 so the fold VM can read it without
+re-running the scan:
+
+```bash
+aws s3 cp /mnt/c/.../data/centroids_60pid.fasta \
+    s3://petadex-protein-structures/esmfold2-centroids/inputs/centroids_60pid.fasta
+```
+
+#### Step 1d: Load the FASTA → coverage check + length histogram
+
+Confirms the fetch actually returned every centroid (a centroid ORFid that is in the cluster table but
+not in `petadex.catalytic_orfs.v1.1.fa` shows up here as `MISSING` — expected if the cluster table is
+from a newer PETadex than the V1 ORFs file), and sizes the folding job. The `over_esmc_ctx` flag marks
+ORFs longer than the ESMC 2048-token context, which get truncated at fold time.
+
+OUT: `data/centroids_60pid_metadata.tsv` (orfid → length, truncation flag)
+
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+ESMC_CONTEXT = 2048               # ORFs longer than this get truncated by the ESMC backbone
+OUT_META = DATA / "centroids_60pid_metadata.tsv"
+
+assert OUT_FASTA.exists(), f"run the WSL seqkit command first to create {OUT_FASTA.name}"
+
+# parse the bare-orfid FASTA -> length per ORFid
+lengths, oid = {}, None
+with open(OUT_FASTA) as fh:
+    for line in fh:
+        if line.startswith(">"):
+            name = line[1:].strip()
+            oid = int(name[3:]) if name.startswith("orf") else None
+            lengths[oid] = 0
+        elif oid is not None:
+            lengths[oid] += len(line.strip().rstrip("*"))
+lengths.pop(None, None)                                   # any header that wasn't rewritten to >orf<id>
+
+found   = set(lengths)
+tset    = set(targets)
+missing = sorted(tset - found)
+extra   = sorted(found - tset)
+print(f"FASTA has {len(found)} ORFs (targets={len(tset)})")
+if missing: print(f"  MISSING {len(missing)} target(s): {missing[:10]}{' ...' if len(missing)>10 else ''}")
+if extra:   print(f"  unexpected {len(extra)}: {extra[:10]}")
+
+with open(OUT_META, "w", newline="") as mh:
+    w = csv.writer(mh, delimiter="\t")
+    w.writerow(["orfid", "orf_len", "over_esmc_ctx"])
+    for o in sorted(found):
+        w.writerow([o, lengths[o], int(lengths[o] > ESMC_CONTEXT)])
+print("wrote", OUT_META.name)
+
+L = np.fromiter(lengths.values(), dtype=np.int64, count=len(lengths))
+print(f"\nn={L.size}  min={L.min()}  median={int(np.median(L))}  mean={L.mean():.0f}  "
+      f"p90={int(np.percentile(L, 90))}  max={L.max()}   |  {int((L > ESMC_CONTEXT).sum())} over {ESMC_CONTEXT}aa")
+print(f"mode={np.bincount(L).argmax()}  (count={np.bincount(L).max()})")
+
+fig, ax = plt.subplots(figsize=(9, 4.5))
+bins = np.linspace(0, max(L.max(), ESMC_CONTEXT) + 50, 100)
+ax.hist(L, bins=bins, color="#4C72B0")
+ax.axvline(ESMC_CONTEXT, color="crimson", ls="--", lw=1.2, label=f"ESMC context ({ESMC_CONTEXT} aa)")
+ax.set_yscale("log")                                      # long thin tail over ~1.8M centroids
+ax.set_xlabel("ORF length (aa)"); ax.set_ylabel("centroids (log)")
+ax.set_title(f"60pid family centroid ORF lengths (n={L.size:,})")
+ax.legend(); fig.tight_layout(); plt.show()
+```
+
+## Step 2: Prefold check — how many centroids already have a structure?
+
+Issue [#79](https://github.com/petadex/igem-toronto/issues/79) already pulled every PETadex sequence
+that the **ESM Atlas** had pre-folded into `s3://petadex-protein-structures/esmatlas/`. Anything in
+there does not need to be folded again, so the real fold target is
+`centroids − (already in the Atlas)`.
+
+**The join key is a sequence hash, not an ORFid.** The Atlas is keyed by
+`protein_hash = md5(sequence)` — specifically the md5 of the **uppercase** sequence with the trailing
+stop `*` **stripped** (ESMFold never folds the stop). That's what
+`esm_atlas_download.parse_fasta()` computes, and Step 2b reproduces it exactly. Because the key is the
+sequence, two centroids with identical sequences collapse to one hash — the cell reports that.
+
+Two independent numbers, and they answer different questions:
+
+| | question | how | cost |
+|---|---|---|---|
+| **2a** | how many centroids exist **in the Atlas at all** | `--count` against the live Lance datasets | VM, ~35 min |
+| **2b** | how many we **already have downloaded** | local join vs the issue-79 `tracker.csv` ledger | seconds, in this kernel |
+
+2b ≤ 2a, and they're equal only if the issue-79 full download actually finished. Run 2b first (it's
+free); run 2a when you need the authoritative ceiling or if 2b comes back suspiciously low.
+
+### Step 2a: Atlas hit rate for the centroid set (on the VM)
+
+`--count` queries the `protein_hash` column only — it never pulls a `structure_blob` — so it is the
+cheap way to ask "is this sequence in the Atlas". Point it at the **centroid** FASTA from Step 1c
+rather than the full ORFs file, so the answer is about the fold set specifically.
+
+Same box/deps as issue #79 (c7i.4xlarge; `pylance`, `pyarrow`, `brotli`, `msgpack`, `numpy`,
+`zstandard`, `boto3`, `tqdm`). Atlas reads are anonymous; the S3 input read is anonymous too, so
+`--count` needs **no credentials**.
+
+```bash
+python3 esm_atlas_download.py \
+    s3://petadex-protein-structures/esmfold2-centroids/inputs/centroids_60pid.fasta \
+    --count --orf-map centroid_orf_hashes.tsv.zst
+```
+
+**Expected runtime** — issue #79 measured 20 ± 1 min per 1 M hashes, so ~1.8 M unique centroid
+sequences ≈ **35–40 min**.
+
+**Expected hit rate** — #79 measured **0.51 %** over two random 1 M-ORF draws of the full ORFs file.
+If centroids behave like the average ORF that is ~9 k of 1.8 M. It could differ in either direction:
+centroids are cluster representatives, not a random ORF draw, so this number is genuinely worth
+measuring rather than extrapolating.
+
+**Two things to know about the flags:**
+
+- `--count` prints only the **aggregate** (`HIT RATE: n/N`). It writes no per-hash output — only
+  `download()` records per-hash rows, into `tracker.csv`. So `--count` cannot tell you *which*
+  centroids are covered. Step 2b does that.
+- `--orf-map` is written by `parse_fasta()` during the same pass, so the command above gets the
+  `orf_id → protein_hash` index for free. It is optional here — Step 2b recomputes the same hashes
+  locally in ~a minute — but it is worth keeping, since `--hashes-from` can then reuse it and skip the
+  FASTA re-parse on a later download run.
+
+**If you'd rather just fetch them:** drop `--count` and let it run in download mode against the
+centroid FASTA. It seeds its resume ledger from `s3://petadex-protein-structures/esmatlas/tracker.csv`
+first, so anything issue #79 already pulled is skipped and only genuinely new centroid hits are
+downloaded — the count and the fetch in one pass.
+
+### Step 2b: Which centroids are already downloaded → the final fold list
+
+Hashes the centroid FASTA locally (same rule as `esm_atlas_download.parse_fasta()`) and joins those
+hashes against the issue-79 ledger, which is one row per structure sitting in
+`s3://petadex-protein-structures/esmatlas/structures/<hash>.cif`. Pull the ledger first — it needs
+**local AWS creds**, the bucket is private:
+
+```bash
+aws s3 cp s3://petadex-protein-structures/esmatlas/tracker.csv \
+    resources/260706_issue6_foldpredictions/data/esmatlas_tracker.csv
+```
+
+> If that 403s / `ExpiredToken`s, refresh your STS keys (`aws configure set aws_session_token ...`).
+
+> The Atlas downloader now writes `tracker.csv` (not the old `metrics.csv`) with the same columns as
+> the ESMFold2 predictor's ledger — see *Structure-Prediction Quality Metrics* below. The join column
+> is still `protein_hash`; `run_label` replaces the old `source_dataset`, and `has_pae` is gone.
+
+OUT:
+- `data/centroid_orf_hashes.tsv` — `orf_id → protein_hash` for every centroid (the join key, also
+  reusable as `--hashes-from`)
+- `data/centroids_60pid_prefolded.tsv` — the centroids that already have a structure, with the Atlas
+  quality metrics carried over (`mean_plddt`, `ptm`)
+- `data/centroids_60pid_tofold.txt` — **the actual input to Step 3**: ORFids with no structure yet
+
+
+```python
+import hashlib
+
+LEDGER   = DATA / "esmatlas_tracker.csv"                 # aws s3 cp ... (see above)
+ORF_MAP  = DATA / "centroid_orf_hashes.tsv"
+PREFOLD  = DATA / "centroids_60pid_prefolded.tsv"
+TOFOLD   = DATA / "centroids_60pid_tofold.txt"
+
+assert LEDGER.exists(), f"aws s3 cp the issue-79 ledger down first -- expected {LEDGER}"
+
+def orf_hashes(fasta):
+    """orf_id -> protein_hash, EXACTLY as esm_atlas_download.parse_fasta() computes it:
+    md5 over the uppercased sequence with the trailing stop '*' stripped."""
+    hid, seq = None, []
+    def h():
+        return hashlib.md5("".join(seq).upper().rstrip("*").encode()).hexdigest()
+    with open(fasta) as fh:
+        for line in fh:
+            if line.startswith(">"):
+                if hid and seq:
+                    yield hid, h()
+                hid, seq = line[1:].strip().split()[0].split("|")[0], []
+            elif line.strip():
+                seq.append(line.strip())
+    if hid and seq:
+        yield hid, h()
+
+o2h = dict(orf_hashes(OUT_FASTA))                        # headers are '>orf<ORFid>' from Step 1c
+with open(ORF_MAP, "w", newline="") as fh:
+    w = csv.writer(fh, delimiter="\t"); w.writerow(["orf_id", "protein_hash"])
+    w.writerows(sorted(o2h.items()))
+
+# the issue-79 ledger: one row per structure ALREADY in s3://petadex-protein-structures/esmatlas/.
+# tracker.csv's `id` IS the protein_hash for Atlas rows, but join on the explicit column -- that is
+# the one the ESMFold2 predictor's tracker shares (its `id` is an ORFid instead).
+have = {r["protein_hash"]: r for r in csv.DictReader(open(LEDGER, newline=""))}
+print(f"esmatlas ledger: {len(have):,} structures already downloaded (issue #79)")
+
+covered = {o: h for o, h in o2h.items() if h in have}
+todo    = sorted(set(o2h) - set(covered), key=lambda s: int(s[3:]) if s[3:].isdigit() else 0)
+n_uniq  = len(set(o2h.values()))
+print(f"centroids: {len(o2h):,}  ({n_uniq:,} unique sequences -- "
+      f"{len(o2h) - n_uniq:,} share a sequence with another centroid)")
+print(f"  prefolded (ESMAtlas) : {len(covered):,}  ({100 * len(covered) / max(len(o2h), 1):.2f}%)")
+print(f"  still to fold        : {len(todo):,}")
+
+with open(PREFOLD, "w", newline="") as fh:
+    w = csv.writer(fh, delimiter="\t")
+    w.writerow(["orf_id", "protein_hash", "run_label", "seq_len", "mean_plddt", "ptm"])
+    for o, h in sorted(covered.items()):
+        r = have[h]
+        w.writerow([o, h, r["run_label"], r["seq_len"], r["mean_plddt"], r["ptm"]])
+
+# bare ORFids, same format as Step 1b -- feeds a seqkit grep of centroids_60pid.fasta for the fold input
+TOFOLD.write_text("".join(f"{o[3:] if o.startswith('orf') else o}\n" for o in todo), encoding="utf-8")
+print(f"\nwrote {PREFOLD.name}, {TOFOLD.name}, {ORF_MAP.name}")
+```
+
+## Step 3: Folding Script (Run over all Centroids)
+
+Folds every remaining centroid with **ESMFold2** locally on a GPU VM.
+
+Script: `resources/260706_issue6_foldpredictions/esmfold2_local_predictor.py`
+
+**Input** — the centroids Step 2b left in `data/centroids_60pid_tofold.txt` (everything else already
+has an Atlas structure). Take those ORFids back out of `data/centroids_60pid.fasta` and upload the
+result; the script reads FASTA (or one-sequence-per-line) and keys every output by the ORFid in the
+header, so nothing downstream has to be re-joined.
+
+**Parameters — 68 sampling steps / 10 loops**, settled by issue 6a: no meaningful quality difference
+across 12.5× of compute (TM range 0.0011, pLDDT flat 95.06–95.37), so the cheap setting wins.
+
+```bash
+# confirm the weights resolve and measure the download+load cost before committing to a full run
+python esmfold2_local_predictor.py centroids_tofold.fasta --load-only
+
+# the real run -- fp32 (bf16 errors on this build), 68 steps / 10 loops, upload-only
+python esmfold2_local_predictor.py centroids_tofold.fasta \
+    --outdir out --label centroids60 \
+    --num-sampling-steps 68 --num-loops 10 \
+    --dtype fp32 \
+    --s3 s3://petadex-protein-structures/esmfold2-centroids/ --s3-only
+
+# fleet: shard K/N across workers -- each gets its own tracker<K-N>.csv, so no ledger clobber
+python esmfold2_local_predictor.py centroids_tofold.fasta --shard 3/16 ...
+```
+
+**Architecture** — `biohub/ESMFold2` is the **structure trunk only**; its `config.json` carries an
+`esmc_id` naming a separate backbone repo (`biohub/ESMC-6B`). You do **not** swap weights to change
+the backbone, you tell the trunk which ESMC to load — that is what `--esmc` does. `--swap-fallback`
+is the ugly in-place weight overwrite, only needed if the installed `esm` build ignores the override.
+ESMC's context is 2048 tokens; longer chains are truncated and flagged (`truncated` in the ledger).
+
+**Output** — `structures/<orfid>.cif` + `metrics/<orfid>.json` + `tracker.csv`, detailed in
+*Structure-Prediction Quality Metrics* below. `--s3-only` uploads the cif/json without keeping local
+copies (a 1.8 M-centroid fleet would otherwise fill the disk); `tracker.csv` stays local for resume
+**and** is mirrored to S3 every ~5 min and at exit, then re-seeded on a fresh box — so a spot VM
+resumes cleanly and already-folded ORFids are skipped.
+
+**Known run facts** (from the 2026-07-25 L40S validation): use `--dtype fp32` — bf16 errors on this
+build; SDPA attention fallback; ~25.6 residues/s, with cost growing super-linearly in length (a 628 aa
+ORF is much worse than 2× a 314 aa one). Budget against the Step 1d length histogram, not the median.
+
+**Dry runs that need no GPU and no weights:** `--mock-fold` exercises the whole pipeline with a fake
+model (combine it with a real `--s3` to validate the upload path), and `--self-test` runs plumbing
+checks and exits.
+
+## Step 4: Analysis:
+
+This is split into experiments indexed by letters (A, B, C, D, E). These experiments and their corresponding graphs will be described in this notebook, and each have their own notebooks with their analysis scripts and methods.
+
+## Structure-Prediction Quality Metrics
+
+Both structure sources — **ESMFold2** (`esmfold2_local_predictor.py`) and the **ESM Atlas** download
+(`esm_atlas_download.py`) — write the **same three outputs**, so a centroid's structure is consumed
+identically no matter which one produced it:
+
+```
+structures/<id>.cif      all-atom mmCIF; per-residue pLDDT in the B-factor column
+metrics/<id>.json        run block + scalars + per-residue pLDDT + PAE, one file per structure
+tracker.csv              the scalar LEDGER (resume table + benchmark table + join key)
+```
+
+| | ESMFold2 predictor | ESM Atlas download |
+|---|---|---|
+| S3 sink | `s3://petadex-protein-structures/esmfold2-centroids/` | `s3://petadex-protein-structures/esmatlas/` |
+| `<id>` is | the **ORFid** (`orf1094884`) | the **`protein_hash`** (content-addressed) |
+| ledger | `tracker<shard>.csv` (per-shard, no fleet clobber) | `tracker.csv` |
+
+The id namespaces differ on purpose: the Atlas is content-addressed and has no concept of a PETadex
+ORF, and hash-keying is what collapses PETadex's heavy ORF redundancy to one object per unique
+sequence. **Both write a `protein_hash` column into `tracker.csv`, computed the same way** — `md5` of
+the uppercased sequence with the trailing `*` stripped — so `protein_hash` joins an ESMFold2
+prediction, its Atlas counterpart, and the centroid ORFid from Step 2b's `centroid_orf_hashes.tsv`.
+
+| Metric | Shape / range | Where it's stored | What it tells you |
+|---|---|---|---|
+| **pLDDT** (predicted lDDT-Cα) | per-residue, 0–100 | CIF **B-factor** + `metrics/<id>.json` → `confidence.per_residue_plddt` (2 dp) | Per-residue *local* confidence — how reliable each residue's local geometry is. **>90** very high (side chains trustworthy); **70–90** confident backbone; **50–70** low, treat cautiously; **&lt;50** likely disordered/unreliable. |
+| **mean pLDDT** | scalar, 0–100 | `tracker.csv:mean_plddt` + json `confidence.mean_plddt` | Chain-average of pLDDT — a single global confidence number for ranking/filtering whole models. |
+| **pTM** (predicted TM-score) | scalar, 0–1 | `tracker.csv:ptm` + json `confidence.ptm` | Global *fold/topology* confidence — estimated TM-score vs. the true structure. **>0.5** means the overall fold is probably correct; higher = more confident topology. Computed from the PAE. |
+| **PAE** (Predicted Aligned Error) | L×L, Ångströms | json `confidence.pae` (**`null`** when the model emitted none) | Pairwise confidence. Entry (i, j) = expected position error at residue *j* when aligned on residue *i*. Low off-diagonal blocks ⇒ two regions/domains are confidently placed *relative to each other*; high ⇒ each domain may be fine internally but their arrangement is uncertain. Best signal for inter-domain confidence and for carving out rigid domains. |
+| **ipTM** (interface pTM) | scalar, 0–1 | `tracker.csv:iptm` + json `confidence.iptm` | Multi-chain complexes only; centroids are single chains, so empty/`null` throughout. |
+| **truncated** | 0/1 flag | `tracker.csv:truncated` + json `truncated` | Sequence exceeded the ESMC 2048-token context and was cut. Cross-check against `over_esmc_ctx` from Step 1d. Always `0` for Atlas rows. |
+| **speed** | s, residues/s | `tracker.csv:wall_s_median`, `residues_per_s` + json `timing.*` | Benchmark columns; ~25.6 res/s on an L40S at fp32. **`null` for Atlas rows** — those were folded by Biohub, not by us. |
+| **run config** | dict | json `run` | Self-describing params block in **every** metrics JSON — this is what made the 6a hyperparameter grid scoreable after the fact. Shares key names across both sources (`label`, `esmfold2`, `esmc`, `num_loops`, `num_sampling_steps`, `seed`, `dtype`); the Atlas doesn't publish its fold parameters, so those read `null` there rather than being guessed, and it adds `source`/`dataset` naming which Lance set the row came from. |
+
+**Notes**
+- **pLDDT vs pTM** — pLDDT is *local* (is this residue placed well?), pTM is *global* (is the whole fold right?). A model can have high pLDDT everywhere yet mediocre pTM if two well-formed domains are mis-oriented — which is exactly what the PAE off-diagonal reveals.
+- **Reading only the scalars is cheap.** In `metrics/<id>.json` the scalars sit *before* the big
+  per-residue/PAE arrays, so a `Range: bytes=0-4095` GET pulls `mean_plddt`/`ptm`/`seq_len` without
+  downloading the whole file — that is how 6a swept confidence across six configs.
+- **No `arrays/*.npz` and no `has_pae` column** anywhere on the centroid path any more. Per-residue
+  pLDDT and PAE live in the metrics JSON; test `confidence.pae is not None` instead of reading a flag.
+- **Distogram / PDE** — ESMFold2 can also emit a *distogram* (predicted inter-residue distance distribution); richer than PAE but bulky, and **not currently saved** by either script.
+- The superseded remote-API script (`esmfold2_predictor.py`, and its byte-identical twin
+  `esmfold2_api_predictor.py`) still writes the old `structures/ + arrays/*.npz + metrics.csv` triple.
+  It is dead code — not converted, and not on any current path. See the note at the end of Step 3.
+
+## **Quick Background**: 
+We have the ESMC6B base and the PETadex MSAs. We want to use ESMFold2, which takes 6B ESMC embeddings, and draw some conclusions about its use. ESMFold2 can also take in an MSA as input to improve predictions, so this group will be noted as MSA throughout these experimental descriptions.
+
+### Experiment Flow Diagram: Doesn't show any results, just a diagram of the movement of data and how things are analyzed
+
+- [ ] Experiment Flow Completion
+
+#### *Important Note:* Since the ESMAtlas is so new, the amount of points that have ground truth PDB structures that were introduced after ESMC training was finished is likely very very small. For this reason, I will use prediction quality metrics as a proxy for quality metrics, which is a standard assumption in the field
+
+## *Letters in the following list represent Graphs and Charts:*
+
+- [x] **A.** *What ESMFold2 Parameters should we use?*
+
+- We can't run the full centroid list on all parameter combinations, so run a *grid-search and see where the predicted quality metrics plateau on a subset*.
+- Could also graph the latency depending on the # of loops and sampling steps.
+- I'll compare some curves with the paper's defaults: *"We use N = 100 which reduces to 68 sampling steps; we observed no benefit of increased sampling steps for structural quality (Figure S13)"*.
+- This test is run over a subset of the data that has ground-truth PDB data.
+
+### Group B: This set of figures compares Base vs MSA (Does adding the MSAs do anything? This should be run over the full centroids)
+
+- [ ] **Ba.** *Does MSA affect TM-Score?*: TM-score(base_pred, msa_pred)
+
+- [ ] **Bb**. *Does MSA affect molecular feasibility distributions?*: Overlaid distributions of Molprobity(base_pred) and Molprobity(msa_pred)
+
+- [ ] **Bc**. *Does MSA affect molecular feasibility (pointwise)?*: Molprobity score of the predicted structure itself as the coordinate
+  - Concretely, x coord: Molprobity(base_pred), y coord: Molprobity(msa_pred)
+  - want points below y=x, as lower molprobity is better
+  - Same data as Bb, but it is a pointwise comparison
+
+- [ ] ***FOR NOW: I'll have the TM-Score and Molprobity distributions for the base model.***
+
+### Group C: Compares the predictions to ground truth data when the crystal structures exist.  Note that we treat pLDDT/pTM as proxies for the rest of the analysis, but this ground truth comparison is valid as these graphs compares base to MSA addition group relative to each other (points relative to y=x on a scatterplot), not absolutely.
+
+#### *Ground Truth Note 1: Determining which structures have ground truth data:*
+
+1. Source 1: Cores file
+    The cores file has various types of accessions which can be mapped to PDB accessions. This can then by reverse mapped by ORFid.
+2. Source 2: ORFs file
+    The ORFs file has GenBank accessions which can be mapped to PDB accessions. This can then be reverse mapped by ORFid.
+
+#### *Ground Truth Note 2: Determining which PDBs (if any) minimize data leakage*
+
+1. Method 1: ESMFold2 Training cutoff is 2023, so anything after that is guaranteed not in the training set. (this probably isn't very many)
+    Another issue: it was trained on AFDB.
+
+2. Method 2: No near-neighbor advantage: Exclude anything that clusters with a training chain at 40pid (paper does this). Could also do FoldSeek and take the lowest?
+
+    Rationale for this is that you just want to directly minimize leakage.
+
+    Doesn't make as much sense, since &lt;40pid would be much too low for most PETases. Also, we don't need a fully novel fold for this initial benchmark. This is why it wasn't really considered for this first test set.
+
+**This has been completed!**
+
+![alt text](image.png)
+
+- [ ] **Ca**. *Difference in Quality (lDDT)*:
+  - Scatterplot with x axis corresponding to base and y corresponding to MSA. Coord value along an axis is a mean lDDT comparison metric of the axis' model's prediction vs the crystal structure.
+  - Concretely, x coord: mean-lDDT(base_pred, crystal structure), y coord: mean-lDDT(msa_pred, crystal structure)
+  - Want points above y=x
+
+- [ ] **Cb**. *Difference in Quality*: Same as Ca but with TM-score vs the crystal structure as the comparison function.
+  - Concretely, x coord: TM-score(base_pred, crystal structure), y coord: TM-score(msa_pred, crystal structure)
+  - Want points above y=x
+
+- [ ] ***FOR NOW: I can just compute the distributions of these values for just the base model now to ensure that it's not horrible, but they are still most meaningful when relative to the MSA, not absolute.***
+
+### Group D: Metrics for the final distribution from the best model
+
+- [ ] **Da**. *Quality for best model (structural feasibility)*: Distribution of mean-pLDDT or pTM and its corresponding fraction above 70 or 80. (Indicative of usable structures). Use these results to conclude about the *use of the generated structures*.
+
+- [ ] **Db**. *Novelty of new structures (novelty)*: Distribution of FoldSeek best-hit similarity score
+
+  - (searches through PDB or AFDB quickly and finds the closest structure and a similarity score for that structure), and its corresponding fraction above a threshold.
+
+  - Make the other dimension confidence to isolate for confidently novel structures - most interesting.
+
+- [ ] ***FOR NOW: This was supposed to just use the better model between MSA addition and base, but I can just make the graphs using the base for now.***
+
+**Extra (In the future/downstream plan)**: Compare binding affinity models (bindcraft2, nesso1 and boltzgen)
+
+**Extra (Not in the Current Plan)**. *Accuracy of Confidence*: pLDDT vs LDDT / pTM vs TM - one graph for each of base or MSA. (Exp. 2)
+
+- Concretely, x coord for base graph: Mean-pLDDT(base_pred)/100
+  y coord for base graph: Mean-LDDT(base_pred, crystal structure)
+- Could also do this per-residue instead of over the full protein
+

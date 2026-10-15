@@ -1,0 +1,119 @@
+---
+    title: 260513_issue34_esm_controls
+    section: "Dry Lab"
+    path: "/dry-lab/issue/34"
+    navTitle: "Issue 34"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+## ESM Landscape Controls
+
+Lead     : `Oscar Heath / baleinegris`
+
+Issue    : [Github Issue #34](https://github.com/petadex/igem-toronto/issues/34) — _Create Controls for ESMLandscape_
+
+Start    : `2026-05-13`
+
+Complete : `2026-05-29`
+
+Files    : `~/resources/260513_issue34_esm_controls/` — control generation scripts
+
+Downstream: embedding + UMAP projection of these controls is tracked in [issue #75](https://github.com/petadex/igem-toronto/issues/75).
+
+## Introduction
+
+In issues #13 and #32 we embedded all 64,730 family-representative sequences with ESM-2 (`esm2_t30_150M_UR50D`, 640-dimensional, mean-pooled) and projected them to 2D with UMAP. The projection showed apparent clusters — but a UMAP of *any* high-dimensional data will produce clusters, so on its own the structure proves nothing. Before we read biological meaning into those islands, we need controls that tell us **what the embeddings are actually encoding**.
+
+Two questions drive the control design. First, do real proteins occupy a region of embedding space that is *distinct* from random amino-acid strings? If random sequences land on top of the real centroids, the landscape is meaningless. Second — and more subtly — is the embedding encoding **amino-acid composition** or **sequence order / structure**? A composition-only encoder would place a sequence and its shuffled copy in the same place. If shuffling moves a sequence, the model is capturing something beyond the bag-of-amino-acids.
+
+This issue (#34) covers **generating** the control sequence sets. Embedding them through the issue #32 pipeline and co-projecting them with the real centroids is handled downstream in #75.
+
+## Objectives
+
+1. Generate negative controls (random and shuffled sequences) from the 64,730 family representatives, designed to disentangle amino-acid composition from sequence order.
+2. Generate positive / real-world controls (random UniProt proteins, real-sequence fragments) for comparison against the real centroids.
+3. Write each control set to a CSV ready for the issue #75 embedding pipeline, with reproducible seeding throughout.
+
+---
+
+## Materials and Methods
+
+### System
+
+- **Language**: Python (`pandas`, `numpy`, `requests`).
+- **Reproducibility**: all generation scripts seeded with `471829`.
+- **Alphabet**: the 20 canonical amino acids, `ACDEFGHIKLMNPQRSTVWY`.
+
+### Data Initialization
+
+```bash
+# Accessed: 2026-05-13
+# family-representatives.csv : 64,730 rows (family_id, sequence) — the real centroids
+# uniprot_ids.tsv            : accession pool for the random-UniProt control
+aws s3 cp s3://petadex/family_representatives/family-representatives.csv ./data/
+```
+
+### Running the generators
+
+```bash
+# Runs every script in scripts/, writing one CSV per control set to controls/
+python3 main.py
+```
+
+### Control sets
+
+We generated six control sets. Each generator lives in `~/resources/260513_issue34_esm_controls/scripts/` and writes one CSV (columns `family_id`, `sequence`) to `controls/`.
+
+| Set | Variant label | Count | Holds constant | Varies | What it tests |
+|---|---|---|---|---|---|
+| **Random matched** | `rand_matched` | 64,730 | length, 1:1 per centroid | composition + order | Do random strings of *real lengths* separate from real proteins? |
+| **Random empirical** | `rand_empirical_family` | 64,730 | length *distribution* | composition + order | Same, length sampled from the observed distribution |
+| **Random 95th** | `rand_95th_family` | 64,730 | length ∈ [p5, p95] | composition + order | Same, length uniform between the 5th–95th percentiles |
+| **Shuffled** | `shuffled` | 64,730 | length **and composition** | order only | **Composition vs. structure** — the key test |
+| **Fragments** | `rand_fragment` | 194,190 | real subsequence | truncated to 30 / 60 / 90% | How much sequence is needed to look 'real'? |
+| **Random UniProt** | `rand_uniprot` | 64,730 | (real proteins) | identity (non-PETase) | Do PETases occupy a distinct region within real-protein space? |
+| **Total controls** | | **517,840** | | | |
+
+**Random matched** — for each centroid, draw a uniform-random amino-acid string of the same length:
+
+```python
+rand_seq = "".join(random.choices(AMINO_ACIDS, k=len(seq)))
+```
+
+**Random empirical / 95th** — sample lengths from the observed distribution, or uniformly between the 5th and 95th length percentiles, then fill with uniform-random amino acids:
+
+```python
+lengths = df["sequence"].str.len().values
+sampled = rng.choice(lengths, size=n)                 # empirical
+p5, p95 = np.percentile(lengths, [5, 95]).astype(int)
+sampled = rng.integers(p5, p95 + 1, size=n)           # 95th
+```
+
+**Shuffled** — keep length and amino-acid composition identical, permute the order. This is the discriminating control: a composition-only encoder would map a sequence and its shuffle to the same point.
+
+```python
+seq = list(row["sequence"]); rng.shuffle(seq)
+```
+
+**Fragments** — for each centroid take a random contiguous 30%, 60%, and 90% slice (hence 3 × 64,730 = 194,190 rows).
+
+**Random UniProt** — sample `n` accessions from `uniprot_ids.tsv` and fetch their sequences via the UniProt REST API (`/uniprotkb/accessions`, ≤200 ids per request).
+
+## Outputs & Handoff
+
+Six CSVs in `controls/` totalling **517,840** control sequences:
+
+| CSV | Rows |
+|---|---|
+| `rand_matched.csv` | 64,730 |
+| `rand_empirical.csv` | 64,730 |
+| `rand_95th.csv` | 64,730 |
+| `shuffled.csv` | 64,730 |
+| `rand_fragments.csv` | 194,190 |
+| `rand_uniprot.csv` | 64,730 |
+
+These feed directly into **[issue #75 — Embed and Plot the UMAP Pilot Controls](https://github.com/petadex/igem-toronto/issues/75)**, where they are embedded with the issue #32 ESM-2 pipeline and co-UMAPed with the real family centroids. The interpretation of the landscape (whether random sequences separate from real, and whether shuffled sequences sit apart) lives in that issue's write-up.

@@ -1,0 +1,430 @@
+import os
+import json
+import boto3
+import time
+import re
+import pandas as pd
+from datetime import datetime
+from botocore.exceptions import ClientError
+
+# BATCH CONFIGURATION
+MODEL_ID = "us.anthropic.claude-sonnet-4-6" 
+REGION_NAME = "us-east-1"
+BUCKET_NAME = "batch-extraction-217113048582-us-east-1-an"
+ROLE_ARN = "arn:aws:iam::217113048582:role/bedrock-s3-write"
+
+# BUDGET SAFEGUARD CONFIGURATION
+MAX_BUDGET_USD = 500.00
+ESTIMATED_INPUT_COST_PER_1M = 3.00   
+ESTIMATED_OUTPUT_COST_PER_1M = 5.00  
+
+# AWS CREDENTIALS (Hardcoded for temporary session)
+AWS_ACCESS_KEY = "Thats What She Said"
+AWS_SECRET_KEY = "No, no, no, no, no, no, no, no DON'T DO THAT. I THOUGHT WE WERE HAVING A NICE DATE"
+AWS_SESSION_TOKEN = "Life is like a box of chocolates. You never know what you're gonna get." 
+
+# DIRECTORIES
+INPUT_DIR = r"C:\Users\somna\Downloads\Plastic_Degradation_Yes_Classified"
+BASE_OUTPUT_DIR = r"C:\Users\somna\Downloads\extracted_metadata_V2_schema_CSVs_Evidence"
+os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
+
+# Clients configured to use explicitly provided credentials
+s3_client = boto3.client(
+    "s3", 
+    region_name=REGION_NAME,
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    aws_session_token=AWS_SESSION_TOKEN
+)
+
+bedrock_client = boto3.client(
+    "bedrock", 
+    region_name=REGION_NAME,
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    aws_session_token=AWS_SESSION_TOKEN
+)
+
+sts_client = boto3.client(
+    "sts",
+    region_name=REGION_NAME,
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    aws_session_token=AWS_SESSION_TOKEN
+)
+
+SYSTEM_PROMPT = """
+You are an expert biological data extractor. I will provide you with sections of a research paper. 
+Your job is to extract metadata about plastic and rubber-degrading enzymes into a strict JSON format that mirrors a relational database schema.
+
+CRITICAL INSTRUCTIONS:
+1. THE DEGRADATION SHORT-CIRCUIT: You must first determine if the paper actually tests enzymes for the DEGRADATION of the following target polymers (or their related monomers) or any other synthetic or NATURAL plastics/rubbers not included here: 
+   * Fossil fuel-based: Polyamide (PA), Polycarbonate (PC), Polyethylene (PE), Polyethylene terephthalate (PET), Polypropylene (PP), Polystyrene (PS), Polyurethane (PUR), Polyvinylchloride (PVC).
+   * Renewable resource-based: Natural rubber (NR), Polybutylene adipate terephthalate (PBAT), Polybutylene succinate (PBS), Polyethylene furanoate (PEF), Polyhydroxyalkanoates (PHA), Polylactic acid (PLA).
+   If the paper is about general medical enzymes, industrial enzymes OR the BIOSYNTHESIS/ACCUMULATION of bioplastics, it does not count. If there is no plastic degrading enzyme found, output ONLY "Has_Plastic_Degrading_Enzyme": "No" and "Reasoning_Summary" explaining why. Leave all other arrays empty.
+2. EXTRACT ENTITIES AS RELATIONAL TABLES: Link the entities using generated primary/foreign keys (e.g. "EXP_1", "PROT_1", "VAR_1", "ASSAY_1"). Treat multiple enzyme variants, whole-cell engineered strains and microbial consortia as unique proteins.
+3. ABSOLUTE RELATIONAL ACCURACY: Papers test multiple protein variants across multiple conditions. You MUST NOT mix and match data. 
+   - If "Variant A" was tested at pH 7 and "Variant B" was tested at pH 9, they MUST be assigned to different assays and different variable IDs.
+   - Do not assign the activity of a mutant to the wild-type protein.
+   - Track the exact textual relationship. If a paragraph discusses PROT_1 and ASSAY_1, ensure the activity data matches those exact foreign keys.
+
+[DATABASE TABLES AND FIELDS]
+Map the extracted information into the following arrays:
+
+1. experiments:
+   - experiment_id: Unique identifier (e.g. "EXP_1").
+   - summary: Brief description of the experiment objective.
+   - evidence_sentence: The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste.
+
+2. plasmids:
+   - plasmid_name: The name of the vector/plasmid (e.g. "pET-21b(+)").
+   - Fragment_Order: Integer representing insertion order.
+   - Fragment_Name: Name of the specific gene/fragment inserted.
+   - Fragment_Amino_Acid_Sequence: Sequence of the fragment if provided (otherwise "NOT_FOUND").
+   - evidence_sentence: The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste.
+
+3. proteins:
+   - protein_id: Unique identifier (e.g. "PROT_1").
+   - plasmid_name: Foreign key matching a plasmid_name from the plasmids array.
+   - is_mutant: true or false.
+   - novel_to_paper: true or false.
+   - genbank_id: Accession number if provided.
+   - unmutated_aa_seq: Amino acid sequence of the wild-type.
+   - mutated_aa_seq: Amino acid sequence of the mutant.
+   - evidence_sentence: The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste.
+
+4. assay_variables: Describes the conditions used for a set of assays. Output a separate object for EACH variable identified.
+   - variables_id: Unique identifier (e.g. "VAR_1").
+   - experiment_id: Foreign key to experiments.
+   - variable: The name of the parameter (e.g. "temperature", "pH", "reaction vessel", "reaction mixing?", "buffer components").
+   - value: The actual value extracted.
+   - unit: The unit of measurement (if applicable, otherwise "NOT_FOUND").
+   - evidence_sentence: The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste.
+
+5. assays_main:
+   - assay_id: Unique identifier (e.g. "ASSAY_1").
+   - experiment_id: Foreign key to experiments.
+   - variables_id: Foreign key to assay_variables.
+   - independent_variable_value: If this specific assay varies a specific parameter from the base variables (like testing a new pH in a curve), state the value here. Otherwise use "NOT_FOUND".
+   - evidence_sentence: The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste.
+
+6. activity:
+   - assay_id: Foreign key to assays_main.
+   - protein_id: Foreign key to proteins.
+   - activity_type: The metric measured (e.g. Degradation rate, Weight loss, Product yield).
+   - activity_value: The numerical value.
+   - activity_units: The physical units associated with the value.
+   - evidence_sentence: The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste.
+
+CRITICAL: Output ONLY valid JSON. The response must start with '{' and end with '}'.
+
+{
+    "Has_Plastic_Degrading_Enzyme": "Yes or No",
+    "Reasoning_Summary": "Briefly list the core findings here.",
+    "experiments": [
+        {
+            "experiment_id": "EXP_1",
+            "summary": "value or NOT_FOUND",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ],
+    "plasmids": [
+        {
+            "plasmid_name": "value or NOT_FOUND",
+            "Fragment_Order": 1,
+            "Fragment_Name": "value or NOT_FOUND",
+            "Fragment_Amino_Acid_Sequence": "value or NOT_FOUND",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ],
+    "proteins": [
+        {
+            "protein_id": "PROT_1",
+            "plasmid_name": "value or NOT_FOUND",
+            "is_mutant": false,
+            "novel_to_paper": false,
+            "genbank_id": "value or NOT_FOUND",
+            "unmutated_aa_seq": "value or NOT_FOUND",
+            "mutated_aa_seq": "value or NOT_FOUND",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ],
+    "assay_variables": [
+        {
+            "variables_id": "VAR_1",
+            "experiment_id": "EXP_1",
+            "variable": "temperature",
+            "value": "30",
+            "unit": "C",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ],
+    "assays_main": [
+        {
+            "assay_id": "ASSAY_1",
+            "experiment_id": "EXP_1",
+            "variables_id": "VAR_1",
+            "independent_variable_value": "value or NOT_FOUND",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ],
+    "activity": [
+        {
+            "assay_id": "ASSAY_1",
+            "protein_id": "PROT_1",
+            "activity_type": "value or NOT_FOUND",
+            "activity_value": "value or NOT_FOUND",
+            "activity_units": "value or NOT_FOUND",
+            "evidence_sentence": "The EXACT verbatim sentence from the text that proves this specific protein achieved this specific activity under these specific assay conditions. Do not summarize. Copy and paste."
+        }
+    ]
+}
+"""
+
+def verify_credentials():
+    try:
+        identity = sts_client.get_caller_identity()
+        print(f"Credentials Verified. Authenticated as: {identity.get('Arn')}")
+    except ClientError as e:
+        print("\n[CREDENTIAL ERROR] Your AWS Access Key, Secret Key, or Session Token is invalid or expired.")
+        print(f"Details: {e}")
+        exit(1)
+
+def calculate_and_enforce_budget(local_jsonl_path):
+    total_input_chars = 0
+    record_count = 0
+
+    with open(local_jsonl_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            sys_len = len(record["modelInput"]["system"])
+            msg_len = len(record["modelInput"]["messages"][0]["content"][0]["text"])
+            total_input_chars += (sys_len + msg_len)
+            record_count += 1
+
+    est_input_tokens = total_input_chars / 4
+    max_output_tokens = record_count * 8000
+
+    est_input_cost = (est_input_tokens / 1_000_000) * ESTIMATED_INPUT_COST_PER_1M
+    max_output_cost = (max_output_tokens / 1_000_000) * ESTIMATED_OUTPUT_COST_PER_1M
+    worst_case_total = est_input_cost + max_output_cost
+
+    print(f"\n COST & BUDGET CHECK ")
+    print(f"Total Papers in Batch: {record_count}")
+    print(f"Est. Input Tokens: {est_input_tokens:,.0f} (~${est_input_cost:.2f})")
+    print(f"Max Potential Output Tokens: {max_output_tokens:,.0f} (~${max_output_cost:.2f})")
+    print(f"Worst-Case Max Cost: ${worst_case_total:.2f}")
+
+    if worst_case_total > MAX_BUDGET_USD:
+        raise ValueError(
+            f"ABORTED: Estimated worst-case cost (${worst_case_total:.2f}) exceeds your budget limit (${MAX_BUDGET_USD:.2f})."
+        )
+    
+    print("Budget check passed! Proceeding with upload...\n")
+
+def prepare_and_upload_jsonl(run_output_dir):
+    jsonl_filename = f"batch_input_{int(time.time())}.jsonl"
+    local_jsonl_path = os.path.join(run_output_dir, jsonl_filename)
+    
+    files = [f for f in os.listdir(INPUT_DIR) if f.endswith('.json')]
+    target_tags = ["body_text", "front_matter", "abstract", "introduction", "methods", "methodology", "results", "discussion"]
+    
+    MAX_CHAR_LIMIT = 500000  # ~125k tokens, well within Claude 4.6 Sonnet's 200k limit
+    valid_records = 0
+
+    with open(local_jsonl_path, 'w', encoding='utf-8') as out_f:
+        for filename in files:
+            paper_id = os.path.splitext(filename)[0]
+            input_path = os.path.join(INPUT_DIR, filename)
+            
+            with open(input_path, 'r', encoding='utf-8') as f:
+                try:
+                    paper_data = json.load(f)
+                except json.JSONDecodeError:
+                    continue
+
+            extracted_sections = []
+            if "content" in paper_data:
+                for block in paper_data["content"]:
+                    section_name = block.get("section", "").lower()
+                    if any(tag in section_name for tag in target_tags):
+                        text_content = block.get("text", "")
+                        if text_content:
+                            extracted_sections.append(f"[{section_name.upper()}]\n{text_content}")
+
+            paper_text = "\n\n".join(extracted_sections)
+            
+            # Skip empty papers
+            if not paper_text.strip():
+                continue
+
+            # Safely truncate oversized papers instead of dropping them
+            if len(paper_text) > MAX_CHAR_LIMIT:
+                paper_text = (
+                    paper_text[:MAX_CHAR_LIMIT] 
+                    + "\n\n--- [SYSTEM NOTE: PAPER TEXT TRUNCATED TO FIT CONTEXT WINDOW] ---"
+                )
+
+            record = {
+                "recordId": paper_id,
+                "modelInput": {
+                    "anthropic_version": "bedrock-2023-05-31",
+                    "max_tokens": 8000,
+                    "temperature": 0.1,
+                    "system": SYSTEM_PROMPT,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "text": paper_text}]
+                        }
+                    ]
+                }
+            }
+            out_f.write(json.dumps(record) + "\n")
+            valid_records += 1
+
+    print(f"Prepared {valid_records} papers into {jsonl_filename}")
+    
+    calculate_and_enforce_budget(local_jsonl_path)
+    
+    s3_input_key = f"batch-jobs/inputs/{jsonl_filename}"
+    s3_client.upload_file(local_jsonl_path, BUCKET_NAME, s3_input_key)
+    print(f"Uploaded input JSONL to s3://{BUCKET_NAME}/{s3_input_key}")
+    
+    return s3_input_key, jsonl_filename
+
+
+def run_batch_inference():
+    verify_credentials()
+
+    run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_output_dir = os.path.join(BASE_OUTPUT_DIR, f"run_{run_timestamp}")
+    os.makedirs(run_output_dir, exist_ok=True)
+    
+    s3_input_key, jsonl_filename = prepare_and_upload_jsonl(run_output_dir)
+    
+    job_name = f"bio-extraction-{int(time.time())}"
+    s3_input_uri = f"s3://{BUCKET_NAME}/{s3_input_key}"
+    s3_output_uri = f"s3://{BUCKET_NAME}/batch-jobs/outputs/{job_name}/"
+    
+    print(f"Starting Bedrock Batch Job: {job_name}")
+    
+    try:
+        response = bedrock_client.create_model_invocation_job(
+            jobName=job_name,
+            roleArn=ROLE_ARN,
+            modelId=MODEL_ID,
+            inputDataConfig={
+                "s3InputDataConfig": {
+                    "s3InputFormat": "JSONL",
+                    "s3Uri": s3_input_uri
+                }
+            },
+            outputDataConfig={
+                "s3OutputDataConfig": {
+                    "s3Uri": s3_output_uri
+                }
+            }
+        )
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        print("\n[ROLE OR PERMISSION ERROR] Failed to start the batch job.")
+        print(f"AWS Error Code: {error_code}")
+        print(f"Message: {error_message}")
+        print("\nTroubleshooting Tips:")
+        print("1. Verify ROLE_ARN is typed correctly.")
+        print("2. Ensure your temporary credentials have 'iam:PassRole' permissions for that exact ARN.")
+        print("3. Ensure the Role itself has a Trust Policy allowing 'bedrock.amazonaws.com' to assume it.")
+        exit(1)
+    
+    job_arn = response["jobArn"]
+    print(f"Job submitted successfully. ARN: {job_arn}")
+    
+    while True:
+        status_response = bedrock_client.get_model_invocation_job(jobIdentifier=job_arn)
+        status = status_response["status"]
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Job Status: {status}")
+        
+        if status in ["Completed", "Failed", "Stopped"]:
+            if status == "Failed":
+                # Bedrock provides a 'message' field explaining the exact failure reason
+                failure_reason = status_response.get("message", "No specific failure message provided by AWS.")
+                print(f"\n[JOB FAILED] Reason: {failure_reason}")
+            break
+            
+        time.sleep(60)
+        
+    if status == "Completed":
+        process_batch_results(job_name, jsonl_filename, run_output_dir)
+    else:
+        print("Job did not complete successfully. Check AWS Console for errors.")
+
+def process_batch_results(job_name, original_jsonl_filename, run_output_dir):
+    output_s3_key = f"batch-jobs/outputs/{job_name}/{original_jsonl_filename}.out"
+    local_out_path = os.path.join(run_output_dir, f"{job_name}_results.jsonl")
+    
+    print(f"Downloading results from s3://{BUCKET_NAME}/{output_s3_key}")
+    s3_client.download_file(BUCKET_NAME, output_s3_key, local_out_path)
+    
+    print("\n Extracting and Saving Individual JSON Files ")
+    with open(local_out_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            record = json.loads(line)
+            paper_id = record.get("recordId")
+            
+            output_content = record.get("modelOutput", {}).get("content", [])
+            if not output_content:
+                continue
+                
+            response_text = output_content[0].get("text", "")
+            match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            
+            if match:
+                try:
+                    extracted_json = json.loads(match.group(0))
+                    json_output_path = os.path.join(run_output_dir, f"{paper_id}.json")
+                    
+                    with open(json_output_path, 'w', encoding='utf-8') as json_out_f:
+                        json.dump(extracted_json, json_out_f, indent=4, ensure_ascii=False)
+                except json.JSONDecodeError:
+                    print(f"Failed to parse JSON for paper {paper_id}")
+                    
+    print("\n Building CSVs from Saved JSON Files ")
+    
+    master_tables = {
+        "experiments": [], "plasmids": [], "proteins": [],
+        "assay_variables": [], "assays_main": [], "activity": []
+    }
+    
+    saved_json_files = [f for f in os.listdir(run_output_dir) if f.endswith('.json')]
+    
+    for filename in saved_json_files:
+        paper_id = os.path.splitext(filename)[0]
+        json_path = os.path.join(run_output_dir, filename)
+        
+        with open(json_path, 'r', encoding='utf-8') as f:
+            try:
+                extracted_json = json.load(f)
+                
+                for table_name in master_tables.keys():
+                    if table_name in extracted_json and isinstance(extracted_json[table_name], list):
+                        for row in extracted_json[table_name]:
+                            new_row = {"paper_id": paper_id}
+                            new_row.update(row)
+                            master_tables[table_name].append(new_row)
+                            
+            except json.JSONDecodeError:
+                print(f"Failed to read saved JSON file: {filename}")
+
+    for table_name, rows in master_tables.items():
+        if rows:
+            df = pd.DataFrame(rows)
+            csv_path = os.path.join(run_output_dir, f"{table_name}.csv")
+            df.to_csv(csv_path, index=False)
+            print(f"Saved {len(rows)} rows to {csv_path}")
+
+if __name__ == "__main__":
+    run_batch_inference()

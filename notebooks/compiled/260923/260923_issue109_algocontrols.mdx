@@ -1,0 +1,178 @@
+---
+    title: 260923_issue109_algocontrols
+    section: "Dry Lab"
+    path: "/dry-lab/issue/109"
+    navTitle: "Issue 109"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+# IsPETase and LCC Literature Controls
+
+Alex Leonardos Sept 23rd 2026
+
+This notebook documents the process for determining the sequences to order for the IsPETase and LCC Literature review controls.
+
+## Step 1: ORFids of IsPETase and LCC:
+
+These were found using the PETadex website.
+
+IsPETase: ORFid 1
+LCC: ORFid 33
+
+## Step 2: Find the 90 PID cluster ID for the two proteins.
+
+
+```python
+SELECT *
+FROM petadex_clustering
+WHERE orf_id = 1;
+
+-- IsPETase's 90pid_enzyme_id is 1.
+```
+
+
+```python
+SELECT *
+FROM petadex_clustering
+WHERE orf_id = 33;
+
+-- IsPETase's 90pid_enzyme_id is 18.
+```
+
+## Step 3: Get ORFids of everything in the clusters
+
+Ran in pgadmin4.
+
+
+```python
+-- IsPETase cluster
+SELECT *
+FROM petadex_clustering
+WHERE "90pid_enzyme_id" = 1;
+```
+
+
+```python
+-- LCC cluster
+SELECT *
+FROM petadex_clustering
+WHERE "90pid_enzyme_id" = 18;
+```
+
+## Step 4: Get the sequences of the ORFs in the cluster
+
+This was run on a c7i.4xlarge cluster on EC2 for faster data transfer.
+
+Note: needs seqkit and pv:
+
+
+#### install seqkit, helps parse fastas
+
+```
+wget https://github.com/shenwei356/seqkit/releases/latest/download/seqkit_linux_amd64.tar.gz
+tar -xzf seqkit_linux_amd64.tar.gz
+sudo mv seqkit /usr/local/bin/
+seqkit version
+```
+
+seqkit used: seqkit v2.3.0
+
+#### install pv, pipe viewer to track progress
+
+`sudo apt install -y pv`
+
+
+```python
+aws s3 cp s3://petadex/logan/petadex.catalytic_orfs.v1.1.fa - --no-sign-request \
+  | pv -s 117g \
+  | seqkit grep --id-regexp '^([^|]+)' -f ispetase_cluster_orfids.txt -o ispetase_control.fa
+```
+
+
+```python
+# To get just the sequences
+seqkit seq -s -w 0 ispetase_control.fa > ispetase_control.seqs.txt
+```
+
+
+```python
+aws s3 cp s3://petadex/logan/petadex.catalytic_orfs.v1.1.fa - --no-sign-request \
+  | pv -s 117g \
+  | seqkit grep --id-regexp '^([^|]+)' -f lcc_cluster_orfids.txt -o lcc_control.fa
+```
+
+
+```python
+# To get just the sequences
+seqkit seq -s -w 0 lcc_control.fa > lcc_control.seqs.txt
+```
+
+## Step 5: Run HMMsearch
+
+First get the HMM for C1: 
+
+`aws s3 cp s3://petadex/petadex.v260701/4_hmm_creation/petadex_hmms/petadex.v260701-C001.hmm`
+
+HMMER 3.4
+
+
+```python
+# check threshold
+grep -qE '^(GA|TC|NC) ' petadex.v260701-C001.hmm && CUT="--cut_ga" || CUT="-E 1e-5"
+echo "using cutoff: $CUT"
+
+# using cutoff: -E 1e-5
+```
+
+
+```python
+# run the serach
+for c in ispetase lcc; do
+  sed '/^>/!s/\*$//' ${c}_control.fa > ${c}.clean.fa
+  hmmsearch $CUT --domtblout ${c}.domtbl -A ${c}.sto \
+      petadex.v260701-C001.hmm ${c}.clean.fa > ${c}.hmmsearch.txt
+  echo "$c -> $(grep -c '^>' ${c}.cores.fa) core hits"
+done
+```
+
+
+```python
+# extract the cores into the core files and align
+# Python: 3.13.13 was used, and the script only has standard-libraries
+# Ctrl-C first, then:
+for c in ispetase lcc; do
+  python3 sto_to_cores.py ${c}.sto ${c}.cores.aln.fa ${c}.cores.fa
+done
+
+```
+
+Now the aligned core files are at ispetase.cores.aln.fa and lcc.cores.aln.fa 
+
+## Step 6: Weight the cores by how many ORFs map to them
+
+For this, a `weight_cores.py` script was made.
+
+
+```python
+for each ($c in @("ispetase","lcc")) { 
+    & $py "$d\weight_cores.py" "$d\$c.cores.aln.fa" 
+    "$d\$c" --min-cov 0.80 }
+```
+
+Now the weighted cores are in ispetase.weighted.aln.fa and lcc.weighted.aln.fa
+
+## Step 7: Make a Design
+
+This follows the Algorithm Running Instructions from the Issue 84 notebook.
+
+Parameters:
+
+library cap: 1000, nt ordered &lt; 50,000 , fragment &lt;= 330nt coding, K &lt;= 10, gg chemistry, dp cut search, seed 0
+
+## Step 8: Order
+
+Format in the specified iDT format. This was as simple as rearraging the columns in the csv, as the standard mixed base format worked.

@@ -1,0 +1,34 @@
+{
+  "sequence_count": 121326,
+  "total_bases": 18020607,
+  "canonical_sequence_rows_sha256": "de024a79efd1612a03ce82f886315f2c8a004e86b764eb2680c359168360dbab",
+  "variants_identical": true,
+  "accessions": [
+    "DRR001152",
+    "DRR000584",
+    "DRR001026",
+    "DRR001104",
+    "DRR000185",
+    "DRR001199",
+    "DRR821254",
+    "DRR821257",
+    "DRR821260"
+  ],
+  "plastic_context_accessions": [
+    "DRR821254",
+    "DRR821257",
+    "DRR821260"
+  ],
+  "background_control_accessions": [
+    "DRR001152",
+    "DRR000584",
+    "DRR001026",
+    "DRR001104",
+    "DRR000185",
+    "DRR001199"
+  ],
+  "reference_sequences": 323,
+  "reference_annotations": 534,
+  "candidate_similarity_rows": 28,
+  "sequences_with_candidate_similarity": 18
+}

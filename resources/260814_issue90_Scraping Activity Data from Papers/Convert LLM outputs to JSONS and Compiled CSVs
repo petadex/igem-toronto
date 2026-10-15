@@ -1,0 +1,164 @@
+import json
+import csv
+import os
+
+# Configuration: Pointing directly to your local file
+INPUT_FILE = r"C:\Users\somna\source\repos\metadata feature extraction\Download batch inference output\final_results\batch_input_1785696820.jsonl.out"
+
+# Dynamically set output folders based on where the input file is located
+BASE_DIR = os.path.dirname(INPUT_FILE)
+JSON_DIR = os.path.join(BASE_DIR, "extracted_jsons")
+CSV_DIR = os.path.join(BASE_DIR, "compiled_csvs")
+ERROR_LOG = os.path.join(BASE_DIR, "failed_records_log.txt")
+
+# The tables we expect to extract based on your database schema
+# The exact tables Claude generated in the batch inference
+# The exact tables Claude generated in the batch inference
+TABLE_NAMES = [
+    "experiments",
+    "plasmids",
+    "proteins",
+    "assay_variables",
+    "assays_main",
+    "activity"
+]
+
+# New dictionary to hold the root-level paper summaries
+paper_metadata = []
+
+# Create output directories if they don't exist
+os.makedirs(JSON_DIR, exist_ok=True)
+os.makedirs(CSV_DIR, exist_ok=True)
+
+def process_local_file():
+    print(f"Reading data directly from:\n{INPUT_FILE}\n")
+    
+    csv_data = {table: [] for table in TABLE_NAMES}
+    csv_headers = {table: set() for table in TABLE_NAMES}
+    failed_records = []
+
+    processed_count = 0
+    token_limit_count = 0
+    refusal_count = 0
+    json_error_count = 0
+
+    with open(INPUT_FILE, 'r', encoding='utf-8') as infile:
+        for line_num, line in enumerate(infile):
+            try:
+                aws_payload = json.loads(line)
+                record_id = aws_payload.get('recordId', f"record_{line_num}")
+                
+                # Catch top-level AWS errors
+                if 'error' in aws_payload:
+                    failed_records.append(f"{record_id}: Bedrock API Error - {aws_payload['error']}")
+                    continue
+
+                model_output = aws_payload.get('modelOutput', {})
+                stop_reason = model_output.get('stop_reason')
+                
+                # Log and skip refusals
+                if stop_reason == 'refusal':
+                    refusal_count += 1
+                    failed_records.append(f"{record_id}: Safety Refusal")
+                    continue
+                    
+                # Log and skip max tokens (truncated JSON)
+                if stop_reason == 'max_tokens':
+                    token_limit_count += 1
+                    failed_records.append(f"{record_id}: Max Tokens Reached (8000 limit)")
+                    continue
+
+                content = model_output.get('content', [])
+                if not content:
+                    failed_records.append(f"{record_id}: Empty Content Array")
+                    continue
+                
+                raw_claude_text = content[0].get('text', '{}')
+                
+                # Strip markdown code blocks if Claude added them
+                if raw_claude_text.startswith("```json"):
+                    raw_claude_text = raw_claude_text.strip("`").removeprefix("json").strip()
+                elif raw_claude_text.startswith("```"):
+                    raw_claude_text = raw_claude_text.strip("`").strip()
+
+                # Attempt to parse the cleaned JSON
+                try:
+                    parsed_data = json.loads(raw_claude_text)
+                except json.JSONDecodeError:
+                    json_error_count += 1
+                    failed_records.append(f"{record_id}: JSON Decode Error (Likely invalid formatting)")
+                    continue
+
+                # 1. Save individual JSON payload
+                json_path = os.path.join(JSON_DIR, f"{record_id}.json")
+                with open(json_path, 'w', encoding='utf-8') as jf:
+                    json.dump(parsed_data, jf, indent=4)
+
+                # 1.5 Extract root-level metadata
+                paper_metadata.append({
+                    "source_record_id": record_id,
+                    "Has_Plastic_Degrading_Enzyme": parsed_data.get("Has_Plastic_Degrading_Enzyme", "NOT_FOUND"),
+                    "Reasoning_Summary": parsed_data.get("Reasoning_Summary", "NOT_FOUND")
+                })
+
+                # 2. Aggregate data for compiled CSVs
+                for table_name in TABLE_NAMES:
+                    if table_name in parsed_data:
+                        rows = parsed_data[table_name]
+                        if isinstance(rows, list):
+                            for row in rows:
+                                if isinstance(row, dict):
+                                    row['source_record_id'] = record_id
+                                    csv_data[table_name].append(row)
+                                    csv_headers[table_name].update(row.keys())
+
+                processed_count += 1
+
+            except Exception as e:
+                failed_records.append(f"Line {line_num}: Unexpected Error - {str(e)}")
+
+    # Write the error log so you know exactly which papers failed and why
+    if failed_records:
+        with open(ERROR_LOG, 'w', encoding='utf-8') as ef:
+            ef.write("\n".join(failed_records))
+        print(f"Saved log of failed records to:\n  {ERROR_LOG}")
+
+    # Print Summary Console Output
+    print("\n--- BATCH SUMMARY ---")
+    print(f"Successfully extracted: {processed_count} papers")
+    print(f"Failed (Max Tokens):    {token_limit_count} papers")
+    print(f"Failed (Refusals):      {refusal_count} papers")
+    print(f"Failed (JSON Errors):   {json_error_count} papers")
+
+    # Generate CSVs
+    print("\n--- GENERATING CSVS ---")
+    for table_name in TABLE_NAMES:
+        if csv_data[table_name]:
+            output_csv_path = os.path.join(CSV_DIR, f"{table_name}_compiled.csv")
+            headers = list(csv_headers[table_name])
+            
+            # Ensure source_record_id is always the first column for easy relational mapping
+            if 'source_record_id' in headers:
+                headers.remove('source_record_id')
+                headers.insert(0, 'source_record_id')
+
+            with open(output_csv_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=headers)
+                writer.writeheader()
+                writer.writerows(csv_data[table_name])
+            print(f"Created {table_name}_compiled.csv ({len(csv_data[table_name])} rows)")
+        else:
+            print(f"Warning: No data found for {table_name}")
+    # Generate Metadata CSV
+    if paper_metadata:
+        metadata_csv_path = os.path.join(CSV_DIR, "document_metadata_compiled.csv")
+        metadata_headers = ["source_record_id", "Has_Plastic_Degrading_Enzyme", "Reasoning_Summary"]
+        
+        with open(metadata_csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=metadata_headers)
+            writer.writeheader()
+            writer.writerows(paper_metadata)
+        print(f"Created document_metadata_compiled.csv ({len(paper_metadata)} rows)")
+
+if __name__ == "__main__":
+    process_local_file()

@@ -1,0 +1,220 @@
+---
+    title: 260809_issue102_af_db_v260701
+    section: "Dry Lab"
+    path: "/dry-lab/issue/102"
+    navTitle: "Issue 102"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+# Issue 102: Download AFDB Structures for PETadex-nr v260701 significant hits
+
+Author: Alexander Leonardos
+
+Start : 2026-08-09
+
+Finish: 2026-08-10
+
+Input : `s3://petadex/petadex.v260701/petadex-nr.v260701.significant-hits.fastaa` (3.91 GB, uncompressed)
+
+S3 Output : `s3://petadex-protein-structures/af_db_v260701/`
+
+Scripts : `resources/260809_issue102_af_db_v260701/scripts/` — a self-contained copy. The original AFDB download scripts under `resources/260523_issue72_af_db_download/` are not modified.
+
+### Task Overview
+This is a task that informs the development of HMMs to extract catalytic domains from the new PETadex-nr dataset. Using these pulled structures, domain location will be identified using pLDDT, and then used to QC HMMs during development.
+
+I've made this a unique issue as it turned out to be significantly different than the original Issue #72 AFDB Download. The main idea of creating a manifest file for downloading from the public GCP bucket remains the same, but the specifics of the accessions and the download script have differed in the following ways:
+
+
+1. Input format: 
+\>genbank_accession:genbank_accession:ect|e_value|pid|bitscore|query_petadex_id|component_id
+
+    This means that there are multiple accessions per sequence, so the mapping script must search all of the possible accessions for each row in the original fasta, and download if any of them have a hit in the AFDB.
+
+2. The upload for these structures is now the S3 bucket above, rather than Azure.
+
+3. The download script is now batched, removing the need for a large staging disk on the cloud.
+
+
+
+## Step 0: Inspect the Input
+
+```bash
+aws s3 ls s3://petadex/petadex.v260701/
+# 2026-08-08 14:27:20  3907136862 petadex-nr.v260701.significant-hits.fastaa
+
+aws s3api get-object --bucket petadex \
+  --key petadex.v260701/petadex-nr.v260701.significant-hits.fastaa \
+  --range "bytes=0-400000" head.txt && grep "^>" head.txt | head -5
+```
+
+```
+>WP_305403363.1|7.24e-11|23.5|73.6|PL141|C034
+>HEX8796638.1|2.08e-06|33.0|60.8|PL141|C034
+>WP_082575588.1|4.75e-87|36.9|298.0|PL68|C009
+>WP_453139269.1,MGW6465901.1|3.06e-50|42.9|181.0|PL127|C014
+>WP_335046055.1,MEH1974844.1,MEH2021907.1|1.48e-12|29.2|82.8|PL47|C026
+```
+
+This structure informs the development of new scripts that map their accessions to Uniprot Accessions, as they are stored in AFDB.
+
+## Step 1: Setup the Downloader RM.
+
+All work happens on a dedicated in-region `c7i.4xlarge`, Ubuntu 24.04 LTS, single 150 GB gp3 root volume, with an IAM instance role for S3.
+
+Run the following commands to download the required mapping files and CLI tools.
+
+```bash
+sudo apt-get update && sudo apt-get install -y unzip curl python3-venv
+curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+unzip -q /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install
+aws sts get-caller-identity      # confirms the instance role is attached
+
+export WORK=$HOME/afdb
+export OUT=$WORK/out
+export S3=s3://petadex-protein-structures/af_db/v260701
+export SCRIPTS=~/igem-toronto/resources/260809_issue72_af_db_download_v2/scripts
+mkdir -p $OUT
+
+python3 -m venv $WORK/venv && source $WORK/venv/bin/activate
+pip install -r ~/igem-toronto/resources/260809_issue72_af_db_download_v2/requirements.txt
+
+aws s3 cp s3://petadex/petadex.v260701/petadex-nr.v260701.significant-hits.fastaa $WORK/
+curl -o $WORK/idmapping_selected.tab.gz \
+  https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/idmapping/idmapping_selected.tab.gz
+```
+
+## Step 2: Parse the Row, Accession Pairs from the FASTA File, and classify the accessions.
+
+This script reads through the accessions for each row and creates a row for each unique accession in the original FASTA.
+
+```bash
+python $SCRIPTS/parse_nr_headers.py \
+    $WORK/petadex-nr.v260701.significant-hits.fastaa --outdir $OUT
+```
+
+This script classifies the accessions into their accession types using regex, so that they can be properly mapped to Uniprot in the next step.
+
+```bash
+python $SCRIPTS/split_accession_types.py \
+    $OUT/unique_accessions.csv --outdir $OUT/accessions --header
+```
+
+## Step 3: Map to UniProt Accessions
+
+This script maps the accessions to Uniprot using the provided mapping. This is the same mapping used in the original AFDB download, but this was redownloaded on August 9th, 2026.
+
+```bash
+for T in refseq genbank pdb; do
+  python $SCRIPTS/local_accession_mapping.py \
+      $OUT/accessions/${T}_accessions.csv \
+      $OUT/mappings/${T}_to_uniprot.tsv \
+      --type $T --master $WORK/idmapping_selected.tab.gz
+done
+```
+
+### Results:
+
+```
+"mapped_pairs_by_type": {
+    "refseq": 616956,
+    "genbank": 1108344,
+    "pdb": 0,
+    "uniprot": 4419
+  }
+```
+
+Note that there are 0 PDBs, this is likely a parsing bug. However, this was ignored as the other types occupied the vast majority of the previous AFDB search, and these number of mapped pairs seemed to be more than sufficient for the QC purpose of this experiment.
+
+## Step 4: Build the Manifest and Check for Existence
+
+This is a notable difference from the first AFDB Download. Instead of retroactively determining which structures exist on the AFDB by searching every possible manifest, this script references the `gs://public-datasets-deepmind-alphafold-v4/accession_ids.csv` file. This contains the name of every uniprot accession that's in the DB allowing the manifest to only contain filenames that exist. This leads to 0 miss requests to GCP.
+
+
+```bash
+# Optional but worth it: the v4 existence index, readable once gcloud is authenticated.
+gcloud storage cp gs://public-datasets-deepmind-alphafold-v4/accession_ids.csv $WORK/ || \
+  echo "no index available -- proceeding without the prefilter"
+
+python $SCRIPTS/build_manifest.py --outdir $OUT \
+    --mapping refseq:$OUT/mappings/refseq_to_uniprot.tsv \
+    --mapping genbank:$OUT/mappings/genbank_to_uniprot.tsv \
+    --mapping pdb:$OUT/mappings/pdb_to_uniprot.tsv \
+    --direct-uniprot $OUT/accessions/uniprot_accessions.csv \
+    --afdb-accessions $WORK/accession_ids.csv
+```
+
+Note: gcloud must be authenticated. The public-datasets bucket denies anonymous reads, so `curl` and `gcloud config set auth/disable_credentials true` both fail. A Google account (or service-account key) is required on the VM, just as was required in the original AFDB download.
+
+### Results: 
+
+  "unique_acs_before_filter": 1199643,
+  "malformed_acs_dropped": 0,
+  "prefilter_applied": true,
+  "prefilter_removed": 619497,
+  "manifest_entries": 580146
+
+Therefore, there should be 580,146 structures that are uploaded to S3.
+
+
+## Step 5: Download and Upload to S3
+
+These scripts perform the GCP searches and the uploads of the corresponding structures to S3.
+
+Pilot to test the credentials for both GCP and S3.
+
+```bash
+python $SCRIPTS/fetch_afdb.py \
+    --manifest $OUT/manifests/afdb_manifest.txt \
+    --workdir $WORK/staging --s3 $S3/structures/ \
+    --ledger-dir $WORK/ledger --s3-ledger $S3/ledger/ \
+    --batch-size 1000 --jobs 32 --max-batches 1
+```
+
+Then the full run, under `tmux` so an SSH drop does not kill it:
+
+```bash
+nohup python $SCRIPTS/fetch_afdb.py \
+    --manifest $OUT/manifests/afdb_manifest.txt \
+    --workdir $WORK/staging --s3 $S3/structures/ \
+    --ledger-dir $WORK/ledger --s3-ledger $S3/ledger/ \
+    --batch-size 5000 --jobs 32 > $WORK/fetch.log 2>&1 &
+tail -f $WORK/fetch.log
+```
+
+After this step, all 580,146 structures were successfully uploaded, with no misses. Note that these structures contain embedded pLDDT information, which can be used to inform the next step in the HMM QC process.
+
+### Terminal output:
+```
+[+] Run complete.
+    batches run : 117
+    hits        : 580,146
+    misses      : 0
+    downloaded  : 242.33 GB in 400.4 min
+```
+
+
+
+# Step 6: Create a full mapping file for the downloaded structures.
+
+This script goes over the manifest file accessions and creates a mapping of them back to their row information in the input FASTA.
+
+```bash
+python $SCRIPTS/build_unfolded_fasta.py     $WORK/petadex-nr.v260701.significant-hits.fastaa --outdir $OUT     --record-accessions $OUT/record_accessions.tsv     --hits $OUT/manifest_acs.txt     --mapping refseq:$OUT/mappings/refseq_to_uniprot.tsv     --mapping genbank:$OUT/mappings/genbank_to_uniprot.tsv     --mapping uniprot:$OUT/mappings/uniprot_identity.tsv     --s3-prefix $S3/structures/
+```
+
+This mapping file is available at `s3://petadex-protein-structures/af_db_v260701/mappings/record_structure_map.tsv`.
+
+An example line is 
+```
+rec_id    query_petadex_id    component_id    matched_accession    uniprot_ac    s3_key
+7    PL138    C028    AVI23960    A0A2P1AFT5    s3://petadex-protein-structures/af_db_v260701/structures/AF-A0A2P1AFT5-F1-model_v4.cif
+```
+
+# Conclusions
+
+These conclusions are short and don't relate to the ultimate goal of HMM QC. However, 580k structures downloaded is very significant and worth doing, and these prefolded structures could be used for future analysis.

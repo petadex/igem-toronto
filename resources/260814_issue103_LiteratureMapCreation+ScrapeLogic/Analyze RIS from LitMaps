@@ -1,0 +1,151 @@
+import os
+import json
+import csv
+import re
+
+
+BASE_DOWNLOAD_DIR = r"C:\Users\somna\Downloads\Litmaps_Exports"
+CSV_OUTPUT_FILE = os.path.join(BASE_DOWNLOAD_DIR, "Master_Unique_Papers.csv")
+
+def sanitize_filename(name):
+    """Removes invalid characters from a string to make it a safe filename."""
+    # Replace invalid chars with an underscore
+    safe_name = re.sub(r'[\\/*?:"<>|]', '_', str(name))
+    # Truncate to avoid OS path length limits
+    return safe_name[:100]
+
+def parse_ris_file(filepath):
+    """
+    Parses an RIS file and returns a list of dictionaries, 
+    where each dictionary represents one paper.
+    """
+    papers = []
+    current_paper = {}
+    current_tag = None
+
+    with open(filepath, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # End of a single reference block
+            if line.startswith('ER  -'):
+                if current_paper:
+                    papers.append(current_paper)
+                    current_paper = {}
+                    current_tag = None
+                continue
+
+            # Check if the line starts a new tag (e.g., 'AB  - ', 'TI  - ')
+            if len(line) >= 6 and line[2:4] == '  ' and line[4] == '-':
+                current_tag = line[0:2]
+                value = line[6:].strip()
+                
+                if current_tag == 'AU':
+                    if 'authors' not in current_paper:
+                        current_paper['authors'] = []
+                    current_paper['authors'].append(value)
+                elif current_tag == 'TI':
+                    current_paper['title'] = value
+                elif current_tag == 'DO':
+                    current_paper['doi'] = value
+                elif current_tag == 'AB':
+                    current_paper['abstract'] = value
+                elif current_tag == 'PY':
+                    current_paper['year'] = value
+                elif current_tag == 'JO':
+                    current_paper['journal'] = value
+                else:
+                    # Capture any other tags dynamically
+                    current_paper[current_tag] = value
+            
+            # Handle multi-line strings (like long abstracts or titles)
+            elif current_tag:
+                if current_tag == 'AB' and 'abstract' in current_paper:
+                    current_paper['abstract'] += " " + line
+                elif current_tag == 'TI' and 'title' in current_paper:
+                    current_paper['title'] += " " + line
+                elif current_tag not in ['AU', 'DO', 'PY', 'JO'] and current_tag in current_paper:
+                    # For any other random multi-line tags
+                    current_paper[current_tag] += " " + line
+
+    return papers
+
+def process_directory():
+    total_raw_count = 0
+    unique_papers_db = {} # Key: DOI (or Title), Value: Paper Dictionary
+
+    print(f"Scanning directory: {BASE_DOWNLOAD_DIR}...\n")
+
+    # Walk through the root directory
+    for root, dirs, files in os.walk(BASE_DOWNLOAD_DIR):
+        for file in files:
+            if file.lower().endswith('.ris'):
+                ris_path = os.path.join(root, file)
+                
+                # Determine if we are in a 'refs' or 'cited by' folder for naming
+                parent_folder = os.path.basename(root).lower()
+                prefix = "ref" if parent_folder == "refs" else "cited"
+
+                # Parse the RIS file into individual papers
+                papers = parse_ris_file(ris_path)
+                
+                for paper in papers:
+                    total_raw_count += 1
+                    
+                    # Determine a unique ID (DOI preferred, Title fallback)
+                    doi = paper.get('doi', '')
+                    title = paper.get('title', '')
+                    unique_id = doi if doi else title
+                    
+                    if not unique_id:
+                        unique_id = f"Unknown_Paper_{total_raw_count}"
+
+                    # 1. Deduplication Logic
+                    if unique_id not in unique_papers_db:
+                        unique_papers_db[unique_id] = paper
+
+                    # 2. Save Individual JSON File
+                    safe_id = sanitize_filename(unique_id)
+                    json_filename = f"{prefix}-{safe_id}.json"
+                    json_filepath = os.path.join(root, json_filename)
+                    
+                    with open(json_filepath, 'w', encoding='utf-8') as jf:
+                        json.dump(paper, jf, indent=4, ensure_ascii=False)
+
+    return total_raw_count, unique_papers_db
+
+def export_to_csv(unique_papers_db):
+    """Writes the deduplicated database to a CSV file."""
+    headers = ['DOI', 'Title', 'Authors', 'Year', 'Journal', 'Abstract']
+    
+    with open(CSV_OUTPUT_FILE, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=headers)
+        writer.writeheader()
+        
+        for uid, paper in unique_papers_db.items():
+            # Format authors array into a single string separated by semicolons
+            authors_str = "; ".join(paper.get('authors', []))
+            
+            writer.writerow({
+                'DOI': paper.get('doi', 'N/A'),
+                'Title': paper.get('title', 'N/A'),
+                'Authors': authors_str,
+                'Year': paper.get('year', 'N/A'),
+                'Journal': paper.get('journal', 'N/A'),
+                'Abstract': paper.get('abstract', 'N/A')
+            })
+
+# --- EXECUTION ---
+if __name__ == "__main__":
+    raw_count, unique_db = process_directory()
+    export_to_csv(unique_db)
+    
+    print("="*50)
+    print("PROCESSING COMPLETE")
+    print("="*50)
+    print(f"Total DOIs Collected (Raw Count) : {raw_count}")
+    print(f"Total Unique DOIs (Deduplicated) : {len(unique_db)}")
+    print(f"Duplicates Removed               : {raw_count - len(unique_db)}")
+    print(f"\nDeduplicated CSV exported to     : {CSV_OUTPUT_FILE}")

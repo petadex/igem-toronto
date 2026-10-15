@@ -1,0 +1,218 @@
+import json
+import csv
+import os
+import re
+
+
+# CONFIGURATION
+
+PASS2_FILE = r"C:\Users\somna\Downloads\pass2_chunked_input_1785856651.jsonl.out"
+PASS1_FILE = r"C:\Users\somna\Downloads\batch_pass_1_1785723771.jsonl.out"
+
+BASE_DIR = os.path.dirname(PASS2_FILE)
+JSON_DIR = os.path.join(BASE_DIR, "extracted_jsons_pass2")
+CSV_DIR = os.path.join(BASE_DIR, "compiled_csvs_pass2")
+REPORT_FILE = os.path.join(BASE_DIR, "pass2_summary_report.txt")
+
+TABLE_NAMES = [
+    "experiments",
+    "plasmids",
+    "proteins",
+    "assay_variables",
+    "assays_main",
+    "activity"
+]
+
+os.makedirs(JSON_DIR, exist_ok=True)
+os.makedirs(CSV_DIR, exist_ok=True)
+
+def process_batch_files():
+    print(f"Reading Pass 2 data from:\n{PASS2_FILE}\n")
+    
+    # Use dictionaries with a frozenset hash to deduplicate rows across chunks of the same paper
+    csv_data_unique = {table: set() for table in TABLE_NAMES}
+    csv_data_dicts = {table: [] for table in TABLE_NAMES}
+    csv_headers = {table: set() for table in TABLE_NAMES}
+    
+    paper_metadata_unique = set()
+    paper_metadata_dicts = []
+    
+    failed_records = []
+    
+    metrics = {
+        "total_chunks_processed": 0,
+        "successful_chunks": 0,
+        "token_limit_count": 0,
+        "refusal_count": 0,
+        "json_error_count": 0,
+        "api_error_count": 0,
+        "unique_papers_seen": set()
+    }
+
+    with open(PASS2_FILE, 'r', encoding='utf-8') as infile:
+        for line_num, line in enumerate(infile):
+            if not line.strip():
+                continue
+                
+            metrics["total_chunks_processed"] += 1
+            
+            try:
+                aws_payload = json.loads(line)
+                chunk_id = aws_payload.get('recordId', f"chunk_{line_num}")
+                
+                # Extract original paper ID from chunk ID (e.g. "PaperID_P1_E1" -> "PaperID")
+                match = re.match(r'(.+)_P\d+_E\d+', chunk_id)
+                paper_id = match.group(1) if match else chunk_id
+                metrics["unique_papers_seen"].add(paper_id)
+                
+                # Catch top-level AWS errors
+                if 'error' in aws_payload:
+                    metrics["api_error_count"] += 1
+                    failed_records.append(f"{chunk_id} ({paper_id}): Bedrock API Error -> {aws_payload['error']}")
+                    continue
+
+                model_output = aws_payload.get('modelOutput', {})
+                stop_reason = model_output.get('stop_reason')
+                
+                if stop_reason == 'refusal':
+                    metrics["refusal_count"] += 1
+                    failed_records.append(f"{chunk_id} ({paper_id}): Safety Refusal")
+                    continue
+                    
+                if stop_reason == 'max_tokens':
+                    metrics["token_limit_count"] += 1
+                    failed_records.append(f"{chunk_id} ({paper_id}): Max Tokens Reached (JSON likely truncated)")
+                    continue
+
+                content = model_output.get('content', [])
+                if not content:
+                    failed_records.append(f"{chunk_id} ({paper_id}): Empty Content Array")
+                    continue
+                
+                raw_claude_text = content[0].get('text', '{}')
+                
+                # Strip markdown code blocks
+                if raw_claude_text.startswith("```json"):
+                    raw_claude_text = raw_claude_text.strip("`").removeprefix("json").strip()
+                elif raw_claude_text.startswith("```"):
+                    raw_claude_text = raw_claude_text.strip("`").strip()
+
+                try:
+                    parsed_data = json.loads(raw_claude_text)
+                except json.JSONDecodeError:
+                    metrics["json_error_count"] += 1
+                    failed_records.append(f"{chunk_id} ({paper_id}): JSON Decode Error")
+                    continue
+
+                # Save individual chunk JSON
+                json_path = os.path.join(JSON_DIR, f"{chunk_id}.json")
+                with open(json_path, 'w', encoding='utf-8') as jf:
+                    json.dump(parsed_data, jf, indent=4)
+
+                metrics["successful_chunks"] += 1
+
+                # Extract document metadata
+                meta_row = {
+                    "source_record_id": paper_id,
+                    "chunk_id": chunk_id,
+                    "Has_Plastic_Degrading_Enzyme": parsed_data.get("Has_Plastic_Degrading_Enzyme", "NOT_FOUND"),
+                    "Reasoning_Summary": parsed_data.get("Reasoning_Summary", "NOT_FOUND")
+                }
+                meta_hash = frozenset(meta_row.items())
+                if meta_hash not in paper_metadata_unique:
+                    paper_metadata_unique.add(meta_hash)
+                    paper_metadata_dicts.append(meta_row)
+
+                # Aggregate data for compiled CSVs with deduplication
+                for table_name in TABLE_NAMES:
+                    if table_name in parsed_data:
+                        rows = parsed_data[table_name]
+                        if isinstance(rows, list):
+                            for row in rows:
+                                if isinstance(row, dict):
+                                    # Add traceability keys
+                                    row['source_record_id'] = paper_id
+                                    row['source_chunk_id'] = chunk_id
+                                    
+                                    # Create a hashable version of the row to check for duplicates
+                                    # We exclude 'source_chunk_id' from the hash so identical entities 
+                                    # found in different chunks of the same paper are deduplicated.
+                                    hashable_row = frozenset({k: v for k, v in row.items() if k != 'source_chunk_id'}.items())
+                                    
+                                    if hashable_row not in csv_data_unique[table_name]:
+                                        csv_data_unique[table_name].add(hashable_row)
+                                        csv_data_dicts[table_name].append(row)
+                                        csv_headers[table_name].update(row.keys())
+
+            except Exception as e:
+                failed_records.append(f"Line {line_num}: Unexpected Error -> {str(e)}")
+
+
+    # CSV GENERATION
+
+    print("\n--- GENERATING CSVS ---")
+    for table_name in TABLE_NAMES:
+        if csv_data_dicts[table_name]:
+            output_csv_path = os.path.join(CSV_DIR, f"{table_name}_compiled.csv")
+            headers = list(csv_headers[table_name])
+            
+            # Reorder columns for readability
+            for col in ['source_chunk_id', 'source_record_id']:
+                if col in headers:
+                    headers.remove(col)
+                    headers.insert(0, col)
+
+            with open(output_csv_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=headers)
+                writer.writeheader()
+                writer.writerows(csv_data_dicts[table_name])
+            print(f"Created {table_name}_compiled.csv ({len(csv_data_dicts[table_name])} unique rows)")
+            
+    if paper_metadata_dicts:
+        metadata_csv_path = os.path.join(CSV_DIR, "document_metadata_compiled.csv")
+        metadata_headers = ["source_record_id", "chunk_id", "Has_Plastic_Degrading_Enzyme", "Reasoning_Summary"]
+        with open(metadata_csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=metadata_headers)
+            writer.writeheader()
+            writer.writerows(paper_metadata_dicts)
+        print(f"Created document_metadata_compiled.csv ({len(paper_metadata_dicts)} rows)")
+
+
+    # SUMMARY REPORT GENERATION
+
+    report_content = [
+        
+        "      PASS 2 EXTRACTION SUMMARY REPORT    ",
+        
+        f"Total Chunks Processed:      {metrics['total_chunks_processed']}",
+        f"Total Unique Papers Seen:    {len(metrics['unique_papers_seen'])}",
+        f"Successfully Parsed Chunks:  {metrics['successful_chunks']}",
+        "",
+        "--- ERROR METRICS ---",
+        f"Max Token Limits Hit:        {metrics['token_limit_count']} (Outputs truncated)",
+        f"Safety Refusals:             {metrics['refusal_count']}",
+        f"JSON Formatting Errors:      {metrics['json_error_count']}",
+        f"Bedrock API Errors:          {metrics['api_error_count']}",
+        "",
+        " DATA EXTRACTED (Deduplicated) "
+    ]
+    
+    for table in TABLE_NAMES:
+        report_content.append(f"{table.capitalize():<18}: {len(csv_data_dicts[table])} rows")
+        
+    report_content.append("\n--- FAILED RECORD LOG ---")
+    if failed_records:
+        report_content.extend(failed_records)
+    else:
+        report_content.append("No failures detected. 100% success rate.")
+
+    report_string = "\n".join(report_content)
+    
+    with open(REPORT_FILE, 'w', encoding='utf-8') as rf:
+        rf.write(report_string)
+        
+    print("\n" + "\n".join(report_content[:17]))
+    print(f"\nFull summary and error log saved to:\n  {REPORT_FILE}")
+
+if __name__ == "__main__":
+    process_batch_files()

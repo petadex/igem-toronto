@@ -1,0 +1,186 @@
+import os
+import re
+import csv
+import json
+import torch
+import torch.nn.functional as F
+import pandas as pd
+from transformers import AutoTokenizer, AutoModel
+
+
+# CONFIGURATION
+
+# We use a lightweight DeBERTa model for accurate sentence embeddings
+MODEL_NAME = "microsoft/deberta-v3-small"
+LEXICAL_THRESHOLD = 0.75
+SEMANTIC_THRESHOLD = 0.85
+WINDOW_SIZE = 60
+
+# Paths (Update these to match your local directories)
+CSV_DIR = r"C:\Users\somna\source\repos\metadata feature extraction\Download batch inference output\final_results\compiled_csvs"
+
+OUTPUT_DIR = r"C:\Users\somna\Downloads\verified_csvs"
+SOURCE_DIR = r"C:\Users\somna\Downloads\Plastic_Degradation_Yes_Classified"
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+
+# TRANSFORMER INITIALIZATION
+
+print(f"Loading {MODEL_NAME}...")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = AutoModel.from_pretrained(MODEL_NAME)
+model.eval()
+
+# Push to GPU if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+print(f"Model loaded on {device}")
+
+def mean_pooling(model_output, attention_mask):
+    """Pools token embeddings into a single sentence vector."""
+    token_embeddings = model_output[0]
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+
+def get_embedding(text):
+    """Generates a semantic embedding vector for a given text."""
+    inputs = tokenizer(text, padding=True, truncation=True, max_length=512, return_tensors="pt").to(device)
+    with torch.no_grad():
+        outputs = model(**inputs)
+    embedding = mean_pooling(outputs, inputs['attention_mask'])
+    return F.normalize(embedding, p=2, dim=1)
+
+
+# VERIFICATION FUNCTIONS
+
+def verify_value_in_evidence(extracted_value, evidence_sentence):
+    """Checks if the extracted variable exists in the Claude-provided sentence."""
+    if pd.isna(extracted_value) or str(extracted_value).strip().upper() == "NOT_FOUND":
+        return True
+    
+    val_lower = str(extracted_value).lower()
+    evidence_lower = str(evidence_sentence).lower()
+    return val_lower in evidence_lower
+
+def tokenize_text(text):
+    """Strips punctuation and returns a set of lowercase words."""
+    text = re.sub(r'[^\w\s]', '', str(text))
+    return set(text.lower().split())
+
+def verify_evidence_in_source(evidence_sentence, original_document_text):
+    """
+    Two-tier verification:
+    1. Fast Lexical Window (Token overlap)
+    2. Deep Semantic Window (Transformer cosine similarity)
+    """
+    if pd.isna(evidence_sentence) or str(evidence_sentence).strip().upper() == "NOT_FOUND":
+        return False, "NO_EVIDENCE_PROVIDED"
+
+    # --- TIER 1: Lexical Check ---
+    evidence_tokens = tokenize_text(evidence_sentence)
+    source_words = re.sub(r'[^\w\s]', '', str(original_document_text)).lower().split()
+    
+    if not evidence_tokens or not source_words:
+        return False, "EMPTY_TEXT"
+
+    # Slide window for lexical overlap
+    for i in range(len(source_words) - WINDOW_SIZE + 1):
+        window_tokens = set(source_words[i : i + WINDOW_SIZE])
+        overlap = len(evidence_tokens.intersection(window_tokens))
+        match_ratio = overlap / len(evidence_tokens)
+        
+        if match_ratio >= LEXICAL_THRESHOLD:
+            return True, "LEXICAL_MATCH"
+
+    # --- TIER 2: Semantic Check (Fallback) ---
+    # Only runs if lexical matching fails due to artifacts or rephrasing
+    evidence_emb = get_embedding(evidence_sentence)
+    
+    # Re-chunk source text into strings rather than isolated tokens
+    source_sentences = str(original_document_text).split('. ')
+    
+    for i in range(0, len(source_sentences), 3):
+        # Group 3 sentences together to capture context around artifacts
+        chunk = ". ".join(source_sentences[i:i+3])
+        if len(chunk.strip()) < 10:
+            continue
+            
+        chunk_emb = get_embedding(chunk)
+        similarity = F.cosine_similarity(evidence_emb, chunk_emb).item()
+        
+        if similarity >= SEMANTIC_THRESHOLD:
+            return True, f"SEMANTIC_MATCH_({round(similarity, 2)})"
+
+    return False, "NO_MATCH_FOUND"
+
+
+def load_source_document(record_id):
+    """Loads the original text directly from your classified directory."""
+    # Append .json to the record_id to find the matching file
+    file_path = os.path.join(SOURCE_DIR, f"{record_id}.json")
+    
+    # Fallback in case the record_id already includes the extension
+    if not os.path.exists(file_path):
+        file_path = os.path.join(SOURCE_DIR, str(record_id))
+        if not os.path.exists(file_path):
+            return ""
+            
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            # Reading the entire file content ensures we capture all text 
+            # regardless of how the JSON is structured internally
+            return f.read()
+    except Exception as e:
+        print(f"Error reading source file for {record_id}: {e}")
+        return ""
+
+
+# MAIN EXECUTION
+
+
+def main():
+    # Process Assay Variables Table (Example)
+    target_csv = os.path.join(CSV_DIR, "activity_compiled.csv")
+    output_csv = os.path.join(OUTPUT_DIR, "activity_compiled.csv")
+    
+    if not os.path.exists(target_csv):
+        print(f"Could not find {target_csv}")
+        return
+
+    print("Verifying assay variables against local source files...")
+    df = pd.read_csv(target_csv)
+    
+    # Add new verification columns
+    df['Value_In_Evidence'] = False
+    df['Evidence_In_Source'] = False
+    df['Verification_Method'] = "UNTESTED"
+
+    for index, row in df.iterrows():
+        record_id = row.get('source_record_id')
+        evidence = row.get('evidence_sentence')
+        value = row.get('value')
+        
+        # Check 1: Did Claude pull the value from the sentence it cited?
+        df.at[index, 'Value_In_Evidence'] = verify_value_in_evidence(value, evidence)
+        
+        # Check 2: Load the source file and verify the evidence exists
+        doc_text = load_source_document(record_id)
+        
+        if doc_text:
+            is_valid, method = verify_evidence_in_source(evidence, doc_text)
+            df.at[index, 'Evidence_In_Source'] = is_valid
+            df.at[index, 'Verification_Method'] = method
+        else:
+            df.at[index, 'Verification_Method'] = "SOURCE_FILE_MISSING"
+
+        if index > 0 and index % 100 == 0:
+            print(f"Processed {index} records...")
+
+    # Save Verified Results
+    df.to_csv(output_csv, index=False, encoding='utf-8')
+    print(f"Verification complete. Saved to {output_csv}")
+
+if __name__ == "__main__":
+    main()

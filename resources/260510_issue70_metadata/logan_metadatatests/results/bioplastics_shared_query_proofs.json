@@ -1,0 +1,27 @@
+{
+  "count_all_sequences": {
+    "no_bioplastics_metadata": "1af029c7e5212a7ec9430ee5ccae926abc45e021d5ba6f78a9c04269acd1d737",
+    "bioplastics_metadata": "1af029c7e5212a7ec9430ee5ccae926abc45e021d5ba6f78a9c04269acd1d737",
+    "equivalent": true
+  },
+  "average_sequence_length": {
+    "no_bioplastics_metadata": "437e50c6eb047737406342895d4df613984ad774d4940681597266bb55546c3a",
+    "bioplastics_metadata": "437e50c6eb047737406342895d4df613984ad774d4940681597266bb55546c3a",
+    "equivalent": true
+  },
+  "gc_range_count": {
+    "no_bioplastics_metadata": "6ac8ea2176f6fa0c78566e6f682bc7850e66f1b7561cf778525a3f9147b0e5d8",
+    "bioplastics_metadata": "6ac8ea2176f6fa0c78566e6f682bc7850e66f1b7561cf778525a3f9147b0e5d8",
+    "equivalent": true
+  },
+  "top_100_longest": {
+    "no_bioplastics_metadata": "d06cf2b38754a35bec4e0f3fd9bc4f57c97f93fd76fd01f1993f46e2dfea557a",
+    "bioplastics_metadata": "d06cf2b38754a35bec4e0f3fd9bc4f57c97f93fd76fd01f1993f46e2dfea557a",
+    "equivalent": true
+  },
+  "plastic_context_sequence_count": {
+    "no_bioplastics_metadata": "d96daf6772a9ee3fd16414665aeb375b4eee1a699ef17ad63ee7ff1df3f05f36",
+    "bioplastics_metadata": "d96daf6772a9ee3fd16414665aeb375b4eee1a699ef17ad63ee7ff1df3f05f36",
+    "equivalent": true
+  }
+}

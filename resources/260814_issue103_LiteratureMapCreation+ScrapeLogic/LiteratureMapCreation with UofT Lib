@@ -1,0 +1,466 @@
+# UofT Lib database does not hold enough space for me to traverse through several pages of "cited by" and "this article cites" making this method unusable...
+import os
+import json
+import glob
+import time
+import random
+import re
+import pyautogui
+import undetected_chromedriver as uc
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+
+# --- Configuration & Variables ---
+JSON_DIR = r"C:\Users\somna\Downloads\PAZY_jsons_Merged"
+BASE_DOWNLOAD_DIR = r"C:\Users\somna\Downloads\literature map"
+LOG_FILE = os.path.join(BASE_DOWNLOAD_DIR, "processed_dois.txt")
+
+SEARCH_INPUT_SELECTOR = "input#main-search-bar"
+SEARCH_BUTTON_SELECTOR = "button[aria-label='Submit search']"
+CITED_BY_SELECTOR = "a[data-qa='record_cited_by']"
+THIS_ARTICLE_CITES_SELECTOR = "a[data-qa='record_cited_in']"
+BUTTON_SELECTOR = "button[aria-label='Download PDF']"
+NEXT_PAGE_SELECTOR = "button[aria-label='Go to next page'], a[aria-label='Next page']"
+
+if not os.path.exists(BASE_DOWNLOAD_DIR):
+    os.makedirs(BASE_DOWNLOAD_DIR)
+
+processed_dois = set()
+if os.path.exists(LOG_FILE):
+    with open(LOG_FILE, "r", encoding="utf-8") as f:
+        processed_dois = set(line.strip() for line in f if line.strip())
+
+prefs = {
+    "download.default_directory": os.path.abspath(BASE_DOWNLOAD_DIR),
+    "download.prompt_for_download": False,
+    "plugins.always_open_pdf_externally": True,
+    "profile.default_content_setting_values.popups": 1 
+}
+
+options = uc.ChromeOptions()
+options.add_experimental_option("prefs", prefs)
+driver = uc.Chrome(options=options)
+
+def set_cdp_download_directory(driver, target_dir):
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir)
+    driver.execute_cdp_cmd("Page.setDownloadBehavior", {
+        "behavior": "allow",
+        "downloadPath": os.path.abspath(target_dir)
+    })
+    print(f"CDP: Download location redirected to: {target_dir}")
+
+def sanitize_doi(doi):
+    return doi.replace("/", "_").replace(":", "-")
+
+def get_dois_from_jsons(folder_path):
+    dois = []
+    json_files = glob.glob(os.path.join(folder_path, "*.json"))
+    for file_path in json_files:
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict) and data.get("doi"):
+                    dois.append(data["doi"])
+        except Exception as e:
+            print(f"Error parsing file mapping {file_path}: {e}")
+    return dois
+
+def get_current_files(directory):
+    if not os.path.exists(directory):
+        return set()
+    return set(os.listdir(directory))
+
+def wait_for_new_download(directory, before_files, timeout=30):
+    print(f"Polling directory for new file up to {timeout} seconds...")
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        current_files = get_current_files(directory)
+        new_files = current_files - before_files
+        valid_files = [f for f in new_files if not f.endswith('.crdownload') and not f.endswith('.tmp')]
+        if valid_files:
+            print(f"Success! Download detected: {valid_files[0]}")
+            return True
+        time.sleep(1)
+    print("Download polling timed out. Considered a failure.")
+    return False
+
+def verify_url_offset(driver, intended_page):
+    current_url = driver.current_url
+    expected_offset = (intended_page - 1) * 50
+    match = re.search(r"[?&]offset=(\d+)", current_url)
+    if match:
+        actual_offset = int(match.group(1))
+        if actual_offset != expected_offset:
+            print(f"Warning: URL offset mismatch! Page {intended_page} expects offset {expected_offset}, but current URL is offset {actual_offset}.")
+            return False
+        return True
+    return False
+
+def navigate_to_page_by_numbers(driver, target_page):
+    if target_page <= 1:
+        return True
+        
+    while True: 
+        print(f"Navigating directly to page {target_page} using numbered buttons...")
+        last_max_page = 0
+        stuck_counter = 0
+        
+        while True: 
+            try:
+                WebDriverWait(driver, 60).until(
+                    lambda d: d.find_elements(By.CSS_SELECTOR, "button.page-number") or 
+                              d.find_elements(By.XPATH, "//*[contains(text(), 'No Records Found')]")
+                )
+            except TimeoutException:
+                print("Timeout waiting for pagination buttons to appear.")
+                return False
+
+            if driver.find_elements(By.XPATH, "//*[contains(text(), 'No Records Found')]"):
+                print("Session death detected during navigation skip.")
+                return False 
+            
+            try:
+                page_buttons = driver.find_elements(By.CSS_SELECTOR, "button.page-number")
+                available_pages = {}
+                for btn in page_buttons:
+                    text_val = btn.text.strip()
+                    if text_val.isdigit():
+                        available_pages[int(text_val)] = btn
+                        
+                if not available_pages:
+                    return False
+                    
+                if target_page in available_pages:
+                    target_btn = available_pages[target_page]
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", target_btn)
+                    time.sleep(1)
+                    target_btn.click()
+                    try:
+                        WebDriverWait(driver, 15).until(EC.staleness_of(target_btn))
+                    except:
+                        pass
+                    return True 
+                else:
+                    max_page = max(available_pages.keys())
+                    if max_page == last_max_page:
+                        stuck_counter += 1
+                        if stuck_counter >= 3:
+                            return False
+                    else:
+                        stuck_counter = 0
+                        
+                    last_max_page = max_page
+                    max_btn = available_pages[max_page]
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", max_btn)
+                    time.sleep(1)
+                    max_btn.click()
+                    try:
+                        WebDriverWait(driver, 15).until(EC.staleness_of(max_btn))
+                    except:
+                        pass
+            except Exception as e:
+                print(f"Pagination navigation encountered an error: {e}")
+                return False
+
+def execute_citation_recovery(driver, doi, citation_selector, target_page):
+    print(f"Executing Deep Recovery for DOI {doi} -> Citation Layer -> Page {target_page}")
+    driver.get("https://librarysearch.library.utoronto.ca")
+    time.sleep(3)
+    
+    try:
+        search_input = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, SEARCH_INPUT_SELECTOR)))
+        search_input.clear()
+        search_input.send_keys(doi)
+        driver.find_element(By.CSS_SELECTOR, SEARCH_BUTTON_SELECTOR).click()
+        
+        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, citation_selector)))
+        cit_btn = driver.find_element(By.CSS_SELECTOR, citation_selector)
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", cit_btn)
+        time.sleep(1)
+        cit_btn.click()
+        
+        WebDriverWait(driver, 20).until(
+            lambda d: d.find_elements(By.CSS_SELECTOR, BUTTON_SELECTOR) or 
+                      d.find_elements(By.XPATH, "//*[contains(text(), 'No Records Found')]")
+        )
+        
+        if target_page > 1:
+            success = navigate_to_page_by_numbers(driver, target_page)
+            return success
+        return True
+    except Exception as e:
+        print(f"Deep recovery completely failed: {e}")
+        return False
+
+def handle_science_direct_bot_check(driver):
+    bot_check_indicators = [
+        "//*[contains(text(), 'Please confirm you are a human')]",
+        "//*[contains(text(), 'Verify you are human')]"
+    ]
+    is_bot_page = False
+    for xpath in bot_check_indicators:
+        if driver.find_elements(By.XPATH, xpath):
+            is_bot_page = True
+            break
+    if is_bot_page:
+        print("Bot verification page detected. Attempting bypass...")
+        time.sleep(2)
+        try:
+            checkbox = driver.find_element(By.XPATH, "//label[contains(., 'Verify you are human')]//input[@type='checkbox']")
+            driver.execute_script("arguments[0].click();", checkbox)
+            print("Successfully clicked verification checkbox via HTML.")
+            time.sleep(5)
+            return
+        except Exception:
+            print("HTML checkbox selection unavailable or blocked. Trying PyAutoGUI fallback...")
+        pyautogui.moveTo(684, 357, duration=0.6)
+        pyautogui.click()
+        print("Triggered PyAutoGUI click at coordinates (684, 357).")
+        time.sleep(5)
+
+def download_visible_results(driver, main_window, current_download_dir):
+    try:
+        WebDriverWait(driver, 30).until(
+            lambda d: d.find_elements(By.CSS_SELECTOR, BUTTON_SELECTOR) or 
+                      d.find_elements(By.XPATH, "//*[contains(text(), 'No Records Found')]")
+        )
+    except TimeoutException:
+        print("Timeout waiting for data components on this canvas layout layer.")
+        return
+
+    buttons = driver.find_elements(By.CSS_SELECTOR, BUTTON_SELECTOR)
+    total_buttons = len(buttons)
+    print(f"Found {total_buttons} download indicators on this sub-page layer.")
+
+    for i in range(total_buttons):
+        download_successful = False
+        
+        for attempt in range(2): 
+            print(f"Processing item {i + 1}/{total_buttons} (Attempt {attempt + 1}/2)...")
+            time.sleep(random.uniform(4.0, 7.0))
+
+            files_before_click = get_current_files(current_download_dir)
+
+            try:
+                buttons = driver.find_elements(By.CSS_SELECTOR, BUTTON_SELECTOR)
+                current_button = buttons[i]
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", current_button)
+                time.sleep(1.5)
+                
+                pre_click_windows = driver.window_handles
+                current_button.click()
+            except Exception as e:
+                print(f"Skipping index {i} due to structural interaction drop: {e}")
+                continue
+
+            time.sleep(3)
+            post_click_windows = driver.window_handles
+
+            if len(post_click_windows) == len(pre_click_windows):
+                print("No new visual tab opened. Document assumed fetching directly via background channels.")
+                download_successful = wait_for_new_download(current_download_dir, files_before_click, timeout=30)
+                
+                time.sleep(1)
+                pyautogui.moveTo(147, 610, duration=0.5)
+                pyautogui.click()
+                time.sleep(3)
+                
+            else:
+                new_tab = [window for window in post_click_windows if window not in pre_click_windows]
+                if new_tab:
+                    driver.switch_to.window(new_tab[0])
+                    time.sleep(2)
+                    current_url = driver.current_url.lower()
+                    print(f"Opened target URL link context: {current_url}")
+                    
+                    handle_science_direct_bot_check(driver)
+
+                    try:
+                        if "epdf" in current_url or "viewer" in current_url:
+                            print("EPUB/Viewer detected. Waiting for the document renderer to initialize...")
+                            try:
+                                WebDriverWait(driver, 30).until(
+                                    lambda d: d.execute_script("return document.readyState") == "complete"
+                                )
+                            except TimeoutException:
+                                print("Page load timed out, but proceeding with clicks anyway...")
+                            
+                            time.sleep(4)
+                            print("Attempting PyAutoGUI automated fallback clicks...")
+                            pyautogui.moveTo(1880, 123, duration=0.5)
+                            pyautogui.click()
+                            time.sleep(1.5)
+                            
+                            print("Executing neutral click to close dropdown menu...")
+                            pyautogui.moveTo(1850, 353, duration=0.5)
+                            pyautogui.click()
+                            
+                            download_successful = wait_for_new_download(current_download_dir, files_before_click, timeout=30)
+                            
+                        else:
+                            print("Publisher landing page detected. Scanning for download targets...")
+                            alt_buttons = driver.find_elements(By.XPATH, "//*[self::button or self::a][@id='new-download-btn' or contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download') or contains(translate(@title, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'download')]")
+                            pdf_links = driver.find_elements(By.XPATH, "//a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'pdf')]")
+                            
+                            if alt_buttons:
+                                print("Found alternative download button. Clicking...")
+                                driver.execute_script("arguments[0].click();", alt_buttons[0])
+                                handle_science_direct_bot_check(driver)
+                                download_successful = wait_for_new_download(current_download_dir, files_before_click, timeout=30)
+                            elif pdf_links:
+                                print("Found direct PDF text link. Clicking...")
+                                driver.execute_script("arguments[0].click();", pdf_links[0])
+                                handle_science_direct_bot_check(driver)
+                                download_successful = wait_for_new_download(current_download_dir, files_before_click, timeout=30)
+                            else:
+                                print("No clear download buttons found. Waiting to see if background download triggered anyway...")
+                                download_successful = wait_for_new_download(current_download_dir, files_before_click, timeout=30)
+                                
+                    except Exception as inner_e:
+                        print(f"Pipeline error inside secondary frame logic: {inner_e}")
+
+                    driver.close()
+                    driver.switch_to.window(main_window)
+                    time.sleep(1)
+            
+            if download_successful:
+                break
+            else:
+                print("Download failed or timed out. Looping back for another attempt...")
+
+def process_citation_layer(driver, main_window, download_dir, doi, citation_selector):
+    current_page = 1
+    while True:
+        print(f"\n--- Citation Page {current_page} ---")
+        
+        try:
+            WebDriverWait(driver, 20).until(
+                lambda d: d.find_elements(By.CSS_SELECTOR, BUTTON_SELECTOR) or 
+                          d.find_elements(By.XPATH, "//*[contains(text(), 'No Records Found')]")
+            )
+        except TimeoutException:
+            pass
+
+        if driver.find_elements(By.XPATH, "//*[contains(text(), 'No Records Found')]"):
+            print("Glitch detected! Initiating recovery sequence...")
+            recovered = execute_citation_recovery(driver, doi, citation_selector, current_page)
+            if not recovered:
+                print("Recovery failed. Aborting this citation thread.")
+                break
+
+        download_visible_results(driver, main_window, download_dir)
+
+        try:
+            next_button = driver.find_element(By.CSS_SELECTOR, NEXT_PAGE_SELECTOR)
+            if next_button.get_attribute("disabled") or "disabled" in next_button.get_attribute("class"):
+                print("Next button disabled. Reached end of citations.")
+                break
+
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", next_button)
+            time.sleep(1)
+            
+            old_elements = driver.find_elements(By.CSS_SELECTOR, BUTTON_SELECTOR)
+            old_ref = old_elements[0] if old_elements else None
+            
+            next_button.click()
+            current_page += 1
+            print("Clicked Next Page. Loading...")
+            
+            if old_ref:
+                try:
+                    WebDriverWait(driver, 15).until(EC.staleness_of(old_ref))
+                except:
+                    pass
+            verify_url_offset(driver, current_page)
+            
+        except NoSuchElementException:
+            print("No 'Next Page' button found. Reached end of citations.")
+            break
+
+# --- Initial Environment Validation ---
+print("Waking system layer engine...")
+driver.get("https://librarysearch.library.utoronto.ca")
+input("Log in entirely via UToronto WebLogin / MFA options. Navigate to a base search page, then press Enter to start...")
+
+main_window = driver.current_window_handle
+target_dois = get_dois_from_jsons(JSON_DIR)
+print(f"Discovered {len(target_dois)} unique record mappings inside target folder pipeline.")
+
+dois_completed_this_session = 0
+
+# --- Master Evaluation Sequencing Loop ---
+for doi in target_dois:
+    if doi in processed_dois:
+        print(f"Skipping DOI (Already indexed in tracking file): {doi}")
+        continue
+
+    print(f"\nEvaluating target entity DOI context node: {doi}")
+    sanitized = sanitize_doi(doi)
+    
+    doi_root_dir = os.path.join(BASE_DOWNLOAD_DIR, sanitized)
+    cited_by_dir = os.path.join(doi_root_dir, "cited by")
+    this_article_cites_dir = os.path.join(doi_root_dir, "this article cites")
+
+    # Step 1: Process "This Article Cites"
+    print("\n[Phase 1] Processing original source layout foundations ('This Article Cites')...")
+    driver.get("https://librarysearch.library.utoronto.ca")
+    time.sleep(3)
+    try:
+        search_input = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, SEARCH_INPUT_SELECTOR)))
+        search_input.clear()
+        search_input.send_keys(doi)
+        driver.find_element(By.CSS_SELECTOR, SEARCH_BUTTON_SELECTOR).click()
+        
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, THIS_ARTICLE_CITES_SELECTOR)))
+        set_cdp_download_directory(driver, this_article_cites_dir)
+        cites_btn = driver.find_element(By.CSS_SELECTOR, THIS_ARTICLE_CITES_SELECTOR)
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", cites_btn)
+        time.sleep(1)
+        cites_btn.click()
+        process_citation_layer(driver, main_window, this_article_cites_dir, doi, THIS_ARTICLE_CITES_SELECTOR)
+    except TimeoutException:
+        print(f"No 'This Article Cites' button found on the page for DOI {doi}. Moving to next phase.")
+    except Exception as err:
+        print(f"Skipping 'This Article Cites' branch due to object execution exceptions: {err}")
+
+    # Step 2: Process "Cited By"
+    print("\n[Phase 2] Processing structural citation dependencies ('Cited By')...")
+    driver.get("https://librarysearch.library.utoronto.ca")
+    time.sleep(3)
+    try:
+        search_input = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, SEARCH_INPUT_SELECTOR)))
+        search_input.clear()
+        search_input.send_keys(doi)
+        driver.find_element(By.CSS_SELECTOR, SEARCH_BUTTON_SELECTOR).click()
+        
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, CITED_BY_SELECTOR)))
+        set_cdp_download_directory(driver, cited_by_dir)
+        cited_by_btn = driver.find_element(By.CSS_SELECTOR, CITED_BY_SELECTOR)
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", cited_by_btn)
+        time.sleep(1)
+        cited_by_btn.click()
+        process_citation_layer(driver, main_window, cited_by_dir, doi, CITED_BY_SELECTOR)
+    except TimeoutException:
+        print(f"No 'Cited By' button found on the page for DOI {doi}. Moving to file tracking.")
+    except Exception as err:
+        print(f"Skipping 'Cited By' branch due to object execution exceptions: {err}")
+
+    with open(LOG_FILE, "a", encoding="utf-8") as log:
+        log.write(f"{doi}\n")
+        log.flush()
+    
+    processed_dois.add(doi)
+    dois_completed_this_session += 1
+    print(f"Successfully processed and mapped item node: {doi}")
+
+    if dois_completed_this_session % 2 == 0:
+        print("\nMACRO BREAK PROTOCOL ACTIVATED")
+        print("Completed 2 DOIs. Sleeping for 15 minutes to regulate request cadence...")
+        time.sleep(900)
+        print("Resuming operation...")
+
+print("\nAll JSON configurations parsed and evaluated. Exiting workflow engine structure cleanly.")
+driver.quit()

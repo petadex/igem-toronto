@@ -1,0 +1,129 @@
+{
+  "manifest_created_at_utc": "2026-09-08T03:41:26.186819+00:00",
+  "rule_set_version": "bioplastics-metadata-rules-1",
+  "source_urls": {
+    "PlasticDB": "https://plasticdb.org/static/degraders_list.tsv",
+    "PAZy": "https://www.pazy.eu/proteins",
+    "UniProt": "https://rest.uniprot.org/uniprotkb/{accession}.fasta",
+    "Logan": "https://s3.amazonaws.com/logan-pub/c/{accession}/{accession}.contigs.fa.zst",
+    "ENA": "https://www.ebi.ac.uk/ena/portal/api/filereport"
+  },
+  "plasticdb_raw_path": "/home/runner/workspace/plastic-biodegradation-analysis/data/plasticdb_microorganisms.tsv",
+  "plasticdb_raw_sha256": "ab6470c995b9bbb318fed02848b2a08533b7850d92d6b28e9b17ae4a4b2cdf8e",
+  "plasticdb_snapshot_mtime_utc": "2026-05-23T14:39:01.290743+00:00",
+  "plasticdb_scored_path": "/home/runner/workspace/plastic-biodegradation-analysis/outputs/reports/plasticdb_scored.csv",
+  "plasticdb_scored_sha256": "556b6faff4da3613b2fa4af59a82850f2593dc6c677a58d86df212fc7e9eb78e",
+  "plasticdb_scored_snapshot_mtime_utc": "2026-05-23T14:50:45.768743+00:00",
+  "pazy_path": "/home/runner/workspace/plastic-biodegradation-analysis/outputs/reports/pazy_proteins.csv",
+  "pazy_sha256": "7d85a0a3fde8a44d7930268ca9541cf301766c8f7764ab336272e4ca3edd4fb2",
+  "pazy_snapshot_mtime_utc": "2026-05-23T14:50:45.788743+00:00",
+  "unique_reference_sequences": 323,
+  "unique_reference_sequence_hashes": 323,
+  "annotation_rows": 534,
+  "reference_fasta_sha256": "e59e7ca9a3ef1cb280b6e5af933c1356fc2771cc0c309b3f6e936a245c6c3a3c",
+  "thresholds": {
+    "evalue_max": 1e-05,
+    "identity_min_pct": 30.0,
+    "aligned_aa_min": 50,
+    "subject_coverage_min": 0.5
+  },
+  "threshold_interpretation": "Heuristic candidate-similarity retrieval filter only; not calibrated to infer plastic-degradation function.",
+  "threshold_rationale": {
+    "evalue_max": "Limits chance alignments in this reference search.",
+    "identity_min_pct": "Permissive remote-similarity screen.",
+    "aligned_aa_min": "Rejects very short local motif matches.",
+    "subject_coverage_min": "Requires at least half of the reference protein span."
+  },
+  "plastic_classification_scope": "Broad study category combining bio-based and/or biodegradable polymers; it does not assert that every material is both.",
+  "bioplastic_or_biodegradable_normalized_prefixes": [
+    "PHA",
+    "PHB",
+    "PHO",
+    "PHV",
+    "P3H",
+    "P4H",
+    "PLA",
+    "PCL",
+    "PBS",
+    "PBAT",
+    "PES",
+    "PEC",
+    "PVA",
+    "OPVA",
+    "PEF",
+    "PEA",
+    "PBSET",
+    "PTS",
+    "PTC"
+  ],
+  "commercial_biodegradable_formulations": [
+    "ECOVIOFT",
+    "IMPRANIL"
+  ],
+  "classification_expectations": {
+    "PHO": "bioplastic_or_biodegradable_polymer",
+    "PHV": "bioplastic_or_biodegradable_polymer",
+    "P3HP": "bioplastic_or_biodegradable_polymer",
+    "P3HV": "bioplastic_or_biodegradable_polymer",
+    "P(3HB-co-3HV)": "bioplastic_or_biodegradable_polymer",
+    "P(3HB-co-3MP)": "bioplastic_or_biodegradable_polymer",
+    "P(3HB-co-4HB)": "bioplastic_or_biodegradable_polymer",
+    "PEF": "bioplastic_or_biodegradable_polymer",
+    "PEA": "bioplastic_or_biodegradable_polymer",
+    "PBSeT": "bioplastic_or_biodegradable_polymer",
+    "PTS": "bioplastic_or_biodegradable_polymer",
+    "PTC": "bioplastic_or_biodegradable_polymer",
+    "Impranil": "commercial_biodegradable_formulation",
+    "Ecovio-FT": "commercial_biodegradable_formulation",
+    "NR": "natural_biopolymer"
+  },
+  "classification_audit_path": "/home/runner/workspace/logan-database-benchmarks/results/plastic_classification_audit.csv",
+  "classification_audit_sha256": "b2040d94896745203464ecc7b88cf03202ae472b8cc92139199571a0e90c317e",
+  "classification_normalization": "Uppercase and remove non-alphanumeric characters before prefix matching.",
+  "deliberate_separation": "Impranil and Ecovio-FT are reported as commercial biodegradable formulations rather than polymer identities. Natural rubber (NR) is reported as a natural biopolymer rather than a plastic.",
+  "enzyme_family_keyword_rules": {
+    "PETase": [
+      "petase",
+      "pet hydrolase",
+      "pet-hydrolas"
+    ],
+    "Cutinase": [
+      "cutin",
+      "cutinase",
+      "lcc"
+    ],
+    "Lipase/esterase": [
+      "lipase",
+      "esterase",
+      "carboxylesterase"
+    ],
+    "Laccase": [
+      "laccase",
+      "multicopper oxidase"
+    ],
+    "Peroxidase": [
+      "peroxidase"
+    ],
+    "Depolymerase": [
+      "depolymerase"
+    ],
+    "Protease": [
+      "protease",
+      "subtilisin"
+    ],
+    "Alkane hydroxylase": [
+      "alkane hydroxylase",
+      "monooxygenase",
+      "alkb"
+    ],
+    "Oxidase": [
+      "oxidase",
+      "catalase"
+    ]
+  },
+  "petadex_derivations": [
+    "bioplastic classification",
+    "enzyme-family classification",
+    "ProtParam biochemical properties"
+  ]
+}

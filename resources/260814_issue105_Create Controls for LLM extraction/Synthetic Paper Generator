@@ -1,0 +1,165 @@
+import os
+import json
+import boto3
+from pathlib import Path
+from botocore.config import Config
+
+# --- CONFIGURATION ---
+INPUT_DIR = r"C:\Users\somna\Downloads\Bot_100_Primary_Proteins_JSONs"
+RAW_OPUS_OUTPUT_DIR = "sonnet_raw_outputs"
+
+# Temporary AWS Credentials
+AWS_ACCESS_KEY = "Thats What She Said"
+AWS_SECRET_KEY = "No, no, no, no, no, no, no, no DON'T DO THAT. I THOUGHT WE WERE HAVING A NICE DATE"
+AWS_SESSION_TOKEN = "Life is like a box of chocolates. You never know what you're gonna get." 
+REGION_NAME = "us-east-1"
+
+# Cost rates per token (USD)
+INPUT_TOKEN_COST = 3.0 / 1_000_000   # $5 per 1M tokens
+OUTPUT_TOKEN_COST = 15.0 / 1_000_000 # $25 per 1M tokens
+
+MODEL_ID = 'us.anthropic.claude-sonnet-4-6'
+
+# Configure custom timeouts and retries for long generation runs
+bedrock_config = Config(
+    read_timeout=900,   # Increases timeout to 15 minutes (900 seconds)
+    connect_timeout=60, # 60 seconds to establish initial connection
+    retries={
+        "max_attempts": 3,
+        "mode": "standard"
+    }
+)
+
+# Initialize Bedrock client with the custom config
+bedrock = boto3.client(
+    service_name='bedrock-runtime',
+    region_name=REGION_NAME,
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    aws_session_token=AWS_SESSION_TOKEN,
+    config=bedrock_config  
+)
+
+SYSTEM_PROMPT = """You are an expert biocurator and biological data synthesizer. 
+
+You will receive a REAL research paper formatted as a JSON object containing a 'content' array of sections. Your goal is to modify this paper by spiking in three specific edge cases, then output the modifications alongside the complete Ground Truth extraction JSON.
+
+SPIKE-IN CONSTRAINTS TO ADD:
+1. Decoy Protein: Add a paragraph describing a non-plastic enzyme (e.g., an amylase or xylanase) with high activity metrics into a Results section.
+2. Disconnected Assay: Introduce a new plastic-degrading enzyme. Put its name in the Abstract, its assay parameters (pH, temperature) in Methods, and its activity values in Results.
+3. Null Mutant: Add an engineered protein variant in the Results section that is explicitly stated to have 0 or non-detectable activity.
+
+OUTPUT SCHEMA:
+Return ONLY a valid JSON object with 'modifications' and 'ground_truth'. Do not return markdown blocks.
+
+{
+  "modifications": [
+    {
+      "target_section_index": 1,
+      "action": "append",
+      "text_to_add": "Text for Disconnected Assay enzyme introducing PROT_X..."
+    },
+    {
+      "target_section_index": 3,
+      "action": "append",
+      "text_to_add": "Text containing the Decoy Protein and Null Mutant activity results..."
+    }
+  ],
+  "ground_truth": {
+    "Has_Plastic_Degrading_Enzyme": "Yes",
+    "Reasoning_Summary": "Spiked-in synthetic control dataset.",
+    "experiments": [],
+    "plasmids": [],
+    "proteins": [],
+    "assay_variables": [],
+    "assays_main": [],
+    "activity": []
+  }
+}"""
+
+def filter_references(content_array):
+    """Removes bibliography and reference sections from the content array."""
+    exclude_keywords = ["reference", "bibliography"]
+    filtered = []
+    for section in content_array:
+        sec_title = section.get("section", "").lower()
+        if not any(keyword in sec_title for keyword in exclude_keywords):
+            filtered.append(section)
+    return filtered
+
+def process_papers():
+    os.makedirs(RAW_OPUS_OUTPUT_DIR, exist_ok=True)
+    input_path = Path(INPUT_DIR)
+    
+    cumulative_cost = 0.0
+    budget_cost = 50.0  
+    
+    for json_file in input_path.glob("*.json"):
+        output_file = Path(RAW_OPUS_OUTPUT_DIR) / f"opus_raw_{json_file.name}"
+        
+        # Check if paper has already been processed in a previous run
+        if output_file.exists():
+            print(f"Skipping {json_file.name} (output file already exists).")
+            continue
+
+        print(f"Processing {json_file.name}...")
+        
+        with open(json_file, "r", encoding="utf-8") as f:
+            paper_data = json.load(f)
+            
+        # Strip references to save tokens
+        paper_data["content"] = filter_references(paper_data.get("content", []))
+        
+        body = json.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 40000,
+            "temperature": 0.5,
+            "system": SYSTEM_PROMPT,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": f"Modify this paper:\n{json.dumps(paper_data, indent=2)}"
+                }
+            ]
+        })
+
+        try:
+            response = bedrock.invoke_model(
+                modelId=MODEL_ID,
+                body=body,
+                contentType='application/json',
+                accept='application/json'
+            )
+            
+            response_body = json.loads(response.get('body').read())
+            output_text = response_body.get('content')[0].get('text')
+            
+            # Token counting and cost calculation
+            usage = response_body.get('usage', {})
+            input_tokens = usage.get('input_tokens', 0)
+            output_tokens = usage.get('output_tokens', 0)
+            
+            call_cost = (input_tokens * INPUT_TOKEN_COST) + (output_tokens * OUTPUT_TOKEN_COST)
+            cumulative_cost += call_cost
+            
+            # Save the raw Opus output
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(output_text)
+                
+            print(f"Success: {json_file.name}")
+            print(f"Tokens used | Input: {input_tokens} | Output: {output_tokens}")
+            print(f"Call cost: USD {call_cost:.4f}")
+            print(f"Cumulative cost: USD {cumulative_cost:.4f}\n")
+            
+            # Budget Check
+            if cumulative_cost >= budget_cost:
+                print(f"Budget of USD {budget_cost} reached or exceeded. Stopping batch.")
+                break
+            
+        except Exception as e:
+            print(f"Error processing {json_file.name}: {e}\n")
+            
+    print(f"Batch complete. Final total cost for this run: USD {cumulative_cost:.4f}")
+
+if __name__ == "__main__":
+    process_papers()

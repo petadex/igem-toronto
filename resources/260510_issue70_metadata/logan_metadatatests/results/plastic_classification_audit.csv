@@ -1,0 +1,71 @@
+source_label,source_rows,normalized_label,assigned_class,classification_rule
+Ecovio-FT,2,ECOVIOFT,commercial_biodegradable_formulation,explicit commercial formulation
+HDPE,62,HDPE,other_plastic,outside declared target families
+Impranil,1,IMPRANIL,commercial_biodegradable_formulation,explicit commercial formulation
+LDPE,320,LDPE,other_plastic,outside declared target families
+LDPE Blend,8,LDPEBLEND,other_plastic,outside declared target families
+LLDPE,7,LLDPE,other_plastic,outside declared target families
+LLDPE Blend,2,LLDPEBLEND,other_plastic,outside declared target families
+NR,4,NR,natural_biopolymer,explicit natural-biopolymer separation
+Nylon,28,NYLON,other_plastic,outside declared target families
+O-PE,3,OPE,other_plastic,outside declared target families
+O-PVA,2,OPVA,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+P(3HB-co-3HV),1,P3HBCO3HV,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+P(3HB-co-3MP),2,P3HBCO3MP,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+P(3HB-co-4HB),2,P3HBCO4HB,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+P(3HB-co-HV),1,P3HBCOHV,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+P(3HV-co-4HB),1,P3HVCO4HB,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+P34HB,2,P34HB,other_plastic,outside declared target families
+P3HP,10,P3HP,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+P3HV,1,P3HV,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+P4HB,3,P4HB,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PBAT,52,PBAT,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PBAT-Blend,3,PBATBLEND,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PBS,50,PBS,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PBS Blend,1,PBSBLEND,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PBS-Blend,1,PBSBLEND,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PBSA,57,PBSA,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PBSA-Blend,1,PBSABLEND,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PBST55,1,PBST55,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PBSTIL,1,PBSTIL,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PBSeT,2,PBSET,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PC,8,PC,other_plastic,outside declared target families
+PCL,291,PCL,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PCL Blend,1,PCLBLEND,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PE,124,PE,other_plastic,outside declared target families
+PE Blend,5,PEBLEND,other_plastic,outside declared target families
+PEA,6,PEA,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PEC,1,PEC,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PEF,3,PEF,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PEG,8,PEG,other_plastic,outside declared target families
+PES,43,PES,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PET,247,PET,other_plastic,outside declared target families
+PETG,6,PETG,other_plastic,outside declared target families
+PHA,86,PHA,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PHA Blend,1,PHABLEND,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PHB,223,PHB,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PHB-Blend,1,PHBBLEND,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PHBH,14,PHBH,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PHBV,38,PHBV,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PHBVH,1,PHBVH,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PHC,10,PHC,other_plastic,outside declared target families
+PHN,1,PHN,other_plastic,outside declared target families
+PHO,16,PHO,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PHPV,2,PHPV,other_plastic,outside declared target families
+PHV,2,PHV,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PLA,171,PLA,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PLA Blend,1,PLABLEND,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PMCL,1,PMCL,other_plastic,outside declared target families
+PP,49,PP,other_plastic,outside declared target families
+PPL,3,PPL,other_plastic,outside declared target families
+PS,57,PS,other_plastic,outside declared target families
+PS Blend,2,PSBLEND,other_plastic,outside declared target families
+PSS,4,PSS,other_plastic,outside declared target families
+PTC,1,PTC,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PTS,4,PTS,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PU,394,PU,other_plastic,outside declared target families
+PU Blend,1,PUBLEND,other_plastic,outside declared target families
+PVA,28,PVA,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PVA Blend,2,PVABLEND,bioplastic_or_biodegradable_polymer,normalized polymer-family prefix
+PVC,43,PVC,other_plastic,outside declared target families
+PVC Blend,5,PVCBLEND,other_plastic,outside declared target families

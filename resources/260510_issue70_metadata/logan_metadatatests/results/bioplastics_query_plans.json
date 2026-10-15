@@ -1,0 +1,86 @@
+{
+  "no_bioplastics_metadata": {
+    "count_all_sequences": [
+      [
+        4,
+        0,
+        0,
+        "SCAN sequences USING COVERING INDEX idx_sequences_gc"
+      ]
+    ],
+    "average_sequence_length": [
+      [
+        3,
+        0,
+        212,
+        "SCAN sequences USING COVERING INDEX idx_sequences_length"
+      ]
+    ],
+    "gc_range_count": [
+      [
+        3,
+        0,
+        152,
+        "SEARCH sequences USING COVERING INDEX idx_sequences_gc (gc_fraction>? AND gc_fraction<?)"
+      ]
+    ],
+    "top_100_longest": [
+      [
+        4,
+        0,
+        212,
+        "SCAN sequences USING COVERING INDEX idx_sequences_length"
+      ]
+    ],
+    "plastic_context_sequence_count": [
+      [
+        3,
+        0,
+        71,
+        "SEARCH sequences USING COVERING INDEX idx_sequences_run (run_accession=?)"
+      ]
+    ]
+  },
+  "bioplastics_metadata": {
+    "count_all_sequences": [
+      [
+        4,
+        0,
+        0,
+        "SCAN sequences USING COVERING INDEX idx_sequences_gc"
+      ]
+    ],
+    "average_sequence_length": [
+      [
+        3,
+        0,
+        212,
+        "SCAN sequences USING COVERING INDEX idx_sequences_length"
+      ]
+    ],
+    "gc_range_count": [
+      [
+        3,
+        0,
+        152,
+        "SEARCH sequences USING COVERING INDEX idx_sequences_gc (gc_fraction>? AND gc_fraction<?)"
+      ]
+    ],
+    "top_100_longest": [
+      [
+        4,
+        0,
+        212,
+        "SCAN sequences USING COVERING INDEX idx_sequences_length"
+      ]
+    ],
+    "plastic_context_sequence_count": [
+      [
+        3,
+        0,
+        71,
+        "SEARCH sequences USING COVERING INDEX idx_sequences_run (run_accession=?)"
+      ]
+    ]
+  }
+}

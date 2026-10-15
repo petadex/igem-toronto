@@ -1,0 +1,118 @@
+{
+  "no_metadata": {
+    "count_all": [
+      [
+        4,
+        0,
+        0,
+        "SCAN sequences USING COVERING INDEX idx_sequences_gc"
+      ]
+    ],
+    "length_range_count": [
+      [
+        3,
+        0,
+        153,
+        "SEARCH sequences USING COVERING INDEX idx_sequences_length (length>? AND length<?)"
+      ]
+    ],
+    "average_length": [
+      [
+        3,
+        0,
+        213,
+        "SCAN sequences USING COVERING INDEX idx_sequences_length"
+      ]
+    ],
+    "gc_range_count": [
+      [
+        3,
+        0,
+        153,
+        "SEARCH sequences USING COVERING INDEX idx_sequences_gc (gc_fraction>? AND gc_fraction<?)"
+      ]
+    ],
+    "top_100_longest": [
+      [
+        4,
+        0,
+        213,
+        "SCAN sequences USING COVERING INDEX idx_sequences_length"
+      ]
+    ],
+    "indexed_lookup_batch_200": [
+      [
+        2,
+        0,
+        39,
+        "SEARCH sequences USING PRIMARY KEY (sequence_id=?)"
+      ]
+    ],
+    "accession_filter": [
+      [
+        3,
+        0,
+        155,
+        "SEARCH sequences USING PRIMARY KEY (sequence_id>? AND sequence_id<?)"
+      ]
+    ]
+  },
+  "metadata": {
+    "count_all": [
+      [
+        4,
+        0,
+        0,
+        "SCAN sequences USING COVERING INDEX idx_sequences_gc"
+      ]
+    ],
+    "length_range_count": [
+      [
+        3,
+        0,
+        151,
+        "SEARCH sequences USING COVERING INDEX idx_sequences_length (length>? AND length<?)"
+      ]
+    ],
+    "average_length": [
+      [
+        3,
+        0,
+        211,
+        "SCAN sequences USING COVERING INDEX idx_sequences_length"
+      ]
+    ],
+    "gc_range_count": [
+      [
+        3,
+        0,
+        151,
+        "SEARCH sequences USING COVERING INDEX idx_sequences_gc (gc_fraction>? AND gc_fraction<?)"
+      ]
+    ],
+    "top_100_longest": [
+      [
+        4,
+        0,
+        211,
+        "SCAN sequences USING COVERING INDEX idx_sequences_length"
+      ]
+    ],
+    "indexed_lookup_batch_200": [
+      [
+        2,
+        0,
+        39,
+        "SEARCH sequences USING PRIMARY KEY (sequence_id=?)"
+      ]
+    ],
+    "accession_filter": [
+      [
+        3,
+        0,
+        55,
+        "SEARCH sequences USING COVERING INDEX idx_sequences_run (run_accession=?)"
+      ]
+    ]
+  }
+}

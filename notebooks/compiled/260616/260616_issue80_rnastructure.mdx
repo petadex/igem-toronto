@@ -1,0 +1,95 @@
+---
+    title: 260616_issue80_rnastructure
+    section: "Dry Lab"
+    path: "/dry-lab/issue/80"
+    navTitle: "Issue 80"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+## RNA Structure for DNA Synthesis
+
+Lead     : `<Claire / clairecyuan>`
+
+Issue    : [Github Issue #80](https://github.com/petadex/igem-toronto/issues/80) — _RNA Structure for DNA Synthesis_
+
+Start    : `2026-06-09`
+
+Complete : `2026-06-16`
+
+Files    : None
+
+S3 files : None
+
+---
+
+
+## Introduction
+
+Predict locations of hairpins in RNA that may impact translation for evaluation of generated mRNAs. 
+
+## Objectives
+
+1. _Predict and extract locations of RNA secondary structure_
+2. _Scoring function to predict if secondary structure interferes with translation efficiency_
+
+---
+
+## Materials and Methods
+
+### System Initialization
+Everything stored in 
+'/mnt/c/Users/clair/RNAfold'
+
+Quick installation of ViennaRNA using:  
+`sudo apt install vienna-rna`  
+
+### Data Initialization
+
+Tested on a few sample sequences from .txt file
+
+### Processing Steps
+
+Use the command 'RNAfold' or 'RNALfold' (for long RNAs, outputs local secondary structure) with the following format to read in sequence files:
+
+```bash
+RNALfold<"INPUT FILE NAME"> "OUTPUT FILE NAME".txt
+```
+The command outputs all local 2D structure as a string of text in the form of brackets and periods in a txt file, along with min. free energy and starting location of the hairpin as a number.  
+Example:  
+.(((.(.(((((((((((.((....)).))))..))))).)).).))). ( -6.40)  274
+
+```
+
+
+```python
+import re
+import json
+with open("C:/Users/clair/RNAfold/examples/files/output5.txt", 'r') as f:
+    lines = f.read().splitlines()
+
+name = None
+i = 0
+results_start = {}
+while i < len(lines):
+    
+    if lines[i].startswith('>'):
+        name = lines[i]
+        results_start[name] = []
+    elif(lines[i].startswith('(') or lines[i].startswith('.')) and name is not None:
+            hairpin_length = len(lines[i].split()[0])
+            results_start[name].append([x.strip() for x in re.findall(r'\s\d{1,3}', lines[i])])
+
+    i += 1
+
+with open('final_output.txt', 'w') as f:
+    for key, value in results_start.items():
+        f.write(f"{key}: {json.dumps(value)}\n")
+```
+
+## Results & Discussion
+
+RNALfold can detect local secondary structures of long mRNAs. Location of first position of secondary structure extracted but project uncompleted because it was deemed unnecessary. 

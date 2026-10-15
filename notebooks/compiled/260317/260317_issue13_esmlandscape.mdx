@@ -1,0 +1,86 @@
+---
+    title: 260317_issue13_esmlandscape
+    section: "Dry Lab"
+    path: "/dry-lab/issue/13"
+    navTitle: "Issue 13"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+## ESM Landscape
+
+Lead : `<Oscar Heath / baleinegris>`
+
+Issue : Github Issue #13
+
+Start : 2026-03-16
+
+Complete : 2026-03-17
+
+Files : 
+
+~/resources/260317_issue13_esmlandscape/ — contains scripts, notebooks and plots
+
+~/notebooks/260317_issue13_esmlandscape.ipynb — the notebook write-up
+
+S3 files :
+
+s3://petadex/esm_embeddings/family_embeddings.npz — used embeddings that Dennis made
+s3://petadex/esm_embeddings/family_representatives.csv — got sequences of representatives that Dennis made
+
+### Data Accessed: 2026-03-16
+
+```bash 
+# commands used to pull input data
+aws s3 cp s3://petadex/esm_embeddings/family_embeddings.npz ./data/embeddings.npz`
+aws s3 cp s3://petadex/esm_embeddings/family_representatives.csv ./data/representatives.csv
+```
+
+### Introduction
+
+We have 64,730 families in the PETadex, represented by family representatives (centroid). We aim to use ESM2 to create high dimensional embeddings of these centroids, then UMAP them to 2D space for visualization. We hypothesize that these families likely form into "clusters" of similar enzymes. 
+
+### Objectives:
+- Pull embeddings and representatives from s3
+- Run UMAP on embeddings to reduce them to 2D
+- Visualize the ESM landscape
+- (secondary objective: create a table of relevant information per family for future plotting)
+
+### Methods and Materials
+
+#### Data initialization
+
+Embeddings were pulled from s3 using the script in `pull_data.sh`:
+```bash
+# Accessed: 2026-03-16
+:~$./pull_data.sh
+```
+
+#### UMAP Process
+
+I UMAP-ed the embeddings using `umap-learn 0.5.11`, and plotted them using pyplot from the `matplotlib 3.10.8` package. The whole process can be seen in `umap_viz.ipynb`.
+
+Parameters used for UMAP (default params):
+
+classumap.umap_.UMAP(n_neighbors=15, n_components=2, metric='euclidean', metric_kwds=None, output_metric='euclidean', output_metric_kwds=None, n_epochs=None, learning_rate=1.0, init='spectral', min_dist=0.1, spread=1.0, low_memory=True, n_jobs=-1, set_op_mix_ratio=1.0, local_connectivity=1.0, repulsion_strength=1.0, negative_sample_rate=5, transform_queue_size=4.0, a=None, b=None, random_state=None, angular_rp_forest=False, target_n_neighbors=-1, target_metric='categorical', target_metric_kwds=None, target_weight=0.5, transform_seed=42, transform_mode='embedding', force_approximation_algorithm=False, verbose=False, tqdm_kwds=None, unique=False, densmap=False, dens_lambda=2.0, dens_frac=0.3, dens_var_shift=0.1, output_dens=False, disconnection_distance=None, precomputed_knn=(None, None, None))
+
+#### Data Preparation
+
+I also created the table **families.csv**, which joins the families with their representative sequence, x and y UMAP coordinates, as well as size (number of members in family). This was done with the **representatives.csv** file, the UMAP data, and data pulled from petadex using `psycopg2-binary 2.9.11`.
+
+### Results & Discussion
+
+The UMAP and visualization went smoothly, and produced our first look at the ESM Landscape, saved in **/esm-landscape/plots**. The embeddings *appear* to form clusters, but we cannot be sure until we run controls and compare the results. Adjusting bubble size by family size looked messy on a static plot.
+
+
+![ESM Landscape UMAP](https://raw.githubusercontent.com/petadex/igem-toronto/refs/heads/esm-landscape/resources/260317_issue13_esmlandscape/plots/first_plot.png?token=GHSAT0AAAAAADXB2MHZUTS4XYZJUVF3H5BY2NZ5FZA)
+
+#### Follow-up work:
+- Embed 2 controls: shuffled sequences and random proteins pulled from uniprot. Hopefully, their distributions in the UMAP space will look different from the family centroids, allowing us to make conclusions about the centroid clusters
+- Create interactive JavaScript plot: This will look nice on the PETadex website, as well as potentially on the iGEM wiki
+- Overlay metadata onto the UMAP visualization and see if any nice patterns emerge
+
+

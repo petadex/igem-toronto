@@ -1,0 +1,47 @@
+---
+    title: 261001_issue114_lobsterpipeline
+    section: "Dry Lab"
+    path: "/dry-lab/issue/114"
+    navTitle: "Issue 114"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+# LOBSTER Pipeline on VM
+
+Alex Leonardos Oct 1st, 2026
+
+This notebook documents the script/process of automating cluster processing through the LOBSTER algorithm.
+
+## VM Deployment
+
+This is intended to be run on a us-east-1 VM, as the data transfer needs to come from the same region as the PETadex.
+
+# Steps
+
+Follows generally the same steps as Issue 109, with the following notes:
+
+1. To keep track of which clusters to run LOBSTER on, as well as which component HMM their preprocessing should use, the `run_pipeline.sh` script takes in a clusters.csv in the following form:
+
+```
+cluster_id,hmm_s3_path
+1,s3://petadex/petadex.v260701/4_hmm_creation/petadex_hmms/petadex.v260701-C001.hmm
+```
+
+2. Clusters are fetched through a psycopg2 script rather than pgadmin4. The commands remain the same.
+
+3. Every cluster uses the same LOBSTER configurations. 
+
+### Bundled Package
+
+The corresponding scripts folder for this issue contains byte-identical copies of each of the LOBSTER files, for cleaner packaging. This folder can therefore be directly scp'd to the VM.
+
+# Run Instructions:
+
+```
+bash setup_vm.sh                      # installs aws, seqkit, hmmer, python deps
+bash run_pipeline.sh clusters.csv     # outputs under ./runs/<timestamp>/
+```

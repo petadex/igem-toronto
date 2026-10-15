@@ -1,0 +1,22 @@
+{
+  "sequence_count": 113113,
+  "total_bases": 17636159,
+  "sequence_payload_sha256": "12eb1e3dce60e6a396f70d78b3e1324a8983b7a7c7ebca2a286932523dc1c2e7",
+  "variants_identical": true,
+  "accessions": [
+    "DRR001152",
+    "DRR000584",
+    "DRR001026",
+    "DRR001104",
+    "DRR000185",
+    "DRR001199"
+  ],
+  "upstream_revisions": {
+    "IndexThePlanet/Logan": "b3da25311802544c4c0e53c44b98380acf4d04d6",
+    "rchikhi_pasteur/logan-analysis": "5e92dafb87e40834ff2123d9b55e3bb27887fedb",
+    "ababaian/petadex": "a6bc326eb187925591b3988f57b4fadb1dba557d"
+  },
+  "python": "3.11.14 (main, Oct  9 2025, 16:16:55) [GCC 15.2.0]",
+  "platform": "Linux-6.18.49-x86_64-with-glibc2.40",
+  "sqlite": "3.51.1"
+}

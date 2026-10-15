@@ -1,0 +1,1118 @@
+---
+    title: 260503_issue18_signalsequences
+    section: "Dry Lab"
+    path: "/dry-lab/issue/18"
+    navTitle: "Issue 18"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+# Issue #18 — Predict Signal Sequences
+
+**Lead:** Angela Jiang / `AngelaJiang0204`  
+**GitHub issue:** [petadex/igem-toronto Issue #18](https://github.com/petadex/igem-toronto/issues/18) — Predict Signal Sequences  
+**Original start date:** 2026-03-26  
+**Completed:** 2026-05-30
+
+## Background and rationale
+
+Many PETadex protein sequences may contain N-terminal signal peptides, which can indicate secretion, membrane targeting, or periplasmic/export pathways depending on organismal context. For downstream modeling or functional analysis, detecting signal peptides is useful because the mature enzyme may differ from the translated precursor sequence. Cleavage-site predictions can also support later generation of mature/cleaved FASTA sequences.
+
+This notebook documents two levels of work:
+
+1. a small-scale exploratory SignalP / DeepLoc setup and troubleshooting workflow; and
+2. a completed large-scale SignalP 6.0 fast-mode analysis of the Azure-hosted PETadex FASTA dataset containing **4,723,339 sequences**.
+
+The completed large-scale SignalP workflow ran both `other` and `eukarya` organism modes, merged the per-chunk outputs, uploaded the final results to Azure Blob Storage, and performed preliminary comparison of prediction classes and cleavage sites. DeepLoc 2.1 remains relevant for downstream localization prediction, but full-scale DeepLoc testing has **not** yet been performed and is documented here as future work.
+
+
+
+# Small-scale exploratory SignalP and DeepLoc analysis
+
+A smaller exploratory workflow was first performed locally before moving to the Azure-scale SignalP workflow. This local analysis was used to install and troubleshoot SignalP 6.0, verify FASTA formatting, compare `other` versus `eukarya` organism modes, inspect SignalP output files, and confirm that mature/cleaved protein FASTA files could be generated.
+
+The local work was performed on Windows using VS Code, Conda, PowerShell/Anaconda Prompt, and a project working directory under:
+
+```text
+C:\Users\jiang\OneDrive\Desktop\PETAdex
+```
+
+The primary small-scale input FASTA used during this troubleshooting workflow was:
+
+```text
+C:\Users\jiang\OneDrive\Desktop\PETAdex\sequences.fasta
+```
+
+After FASTA repair, the SignalP-compatible input became:
+
+```text
+C:\Users\jiang\OneDrive\Desktop\PETAdex\sequences_fixed.fasta
+```
+
+---
+
+## Generation of the small FASTA subset from Petadex PostgreSQL
+
+A small FASTA subset of approximately 602 protein sequences was exported from the Petadex PostgreSQL `fastaa` table for local testing.
+
+The database was accessed with the PostgreSQL command-line client. The local client path used on Windows was:
+
+```powershell
+& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -h <PETADEX_RDS_HOST> -p 5432 -U readonly_user -d petadex
+```
+
+The database schema was inspected interactively:
+
+```sql
+\dt
+\d fastaa
+```
+
+The relevant columns identified from `fastaa` were:
+
+```text
+accession
+aa_sequence
+```
+
+The FASTA was exported using `\copy`:
+
+```sql
+\copy (
+  SELECT '>' || accession || E'\n' || aa_sequence
+  FROM fastaa
+) TO 'C:/Users/jiang/Desktop/PETadex/sequences.fasta';
+```
+
+The observed PostgreSQL output was:
+
+```text
+COPY 602
+```
+
+This confirmed that 602 FASTA records were written. The resulting file was checked locally with:
+
+```powershell
+Test-Path "C:\Users\jiang\Desktop\PETadex\sequences.fasta"
+```
+
+Expected output:
+
+```text
+True
+```
+
+Note: later local SignalP work in VS Code used the OneDrive project directory path `C:\Users\jiang\OneDrive\Desktop\PETAdex`. The notebook keeps both paths here because both appeared during the local workflow, and the exact file was later worked on from the OneDrive `PETAdex` folder.
+
+---
+
+## Local Conda and VS Code setup
+
+A dedicated Conda environment was created for SignalP so its older dependency requirements would not interfere with other Python projects:
+
+```powershell
+conda create -n signalp6 python=3.9 -y
+conda activate signalp6
+```
+
+SignalP was run from the VS Code integrated terminal after selecting the `signalp6` Conda interpreter for the PETAdex project folder.
+
+The environment was intentionally kept separate because SignalP installation downgraded several packages, including PyTorch/Numpy-related dependencies. A NumPy compatibility error was encountered when PyTorch expected NumPy 1.x rather than NumPy 2.x:
+
+```text
+ARRAY_API not found
+```
+
+This was resolved inside the `signalp6` environment with:
+
+```powershell
+python -m pip install "numpy<2"
+```
+
+This installed NumPy 1.26.4 during the local troubleshooting run.
+
+---
+
+## Local SignalP 6.0 slow sequential installation
+
+The SignalP 6.0 slow sequential package was downloaded manually from the DTU SignalP 6.0 distribution page as:
+
+```text
+signalp-6.0i.slow_sequential.tar.gz
+```
+
+The archive was extracted from the Downloads folder:
+
+```powershell
+cd C:\Users\jiang\Downloads
+tar -xvzf signalp-6.0i.slow_sequential.tar.gz
+```
+
+The extracted folder was renamed for clarity:
+
+```powershell
+ren signalp6_slow_sequential signalp6_models
+```
+
+The usable package directory was:
+
+```text
+C:\Users\jiang\Downloads\signalp6_models\signalp-6-package
+```
+
+The package was installed from that directory:
+
+```powershell
+cd C:\Users\jiang\Downloads\signalp6_models\signalp-6-package
+python -m pip install -e .
+```
+
+The SignalP model directory was configured in PowerShell with:
+
+```powershell
+$env:SIGNALP6_MODEL_DIR = "C:\Users\jiang\Downloads\signalp6_models"
+```
+
+For persistent configuration, the following user-level environment variable command was also used during troubleshooting:
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("SIGNALP6_MODEL_DIR", "C:\Users\jiang\Downloads\signalp6_models", "User")
+```
+
+The model directory was checked with:
+
+```powershell
+echo $env:SIGNALP6_MODEL_DIR
+dir $env:SIGNALP6_MODEL_DIR
+```
+
+---
+
+## SignalP command entry-point
+
+The GitHub clone alone did not provide the working local inference package. The correct execution pattern was to run SignalP from the package parent directory as a module:
+
+```powershell
+cd C:\Users\jiang\Downloads\signalp6_models\signalp-6-package
+python -m signalp.predict
+```
+---
+
+## FASTA formatting repair
+
+The first local FASTA contained literal `\n` text inside records instead of true newline characters between FASTA headers and sequence lines. This caused SignalP parsing failures, including `StopIteration` errors.
+
+The malformed format looked like:
+
+```text
+>WP_054022242.1_M1\nQTNP...
+```
+
+The required FASTA format was:
+
+```text
+>WP_054022242.1_M1
+QTNP...
+```
+
+The file was repaired with a local script named:
+
+```text
+fix_fasta.py
+```
+
+Script contents:
+
+```python
+from pathlib import Path
+
+input_path = Path(r"C:\Users\jiang\OneDrive\Desktop\PETAdex\sequences.fasta")
+output_path = Path(r"C:\Users\jiang\OneDrive\Desktop\PETAdex\sequences_fixed.fasta")
+
+text = input_path.read_text(encoding="utf-8")
+
+# Convert literal "\\n" text into actual newlines
+fixed = text.replace("\\n", "\n")
+
+# Normalize line endings and remove extra blank lines
+lines = [line.rstrip() for line in fixed.splitlines()]
+cleaned = "\n".join(line for line in lines if line.strip()) + "\n"
+
+output_path.write_text(cleaned, encoding="utf-8")
+
+print(f"Fixed FASTA written to: {output_path}")
+```
+
+The script was run with:
+
+```powershell
+python C:\Users\jiang\OneDrive\Desktop\PETAdex\fix_fasta.py
+```
+
+The fixed file was then used for all subsequent SignalP local runs:
+
+```text
+C:\Users\jiang\OneDrive\Desktop\PETAdex\sequences_fixed.fasta
+```
+
+A quick manual check was performed with:
+
+```powershell
+Get-Content C:\Users\jiang\OneDrive\Desktop\PETAdex\sequences_fixed.fasta -TotalCount 20
+```
+
+---
+
+## Slow-mode SignalP runs on the small local FASTA
+
+Because the installed package was the slow sequential package, SignalP was run explicitly in slow mode and pointed to the model directory.
+
+### Other-mode slow run
+
+```powershell
+cd C:\Users\jiang\Downloads\signalp6_models\signalp-6-package
+
+python -m signalp.predict `
+  --fastafile C:\Users\jiang\OneDrive\Desktop\PETAdex\sequences_fixed.fasta `
+  --organism other `
+  --output_dir C:\Users\jiang\OneDrive\Desktop\PETAdex\signalp_out_other `
+  --mode slow `
+  --model_dir C:\Users\jiang\Downloads\signalp6_models\signalp-6-package\models
+```
+
+### Eukarya-mode slow run
+
+```powershell
+cd C:\Users\jiang\Downloads\signalp6_models\signalp-6-package
+
+python -m signalp.predict `
+  --fastafile C:\Users\jiang\OneDrive\Desktop\PETAdex\sequences_fixed.fasta `
+  --organism eukarya `
+  --output_dir C:\Users\jiang\OneDrive\Desktop\PETAdex\signalp_out_eukarya `
+  --mode slow `
+  --model_dir C:\Users\jiang\Downloads\signalp6_models\signalp-6-package\models
+```
+
+---
+
+## Output files generated by SignalP
+
+Each local SignalP output folder generated summary files and many per-sequence probability profile files.
+
+For example:
+
+```text
+C:\Users\jiang\OneDrive\Desktop\PETAdex\signalp_out_other
+C:\Users\jiang\OneDrive\Desktop\PETAdex\signalp_out_eukarya
+```
+
+Key outputs:
+
+```text
+output.json
+prediction_results.txt
+processed_entries.fasta
+region_output.gff3
+```
+
+The important downstream files were:
+
+- `prediction_results.txt`: compact SignalP prediction summary
+- `processed_entries.fasta`: mature/processed sequences after predicted signal peptide cleavage
+- `output.json`: structured metadata including prediction class, likelihoods, cleavage site positions, and output file paths
+- `region_output.gff3`: positional annotation output
+
+The folders also included many per-sequence files such as:
+
+```text
+output_<sequence_id>_plot.txt
+```
+
+These `_plot.txt` files contained per-residue probability profiles with columns such as:
+
+```text
+# pos	aa	label	Other	Sec/SPI n	Sec/SPI h	Sec/SPI c	Sec/SPII n	Sec/SPII h	Sec/SPII cys	Tat/SPI n	Tat/SPI RR	Tat/SPI h	Tat/SPI c	Tat/SPII n	Tat/SPII RR	Tat/SPII h	Tat/SPII cys	Sec/SPIII P	Sec/SPIII cons.	Sec/SPIII h
+```
+
+The `processed_entries.fasta` file was identified as the SignalP-generated mature protein FASTA. It contains sequences after SignalP processing/cleavage according to the predicted signal peptide and cleavage site calls. From manual confirmation, the Other and Eukarya mode runs appeared to only differ in that classifying the other SP types in the former all as SPI in the latter. The predicted cleavage sites appear to be fully consistent in both modes.
+
+---
+## Fast vs Slow Mode SignalP Validation
+
+To evaluate whether SignalP 6.0 fast mode could be used reliably for larger-scale screening, a validation analysis was performed comparing fast mode against the full slow ensemble model. Fast mode required a separate but similar setup process as slow mode, due to requiring a separate distilled model.
+
+### Validation dataset
+
+A 600-sequence subset was generated and analyzed using both fast and slow mode. And then compared using the following script.
+
+```python
+import pandas as pd
+
+cols = [
+    "ID",
+    "Prediction",
+    "OTHER",
+    "SP",
+    "LIPO",
+    "TAT",
+    "TATLIPO",
+    "PILIN",
+    "CS"
+]
+
+fast = pd.read_csv(
+    "signalp_fast_validation/prediction_results.txt",
+    sep="\t",
+    comment="#",
+    names=cols
+)
+
+slow = pd.read_csv(
+    "signalp_slow_validation/prediction_results.txt",
+    sep="\t",
+    comment="#",
+    names=cols
+)
+
+merged = fast.merge(
+    slow,
+    on="ID",
+    suffixes=("_fast", "_slow")
+)
+
+# Compare secretion class
+merged["prediction_match"] = (
+    merged["Prediction_fast"] ==
+    merged["Prediction_slow"]
+)
+
+# Compare cleavage site exactly
+merged["cs_match"] = (
+    merged["CS_fast"].fillna("") ==
+    merged["CS_slow"].fillna("")
+)
+
+# BOTH must match
+merged["full_match"] = (
+    merged["prediction_match"] &
+    merged["cs_match"]
+)
+
+print("\n=== Prediction Agreement ===")
+print(merged["prediction_match"].value_counts())
+
+prediction_agreement = (
+    merged["prediction_match"].mean() * 100
+)
+
+print(f"\nPrediction agreement: {prediction_agreement:.2f}%")
+
+print("\n=== Cleavage Site Agreement ===")
+print(merged["cs_match"].value_counts())
+
+cs_agreement = (
+    merged["cs_match"].mean() * 100
+)
+
+print(f"\nCleavage site agreement: {cs_agreement:.2f}%")
+
+print("\n=== Full Agreement (Prediction + CS) ===")
+print(merged["full_match"].value_counts())
+
+full_agreement = (
+    merged["full_match"].mean() * 100
+)
+
+print(f"\nFull agreement: {full_agreement:.2f}%")
+
+print("\n=== Prediction Disagreements ===")
+prediction_disagreements = merged[
+    ~merged["prediction_match"]
+]
+
+print(
+    prediction_disagreements[
+        ["ID", "Prediction_fast", "Prediction_slow"]
+    ]
+)
+
+print("\n=== Cleavage Site Disagreements ===")
+cs_disagreements = merged[
+    merged["prediction_match"] &
+    ~merged["cs_match"]
+]
+
+print(
+    cs_disagreements[
+        [
+            "ID",
+            "Prediction_fast",
+            "CS_fast",
+            "CS_slow"
+        ]
+    ].head(50)
+)
+
+merged.to_csv(
+    "signalp_comparison_full.csv",
+    index=False
+)
+
+print("\nSaved full comparison to signalp_comparison_full.csv")
+```
+
+Observed prediction agreement:
+
+```text
+599 / 600 matches
+99.83% agreement
+```
+
+Only a single prediction disagreement was identified:
+
+```text
+WP_360729645.1
+Fast mode: OTHER
+Slow mode: SP
+```
+
+Anither apparent cleavage-site disagreement was investigated and determined to arise from differences in reported confidence values rather than different cleavage coordinates. The cleavage position itself was unchanged. Therefore, the validation demonstrated extremely high agreement between fast and slow SignalP modes on the tested dataset. These results supported the use of fast mode for subsequent large-scale screening workflows while retaining confidence that the distilled model produced predictions highly consistent with the full ensemble implementation.
+
+---
+
+## DeepLoc 2.1 exploration
+The DeepLoc 2.1 DTU web server was used on the 602 fasta sequences: https://services.healthtech.dtu.dk/services/DeepLoc-2.1/.
+
+The results were downloaded and literature review was performed on the sequences to assess the accuracy fo the prediction. As DeepLoc is accurate only for sequences of Eukaryotic origin, an upstream process for identifying only these sequences to run DeepLoc on is suggested. This would also be more efficient given the size of the entire database. For the Eukaryotic sequences specifically, DeepLoc 2.1 was determined to have sufficient accuracy to warrant further usage in the future.
+
+---
+
+## Large-scale Azure setup
+
+### Compute resource
+
+Initial VM used for setup/testing:
+
+```text
+Resource group: petadex-esm2-embed_group
+VM name: signalp-cpu-vm-03
+Region: eastus2
+Initial VM size: Standard_D4s_v3
+Initial CPU: 4 vCPUs
+Initial RAM: ~15 GiB
+OS: Ubuntu 22.04
+```
+
+The VM was later resized to increase CPU throughput for chunk-parallel SignalP processing. The verified resize history includes:
+
+```text
+Standard_D4s_v3  -> initial setup/testing
+Standard_D32s_v3 -> later production
+```
+
+The working directory was created on the temporary disk:
+
+```text
+/mnt/signalp_deeploc_project
+```
+
+Subfolders used:
+
+```text
+/mnt/signalp_deeploc_project/
+├── data/
+├── subsets/
+├── chunks/
+├── results/
+├── logs/
+├── scripts/
+├── merged/
+└── software/
+```
+
+## Large-scale data acquisition and verification
+
+The full FASTA was downloaded from Azure Blob Storage to the VM using Azure CLI:
+
+```bash
+az storage blob download \
+  --account-name petadexstorage \
+  --container-name petadex-orf-fastaa \
+  --name "blastnr_pazy.catalytic_orfs.fa" \
+  --file "data/blastnr_pazy.catalytic_orfs.fa" \
+  --auth-mode login
+```
+
+The file was verified locally:
+
+```bash
+ls -lh data/
+du -h data/blastnr_pazy.catalytic_orfs.fa
+head -40 data/blastnr_pazy.catalytic_orfs.fa
+grep -c "^>" data/blastnr_pazy.catalytic_orfs.fa
+```
+
+Confirmed record count:
+
+```text
+4,723,339 FASTA records
+```
+
+Example FASTA header format:
+
+```text
+>1|WP_054022242.1|||||
+>2|7NEI|||||
+>3|7QJM|||||
+>4|A0A1W6L588|||||
+```
+
+A 100-sequence test subset was generated and confirmed:
+
+```bash
+python3 scripts/take_first_n_fasta.py \
+  data/blastnr_pazy.catalytic_orfs.fa \
+  subsets/test_100.fa \
+  100
+
+grep -c "^>" subsets/test_100.fa
+```
+
+Confirmed subset count:
+
+```text
+100
+```
+
+## SignalP 6.0 fast installation
+
+The SignalP 6.0 fast package was downloaded using institutional access and uploaded to private Azure Blob Storage:
+
+```text
+Storage account: petadexstorage
+Container: private-software
+Blob: signalp-6.0i.fast (1).tar.gz
+Size: ~1.42 GiB
+```
+
+The package was downloaded to the VM as:
+
+```text
+software/signalp-6.0i.fast.tar.gz
+```
+
+The package contents included:
+
+```text
+signalp6_fast/signalp-6-package/
+signalp6_fast/signalp-6-package/setup.py
+signalp6_fast/signalp-6-package/requirements.txt
+signalp6_fast/signalp-6-package/signalp/
+signalp6_fast/signalp-6-package/models/distilled_model_signalp6.pt
+```
+
+SignalP was installed in a dedicated conda environment:
+
+```bash
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
+conda create -n signalp6 python=3.9 -y
+conda activate signalp6
+
+pip install ./software/signalp6_fast/signalp6_fast/signalp-6-package
+```
+
+Two fixes were required after installation:
+
+1. **Downgrade NumPy below 2** because the installed PyTorch/SignalP combination was not compatible with NumPy 2.x:
+
+```bash
+pip install "numpy<2"
+```
+
+2. **Copy the fast model weights into the installed package path**, because SignalP expected `distilled_model_signalp6.pt` under the installed `signalp/model_weights/` directory:
+
+```bash
+mkdir -p /home/azureuser/miniconda3/envs/signalp6/lib/python3.9/site-packages/signalp/model_weights
+
+cp \
+  software/signalp6_fast/signalp6_fast/signalp-6-package/models/distilled_model_signalp6.pt \
+  /home/azureuser/miniconda3/envs/signalp6/lib/python3.9/site-packages/signalp/model_weights/
+```
+
+The help command then worked:
+
+```bash
+python -m signalp.predict --help
+```
+
+## SignalP 100-sequence test run
+
+SignalP 6.0 fast mode was successfully tested on `subsets/test_100.fa`.
+
+### Eukarya mode test
+
+```bash
+python -m signalp.predict \
+  --fastafile subsets/test_100.fa \
+  --output_dir results/signalp_test_eukarya \
+  --organism eukarya \
+  --mode fast
+```
+
+### Other mode test
+
+```bash
+python -m signalp.predict \
+  --fastafile subsets/test_100.fa \
+  --output_dir results/signalp_test_other \
+  --organism other \
+  --mode fast
+```
+
+Both modes produced `prediction_results.txt`.
+
+Example behavior observed:
+
+- In `eukarya` mode, SignalP reports `OTHER` vs `SP(Sec/SPI)`.
+- In `other` mode, SignalP reports `OTHER`, `SP`, `LIPO`, `TAT`, `TATLIPO`, and `PILIN`.
+- A sequence such as `ADV66860.1` was predicted as `SP` in Eukarya mode but `LIPO` in Other mode, illustrating why both modes can produce different labels.
+
+## Large-scale SignalP production workflow
+
+### Split FASTA into 5,000-sequence chunks
+
+The full FASTA was split into deterministic 5,000-record chunks. This made the workflow resumable, limited the cost of failed jobs, and allowed multiple chunks to be run in parallel on larger CPU VMs.
+
+```bash
+rm -rf chunks
+mkdir -p chunks
+
+python scripts/split_fasta.py   data/blastnr_pazy.catalytic_orfs.fa   chunks   5000
+```
+
+Confirmed chunking:
+
+```text
+Total FASTA records: 4,723,339
+Chunk size: 5,000 records
+Total chunks: 945
+```
+
+The chunking is deterministic because the same FASTA, same splitting script, and same chunk size reproduce the same ordered chunk boundaries. This was important after VM resizing, because the `/mnt` temporary disk was wiped and chunks had to be regenerated from the original FASTA.
+
+### SignalP runner behavior
+
+The large-scale runner used:
+
+```bash
+--format none
+```
+
+to avoid generating per-sequence plots or individual sequence-level files. This was essential for the full 4.7M-sequence dataset because per-sequence figures/files would create an unmanageable number of outputs.
+
+Runner behavior:
+
+```text
+Input: one FASTA chunk
+Mode: other or eukarya
+Output directory: results/signalp_<mode>/<chunk_name>/
+Primary result file: prediction_results.txt
+Completion marker: DONE
+Logs: logs/signalp_<mode>_<chunk_name>.log
+```
+
+The `DONE` marker allowed interrupted runs to resume without reprocessing completed chunks.
+
+### Compute scaling and checkpointing
+
+The initial VM was suitable for installation and small tests, but full-scale processing required CPU scaling. The confirmed VM progression was:
+
+```text
+Standard_D4s_v3  -> initial setup/testing, 4 vCPUs
+Standard_D16s_v3 -> intermediate production scaling, 16 vCPUs
+Standard_D32s_v3 -> later production scaling, 32 vCPUs
+```
+
+Because the project directory was kept on `/mnt/signalp_deeploc_project`, and `/mnt` behaved as temporary storage, resizing/deallocating the VM could wipe the project working directory. Before resizing, completed outputs were checkpointed and uploaded to Azure. After resizing, the FASTA was re-downloaded, chunks were regenerated, and checkpointed `DONE` folders were restored as needed.
+
+### Other-mode pass completed
+
+The **Other-mode SignalP pass was completed** on the full 4,723,339-sequence dataset. The per-chunk outputs were merged into:
+
+```text
+merged/signalp_other_all_predictions.tsv
+```
+
+The merged Other-mode output and full archive were uploaded to Azure Blob Storage:
+
+```text
+Storage account: petadexstorage
+Container: signalp-results
+Blob: signalp_other/merged/signalp_other_all_predictions.tsv
+Observed size: 449,527,534 bytes
+
+Blob: signalp_other/merged/signalp_other_prediction_counts.tsv
+
+Blob: signalp_other/archive/signalp_other_full_results_20260527_134354.tar.gz
+Observed size: 643,069,233 bytes
+```
+
+### Eukarya-mode pass completed
+
+The **Eukarya-mode SignalP pass was also completed** on the full 4,723,339-sequence dataset. During the run, an intermediate checkpoint was created after approximately 280 chunks had completed, then the VM was resized to improve throughput. The final per-chunk outputs were merged into:
+
+```text
+merged/signalp_eukarya_all_predictions.tsv
+```
+
+The merged Eukarya-mode output, prediction counts, and full archive were uploaded to Azure Blob Storage:
+
+```text
+Storage account: petadexstorage
+Container: signalp-results
+Blob: signalp_eukarya/merged/signalp_eukarya_all_predictions.tsv
+Observed size: 278,834,287 bytes
+
+Blob: signalp_eukarya/merged/signalp_eukarya_prediction_counts.tsv
+Observed size: 39 bytes
+
+Blob: signalp_eukarya/archive/signalp_eukarya_full_results_20260530_010413.tar.gz
+Observed size: 591,682,057 bytes
+```
+
+### Final row-count validation
+
+Both merged prediction files were verified to contain exactly one row per FASTA record:
+
+```text
+signalp_other_all_predictions.tsv:   4,723,339 rows
+signalp_eukarya_all_predictions.tsv: 4,723,339 rows
+Input FASTA:                         4,723,339 records
+```
+
+No IDs were missing from either merged result during the mode-comparison analysis.
+
+
+## Completed SignalP results and preliminary discussion
+
+### Prediction counts by mode
+
+SignalP 6.0 was run in both `eukarya` and `other` organism modes across the complete FASTA dataset of **4,723,339 sequences**.
+
+#### Eukarya mode
+
+| Prediction | Count | Percent |
+|---|---:|---:|
+| OTHER | 3,129,552 | 66.257196% |
+| SP | 1,593,787 | 33.742804% |
+
+#### Other mode
+
+| Prediction | Count | Percent |
+|---|---:|---:|
+| OTHER | 3,132,105 | 66.311247% |
+| SP | 1,195,691 | 25.314529% |
+| LIPO | 219,125 | 4.639197% |
+| TAT | 152,778 | 3.234534% |
+| TATLIPO | 23,626 | 0.500197% |
+| PILIN | 14 | 0.000296% |
+
+The overall signal-peptide-positive fraction was highly similar between modes.
+
+### Eukarya vs Other mode comparison
+
+The merged results from both modes were compared by sequence ID. The comparison found:
+
+```text
+Eukarya rows: 4,723,339
+Other rows:   4,723,339
+IDs missing in Eukarya: 0
+IDs missing in Other:   0
+```
+
+Confusion matrix:
+
+| Eukarya prediction | Other prediction | Count |
+|---|---|---:|
+| OTHER | OTHER | 3,129,552 |
+| SP | SP | 1,195,691 |
+| SP | LIPO | 219,125 |
+| SP | TAT | 152,778 |
+| SP | TATLIPO | 23,626 |
+| SP | PILIN | 14 |
+| SP | OTHER | 2,553 |
+
+The key observation is that every sequence predicted as a signal peptide class in Other mode was also predicted as `SP` in Eukarya mode. In other words, Other-mode `SP`, `LIPO`, `TAT`, `TATLIPO`, and `PILIN` predictions all collapsed into the broader Eukarya-mode `SP` label. However, **2,553 sequences** were predicted as `SP` in Eukarya mode but `OTHER` in Other mode.
+
+### Cleavage-site comparison
+
+For sequences predicted as signal-peptide-positive in both modes, cleavage sites were compared between the Eukarya and Other predictions:
+
+| Cleavage-site comparison | Count |
+|---|---:|
+| same_cs | 1,567,257 |
+| different_cs | 23,964 |
+| missing_eukarya_cs_only | 2 |
+| missing_other_cs_only | 11 |
+
+Most shared signal-peptide-positive predictions had the same cleavage site in both modes, suggesting that the mode choice mainly changes signal peptide subtype labels rather than cleavage-site position for the majority of shared signal peptide calls. ~24k cleavage sites differed, which is still a relatively small amount given the 4.7 million sequences.
+
+### Cleavage-site position distribution
+
+The most common Eukarya-mode cleavage-site intervals were:
+
+| Prediction | CS left | CS right | Count |
+|---|---:|---:|---:|
+| SP | 19 | 20 | 112,837 |
+| SP | 21 | 22 | 102,325 |
+| SP | 20 | 21 | 99,968 |
+| SP | 23 | 24 | 92,927 |
+| SP | 22 | 23 | 90,444 |
+
+The most common Other-mode cleavage-site intervals were also concentrated around the same N-terminal region, especially for `SP` predictions:
+
+| Prediction | CS left | CS right | Count |
+|---|---:|---:|---:|
+| SP | 19 | 20 | 94,949 |
+| SP | 21 | 22 | 83,513 |
+| SP | 20 | 21 | 80,460 |
+| SP | 23 | 24 | 76,474 |
+| SP | 22 | 23 | 72,803 |
+
+Other-mode subtype-specific cleavage-site peaks also appeared, for example `LIPO` around positions 18–21 and `TAT` around positions 28–29 among the top entries. This is consistent with the idea that Other mode is capturing multiple signal peptide/export classes with different cleavage-site distributions.
+
+### Generated analysis outputs
+
+The following analysis outputs were generated and uploaded to Azure Blob Storage under:
+
+```text
+Storage account: petadexstorage
+Container: signalp-results
+Prefix: signalp_analysis/
+```
+
+Uploaded analysis files:
+
+```text
+signalp_analysis/signalp_analysis_run_summary.txt
+signalp_analysis/signalp_prediction_counts_by_mode.tsv
+signalp_analysis/signalp_eukarya_vs_other_confusion_matrix.tsv
+signalp_analysis/signalp_nonother_overlap_summary.tsv
+signalp_analysis/signalp_other_type_vs_eukarya_prediction.tsv
+signalp_analysis/signalp_cleavage_site_comparison_summary.tsv
+signalp_analysis/signalp_eukarya_cleavage_site_distribution.tsv
+signalp_analysis/signalp_other_cleavage_site_distribution.tsv
+signalp_analysis/signalp_prediction_discrepancies.tsv
+signalp_analysis/signalp_cleavage_site_differences.tsv
+```
+
+Figures were also generated from the analysis tables and uploaded under:
+
+```text
+Storage account: petadexstorage
+Container: signalp-results
+Prefix: signalp_figures/
+```
+The script used to generate the analysis is below:
+```python
+cat > scripts/plot_signalp_analysis.py <<'PY'
+from pathlib import Path
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
+base = Path("/mnt/signalp_deeploc_project")
+analysis = base / "analysis"
+figures = base / "figures"
+figures.mkdir(exist_ok=True)
+
+plt.rcParams.update({
+    "figure.dpi": 140,
+    "savefig.dpi": 300,
+    "font.size": 11,
+    "axes.titlesize": 15,
+    "axes.labelsize": 12,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "legend.fontsize": 10,
+    "figure.facecolor": "white",
+    "axes.facecolor": "white",
+})
+
+def savefig(name):
+    plt.tight_layout()
+    plt.savefig(figures / f"{name}.png", bbox_inches="tight")
+    plt.savefig(figures / f"{name}.pdf", bbox_inches="tight")
+    plt.close()
+
+# ---------- Load data ----------
+counts = pd.read_csv(analysis / "signalp_prediction_counts_by_mode.tsv", sep="\t")
+conf = pd.read_csv(analysis / "signalp_eukarya_vs_other_confusion_matrix.tsv", sep="\t")
+overlap = pd.read_csv(analysis / "signalp_nonother_overlap_summary.tsv", sep="\t")
+other_vs_euk = pd.read_csv(analysis / "signalp_other_type_vs_eukarya_prediction.tsv", sep="\t")
+cs_comp = pd.read_csv(analysis / "signalp_cleavage_site_comparison_summary.tsv", sep="\t")
+euk_cs = pd.read_csv(analysis / "signalp_eukarya_cleavage_site_distribution.tsv", sep="\t")
+other_cs = pd.read_csv(analysis / "signalp_other_cleavage_site_distribution.tsv", sep="\t")
+
+# ---------- 1. Prediction counts by mode ----------
+fig, ax = plt.subplots(figsize=(9, 5.5))
+
+order = ["OTHER", "SP", "LIPO", "TAT", "TATLIPO", "PILIN"]
+pivot = counts.pivot(index="prediction", columns="mode", values="count").reindex(order).fillna(0)
+pivot.plot(kind="bar", ax=ax)
+
+ax.set_title("SignalP 6.0 Predictions by Mode")
+ax.set_xlabel("Prediction class")
+ax.set_ylabel("Number of sequences")
+ax.ticklabel_format(axis="y", style="plain")
+ax.legend(title="Mode")
+ax.grid(axis="y", alpha=0.25)
+
+for container in ax.containers:
+    ax.bar_label(container, fmt="%.0f", rotation=90, padding=3, fontsize=8)
+
+savefig("01_prediction_counts_by_mode")
+
+# ---------- 2. Prediction percent by mode ----------
+fig, ax = plt.subplots(figsize=(9, 5.5))
+
+percent = counts.pivot(index="prediction", columns="mode", values="percent").reindex(order).fillna(0)
+percent.plot(kind="bar", ax=ax)
+
+ax.set_title("SignalP 6.0 Prediction Percentages by Mode")
+ax.set_xlabel("Prediction class")
+ax.set_ylabel("Percent of total sequences")
+ax.legend(title="Mode")
+ax.grid(axis="y", alpha=0.25)
+
+for container in ax.containers:
+    ax.bar_label(container, fmt="%.2f%%", rotation=90, padding=3, fontsize=8)
+
+savefig("02_prediction_percentages_by_mode")
+
+# ---------- 3. Other mode class composition ----------
+other_counts = counts[counts["mode"] == "other"].copy()
+other_counts = other_counts.set_index("prediction").reindex(order).dropna().reset_index()
+
+fig, ax = plt.subplots(figsize=(8, 5.2))
+ax.bar(other_counts["prediction"], other_counts["count"])
+ax.set_title("Other Mode SignalP Class Breakdown")
+ax.set_xlabel("Other-mode prediction class")
+ax.set_ylabel("Number of sequences")
+ax.ticklabel_format(axis="y", style="plain")
+ax.grid(axis="y", alpha=0.25)
+
+for i, row in other_counts.iterrows():
+    ax.text(i, row["count"], f"{row['percent']:.2f}%", ha="center", va="bottom", fontsize=9)
+
+savefig("03_other_mode_class_breakdown")
+
+# ---------- 4. Eukarya vs Other confusion heatmap ----------
+conf_pivot = conf.pivot(index="eukarya_prediction", columns="other_prediction", values="count").fillna(0)
+conf_pivot = conf_pivot.reindex(index=["OTHER", "SP"], columns=["OTHER", "SP", "LIPO", "TAT", "TATLIPO", "PILIN"]).fillna(0)
+
+fig, ax = plt.subplots(figsize=(9, 4.5))
+im = ax.imshow(conf_pivot.values, aspect="auto")
+
+ax.set_title("Eukarya vs Other Mode Prediction Matrix")
+ax.set_xlabel("Other mode prediction")
+ax.set_ylabel("Eukarya mode prediction")
+ax.set_xticks(np.arange(len(conf_pivot.columns)))
+ax.set_xticklabels(conf_pivot.columns)
+ax.set_yticks(np.arange(len(conf_pivot.index)))
+ax.set_yticklabels(conf_pivot.index)
+
+for i in range(conf_pivot.shape[0]):
+    for j in range(conf_pivot.shape[1]):
+        val = int(conf_pivot.iloc[i, j])
+        if val > 0:
+            ax.text(j, i, f"{val:,}", ha="center", va="center", fontsize=9)
+
+cbar = plt.colorbar(im, ax=ax)
+cbar.set_label("Number of sequences")
+
+savefig("04_eukarya_vs_other_confusion_matrix")
+
+# ---------- 5. Non-OTHER overlap summary ----------
+fig, ax = plt.subplots(figsize=(8.5, 5))
+overlap_sorted = overlap.sort_values("count", ascending=False)
+labels = overlap_sorted["category"].str.replace("_", "\n")
+ax.bar(labels, overlap_sorted["count"])
+ax.set_title("Signal Peptide Presence Agreement Between Modes")
+ax.set_xlabel("Agreement category")
+ax.set_ylabel("Number of sequences")
+ax.ticklabel_format(axis="y", style="plain")
+ax.grid(axis="y", alpha=0.25)
+
+for i, row in overlap_sorted.reset_index(drop=True).iterrows():
+    ax.text(i, row["count"], f"{row['count']:,}", ha="center", va="bottom", fontsize=9)
+
+savefig("05_signal_peptide_presence_overlap")
+
+# ---------- 6. Cleavage-site comparison ----------
+fig, ax = plt.subplots(figsize=(8.5, 5))
+cs_sorted = cs_comp.sort_values("count", ascending=False)
+labels = cs_sorted["category"].str.replace("_", "\n")
+ax.bar(labels, cs_sorted["count"])
+ax.set_title("Cleavage-Site Agreement for Sequences Predicted as Signal Peptides in Both Modes")
+ax.set_xlabel("Cleavage-site comparison category")
+ax.set_ylabel("Number of sequences")
+ax.ticklabel_format(axis="y", style="plain")
+ax.grid(axis="y", alpha=0.25)
+
+for i, row in cs_sorted.reset_index(drop=True).iterrows():
+    ax.text(i, row["count"], f"{row['count']:,}", ha="center", va="bottom", fontsize=9)
+
+savefig("06_cleavage_site_agreement")
+
+# ---------- 7. Eukarya cleavage-site distribution ----------
+fig, ax = plt.subplots(figsize=(9.5, 5.5))
+euk_line = euk_cs.groupby("cs_left", as_index=False)["count"].sum().sort_values("cs_left")
+ax.plot(euk_line["cs_left"], euk_line["count"], marker="o", linewidth=2)
+ax.set_title("Eukarya Mode Cleavage-Site Position Distribution")
+ax.set_xlabel("Cleavage-site left position")
+ax.set_ylabel("Number of predictions")
+ax.ticklabel_format(axis="y", style="plain")
+ax.grid(alpha=0.25)
+
+savefig("07_eukarya_cleavage_site_distribution")
+
+# ---------- 8. Other cleavage-site distribution by class ----------
+fig, ax = plt.subplots(figsize=(10, 6))
+for pred, group in other_cs.groupby("prediction"):
+    line = group.groupby("cs_left", as_index=False)["count"].sum().sort_values("cs_left")
+    ax.plot(line["cs_left"], line["count"], marker="o", linewidth=2, label=pred)
+
+ax.set_title("Other Mode Cleavage-Site Position Distribution by Class")
+ax.set_xlabel("Cleavage-site left position")
+ax.set_ylabel("Number of predictions")
+ax.ticklabel_format(axis="y", style="plain")
+ax.legend(title="Prediction")
+ax.grid(alpha=0.25)
+
+savefig("08_other_cleavage_site_distribution_by_class")
+
+# ---------- 9. Other class vs Eukarya classification ----------
+fig, ax = plt.subplots(figsize=(8, 5))
+other_vs_euk_sorted = other_vs_euk.sort_values("count", ascending=False)
+labels = other_vs_euk_sorted["other_prediction"] + " → " + other_vs_euk_sorted["eukarya_prediction"]
+ax.bar(labels, other_vs_euk_sorted["count"])
+ax.set_title("Other-Mode Signal Peptide Classes Mapped to Eukarya Mode")
+ax.set_xlabel("Other mode → Eukarya mode")
+ax.set_ylabel("Number of sequences")
+ax.ticklabel_format(axis="y", style="plain")
+ax.grid(axis="y", alpha=0.25)
+
+for i, row in other_vs_euk_sorted.reset_index(drop=True).iterrows():
+    ax.text(i, row["count"], f"{row['count']:,}", ha="center", va="bottom", fontsize=9)
+
+savefig("09_other_classes_mapped_to_eukarya")
+
+print(f"Figures written to: {figures}")
+PY
+```

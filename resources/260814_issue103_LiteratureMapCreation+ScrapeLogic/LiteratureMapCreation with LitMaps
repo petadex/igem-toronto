@@ -1,0 +1,485 @@
+# same database memory issue, but this site lets you export an RIS file of up to 200 selections, none of the papers cite over 200 papers, so this only leaves out a few cases, where papers had a large impact factor
+import os
+import time
+import re
+import pyautogui
+import undetected_chromedriver as uc
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
+
+
+# PYAUTOGUI FALLBACK COORDINATES
+COORD_EXPORT_BTN      = (650, 447)
+COORD_FORMAT_DROPDOWN = (1238, 232) 
+COORD_RIS_OPTION      = (1249, 342) 
+COORD_DOWNLOAD_BTN    = (888, 876)  
+COORD_CANCEL_BTN      = (1035, 879) 
+
+
+# HELPER FUNCTIONS 
+def sanitize_filename(name):
+    return re.sub(r'[\\/*?:"<>|]', '_', name)
+
+def safe_js_click(driver, element):
+    driver.execute_script("arguments[0].scrollIntoView({block: 'nearest', inline: 'nearest'});", element)
+    time.sleep(0.5)
+    driver.execute_script("arguments[0].click();", element)
+
+def set_cdp_download_directory(driver, download_dir):
+    driver.execute_cdp_cmd("Page.setDownloadBehavior", {
+        "behavior": "allow",
+        "downloadPath": download_dir
+    })
+
+def wait_for_new_download(directory, files_before, timeout=20):
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        current_files = set(os.listdir(directory))
+        new_files = current_files - files_before
+        for file in new_files:
+            if not file.endswith('.crdownload') and not file.endswith('.tmp'):
+                return True
+        time.sleep(1)
+    return False
+
+def parse_k_count(text):
+    """Converts strings like '1.1k' to 1100, and '39' to 39."""
+    text = text.strip().lower()
+    if not text:
+        return 0
+    if 'k' in text:
+        return int(float(text.replace('k', '')) * 1000)
+    # Remove any commas just in case (e.g., '1,200')
+    return int(text.replace(',', ''))
+
+# CONFIGURATION
+BASE_DOWNLOAD_DIR = r"C:\Users\somna\Downloads\Litmaps_Exports"
+os.makedirs(BASE_DOWNLOAD_DIR, exist_ok=True)
+
+# SELECTORS
+POPUP_ARTICLE_WAIT_SEL = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div.AnimatedContainer__Container-sc-14fxw03-0.dFOrZB.TrailOverlay__Container-sc-luu1ph-2.ksERhF.ac-enter-done > div > div.Trail__TrailSeriesContainer-sc-15tt5id-1.geKCMy.flex > div > div > div > div > div.HorizontalPanels__Left-sc-hpadpu-1.kTAYzy > div > div.ScrollContainer__Root-sc-ynrjzy-0.cnQPHG.flex > div > div:nth-child(1) > div > div:nth-child(2) > div > div > div.ArticleCardTitle__Container-sc-wbi0h-0.jAxpaz > div > h4"
+POPUP_ARTICLE_WAIT_SEL2 = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div.AnimatedContainer__Container-sc-14fxw03-0.dFOrZB.TrailOverlay__Container-sc-luu1ph-2.ksERhF.ac-enter-done > div > div.Trail__TrailSeriesContainer-sc-15tt5id-1.geKCMy.flex > div > div > div > div > div.HorizontalPanels__Left-sc-hpadpu-1.kTAYzy > div > div.ScrollContainer__Root-sc-ynrjzy-0.cnQPHG.flex > div > div:nth-child(1) > div > div:nth-child(3) > div > div > div.ArticleCardTitle__Container-sc-wbi0h-0.jAxpaz > div > h4"
+
+# MAIN SCRIPT
+options = uc.ChromeOptions()
+prefs = {
+    "download.default_directory": BASE_DOWNLOAD_DIR,
+    "download.prompt_for_download": False,
+    "download.directory_upgrade": True,
+    "profile.default_content_settings.popups": 0,
+    "safebrowsing.enabled": True
+}
+options.add_experimental_option("prefs", prefs)
+
+driver = uc.Chrome(options=options)
+driver.maximize_window()
+
+driver.get("https://app.litmaps.com/?auth=sign-in")
+
+print("\n" + "="*50)
+print("ACTION REQUIRED: Please log in to Litmaps and upload your PAZy papers.")
+print("Navigate to the list view showing all your articles.")
+input("Press ENTER here in the console when you are ready to begin scraping...")
+print("="*50 + "\n")
+
+page_number = 1
+
+while True:
+    print(f"\n===== SCANNING PAGE {page_number} =====")
+    
+    print("[DEBUG] Waiting for TriageList ItemContainers to load...")
+    try:
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div[class*='TriageList__ItemContainer']"))
+        )
+    except Exception as e:
+        print(f"[ERROR] Could not find TriageList containers. Error: {e}")
+        #user_input = input("Are there articles on this page? Type 'y' to try fetching anyway, or 'n' to exit: ")
+        #if user_input.lower() != 'y':
+        #    break
+
+    print("[DEBUG] Fetching article list using your exact selector targeting the h4...")
+    articles_selector = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div > div > div > div.BrowseList__Container-sc-y5e0hm-0.btCRdv.flex > div.BrowseList__ListContainer-sc-y5e0hm-1.gJhQwO > div.ScrollContainer__Root-sc-ynrjzy-0.cnQPHG.flex.flex-column.relative > div > div:nth-child(1) > div > div.TriageList__ItemContainer-sc-h0nr3c-0 > div > div > div:nth-child(2) > div > h4"
+    articles = driver.find_elements(By.CSS_SELECTOR, articles_selector)
+    total_articles = len(articles)
+    
+    if total_articles == 0:
+        print("[ERROR] Found 0 articles with that selector.")
+        #total_input = input("Please manually enter how many articles you see to loop through (e.g., 20): ")
+        #total_articles = int(total_input) if total_input.isdigit() else 0
+
+    print(f"Found {total_articles} articles on current page.")
+
+    for idx in range(total_articles):
+        print(f"\n--- Processing Article {idx + 1}/{total_articles} ---")
+        
+        print("[DEBUG] Clicking the article card (h4) in the list...")
+        try:
+            articles = driver.find_elements(By.CSS_SELECTOR, articles_selector)
+            current_article = articles[idx]
+            safe_js_click(driver, current_article)
+            time.sleep(2.5) 
+        except Exception as e:
+            print(f"[ERROR] Failed to click article index {idx}. Error: {e}")
+            input(f"Please manually click article #{idx + 1} in the browser, then press ENTER to continue...")
+
+        print("[DEBUG] Extracting DOI...")
+        try:
+            doi_selector = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div > div > div > div.BrowseList__Container-sc-y5e0hm-0.btCRdv.flex > div.BrowseList__ArticleContainer-sc-y5e0hm-2.jpaTip.relative > div > div.ScrollContainer__Root-sc-ynrjzy-0.cnQPHG.flex > div > div:nth-child(1) > div > div.flex > div:nth-child(3) > div > p:nth-child(3)"
+            doi_element = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, doi_selector)))
+            raw_doi = driver.execute_script("return arguments[0].innerText;", doi_element).strip()
+            print(f"[DEBUG] Captured DOI: {raw_doi}")
+        except Exception as e:
+            print(f"[ERROR] Failed to extract DOI using selector. Error: {e}")
+            #raw_doi = input("Please manually type the DOI here (or press ENTER to use a timestamp): ").strip()
+            if not raw_doi:
+                raw_doi = f"Unknown_DOI_{int(time.time())}"
+        
+        safe_doi = sanitize_filename(raw_doi)
+
+        # --- RESUME LOGIC & DIRECTORY CREATION ---
+        article_dir = os.path.join(BASE_DOWNLOAD_DIR, safe_doi)
+        if os.path.exists(article_dir):
+            print(f"[SKIP] Directory already exists for DOI: {safe_doi}")
+            continue 
+
+        refs_dir = os.path.join(article_dir, "refs")
+        cited_dir = os.path.join(article_dir, "cited by")
+        os.makedirs(refs_dir, exist_ok=True)
+        os.makedirs(cited_dir, exist_ok=True)
+
+
+        # PHASE 1: REFERENCES
+
+        print("\n[DEBUG] --- STARTING REFERENCES ---")
+        try:
+            print("[DEBUG] Clicking References button...")
+            ref_sel = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div > div > div > div.BrowseList__Container-sc-y5e0hm-0.btCRdv.flex > div.BrowseList__ArticleContainer-sc-y5e0hm-2.jpaTip.relative > div > div.ScrollContainer__Root-sc-ynrjzy-0.cnQPHG.flex > div > div:nth-child(1) > div > div.RegisteredOnly__Container-sc-1ycepln-0.dcUGRA.ArticleLibraryConnections__Container-sc-1vim94y-0.bqKlDU.ArticleInspector__StyledArticleLibraryConnections-sc-1xf8bpo-7.OaEck > div:nth-child(3) > div"
+            references_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, ref_sel)))
+            references_btn.click()
+            
+            print("[DEBUG] Waiting for Reference articles to populate in the pop-up...")
+            WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, POPUP_ARTICLE_WAIT_SEL)))
+            time.sleep(1) # Extra second for UI to settle
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, POPUP_ARTICLE_WAIT_SEL)))
+        except Exception as e:
+            print(f"[ERROR] Failed. Error: {e}")
+            #input("Please manually click 'References', ensure the list loads, then press ENTER...")
+        try:
+            print("[DEBUG] Checking reference count...")
+            ref_num_sel = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div.AnimatedContainer__Container-sc-14fxw03-0.dFOrZB.TrailOverlay__Container-sc-luu1ph-2.ksERhF.ac-enter-done > div > div.Trail__TrailSeriesContainer-sc-15tt5id-1.geKCMy.flex > div > div > div > div > div.HorizontalPanels__Left-sc-hpadpu-1.kTAYzy > div > div.InlineRadioBar__Container-sc-1y7e0al-0.hjhFZc > div > div.InlineRadioBar__Option-sc-1y7e0al-2.koWUOq.selected > span > span"
+            References_number = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, ref_num_sel)))
+            Ref_count = parse_k_count(References_number.text)
+            print(f"[DEBUG] Found {Ref_count} references.")
+        except Exception as e:
+            print(f"[ERROR] Failed to read reference count. Error: {e}")
+            #cit_val = input("Please type the number of citations you see (type 0 if none): ")
+            #cit_count = parse_k_count(cit_val)
+        
+        if Ref_count > 0:
+            try:
+                print("[DEBUG] Clicking Select All...")
+                sel_all = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div.AnimatedContainer__Container-sc-14fxw03-0.dFOrZB.TrailOverlay__Container-sc-luu1ph-2.ksERhF.ac-enter-done > div > div.Trail__TrailSeriesContainer-sc-15tt5id-1.geKCMy.flex > div > div > div > div > div.HorizontalPanels__Left-sc-hpadpu-1.kTAYzy > div > div.FilterBar__Container-sc-1my43bp-0.hhrXuk > div.flex.flex-container-centered > div.flex-container-centered.relative > div"
+                select_all_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, sel_all)))
+                select_all_btn.click()
+            except Exception as e:
+                print(f"[ERROR] Failed. Error: {e}")
+                #input("Please manually click 'Select All' then press ENTER...")
+
+            try:
+                print("[DEBUG] Clicking Three Dots...")
+                dots_sel = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div.AnimatedContainer__Container-sc-14fxw03-0.dFOrZB.TrailOverlay__Container-sc-luu1ph-2.ksERhF.ac-enter-done > div > div.Trail__TrailSeriesContainer-sc-15tt5id-1.geKCMy.flex > div > div > div > div > div.HorizontalPanels__Left-sc-hpadpu-1.kTAYzy > div > div.FilterBar__Container-sc-1my43bp-0.erRziy > div > div.HintContainer__Container-sc-1k7coz6-0.ijyWYF.Button__Container-sc-1tzjyng-0.eWxZmP.StandardDropdownButton__StyledButton-sc-p4nli5-0.fYOHUq"
+                three_dots_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, dots_sel)))
+                three_dots_btn.click()
+                time.sleep(1)
+            except Exception as e:
+                print(f"[ERROR] Failed. Error: {e}")
+                #input("Please manually click the 'Three Dots' then press ENTER...")
+
+            try:
+                print("[DEBUG] Clicking Export in dropdown...")
+                exp_sel = "#litmaps-portals > div > div > div > div:nth-child(1) > div:nth-child(2) > div > div"
+                export_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, exp_sel)))
+                export_btn.click()
+                time.sleep(1)
+            except Exception as e:
+                print(f"[ERROR] Selenium click failed. Error: {e}")
+                #input(f"Press ENTER to trigger PyAutoGUI fallback clicking at {COORD_EXPORT_BTN}...")
+                time.sleep(1)
+                pyautogui.click(x=COORD_EXPORT_BTN[0], y=COORD_EXPORT_BTN[1])
+                time.sleep(1)
+
+            print("[DEBUG] Checking Format text for Citations...")
+            fmt_txt_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div:nth-child(1) > div.Dropdown__Container-sc-hsgncl-0.bJuCdp.useExporter__FormatDropdown-sc-paqtm1-1.kylfGx > div.Dropdown__Hero-sc-hsgncl-3.xUCAY.flex-container-centered > div.flex.overflow-hidden > div > div > div > div.flex-container-centered > div > span"
+            format_txt = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, fmt_txt_sel)))
+
+            if format_txt.text != "RIS":
+                print("[DEBUG] Format is not RIS, changing it...")
+                try:
+                    fmt_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div:nth-child(1) > div.Dropdown__Container-sc-hsgncl-0.bJuCdp.useExporter__FormatDropdown-sc-paqtm1-1.kylfGx > div.Dropdown__Hero-sc-hsgncl-3.xUCAY.flex-container-centered"
+                    format_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, fmt_sel)))
+                    format_btn.click()
+                    time.sleep(1)
+                    ris_sel = "#litmaps-portals > div.AnimatedContainer__Container-sc-14fxw03-0.jXCtbw.ac-enter-done > div > div > div:nth-child(1) > div:nth-child(3)"
+                    RIS_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, ris_sel)))
+                    RIS_btn.click()
+                    time.sleep(1)
+
+                except Exception as e:
+                    print(f"[ERROR] Failed to click Format. Error: {e}")
+                    #input(f"Press ENTER to use PyAutoGUI at {COORD_FORMAT_DROPDOWN} for Format...")
+                    time.sleep(1)
+                    pyautogui.click(x=COORD_FORMAT_DROPDOWN[0], y=COORD_FORMAT_DROPDOWN[1]) 
+                    time.sleep(1)
+                        
+                    print(f"[ERROR] Failed to select RIS. Error: {e}")
+                    #input(f"Press ENTER to use PyAutoGUI at {COORD_RIS_OPTION} for RIS option...")
+                    pyautogui.click(x=COORD_RIS_OPTION[0], y=COORD_RIS_OPTION[1]) 
+                    time.sleep(1)
+
+            try:
+                print("[DEBUG] Waiting for export list items to load in the modal...")
+                export_item_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div.SelectionList__Root-sc-1f7phdr-0.fIZIgH.flex > div:nth-child(1) > div.SelectionList__ItemContainer-sc-1f7phdr-1.hOnvNA > div.ArticleCardTitle__Container-sc-wbi0h-0.jAxpaz > div > h4"
+                WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, export_item_sel)))
+                time.sleep(1) # Brief pause for UI to settle
+
+                print("[DEBUG] Waiting for second export list items to load in the modal...")
+                export_item_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div.SelectionList__Root-sc-1f7phdr-0.fIZIgH.flex > div:nth-child(4) > div.SelectionList__ItemContainer-sc-1f7phdr-1.hOnvNA > div.ArticleCardTitle__Container-sc-wbi0h-0.jAxpaz > div > h4"
+                WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, export_item_sel)))
+                time.sleep(1) # Brief pause for UI to settle
+
+                print("[DEBUG] Executing Download...")
+                set_cdp_download_directory(driver, refs_dir)
+                files_before = set(os.listdir(refs_dir))
+            
+                dl_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div.flex-container-centered-justified > button.Button__Container-sc-1tzjyng-0.jespKV"
+                Download_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, dl_sel)))
+                Download_btn.click()
+            
+                print("[DEBUG] Waiting for file to appear...")
+                if not wait_for_new_download(refs_dir, files_before, timeout=15):
+                    print("[WARNING] Download timeout. Waiting 5s and retrying click...")
+                    time.sleep(5)
+                    Download_btn.click()
+                    if not wait_for_new_download(refs_dir, files_before, timeout=15):
+                        raise Exception("Second download attempt timed out.")
+                print("[DEBUG] Download confirmed.")
+            except Exception as e:
+                print(f"[ERROR] Failed to download. Error: {e}")
+                #input(f"Press ENTER to use PyAutoGUI at {COORD_DOWNLOAD_BTN} for Download...")
+                try:
+                    time.sleep(5)
+                    dl_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div.flex-container-centered-justified > button.Button__Container-sc-1tzjyng-0.jespKV"
+                    Download_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, dl_sel)))
+                    Download_btn.click()
+                except:
+                    time.sleep(10)
+                    pyautogui.click(x=COORD_DOWNLOAD_BTN[0], y=COORD_DOWNLOAD_BTN[1]) 
+                    time.sleep(2)
+
+            try:
+                print("[DEBUG] Clicking Cancel to close Export popup...")
+                can_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div.flex-container-centered-justified > button.Button__Container-sc-1tzjyng-0.bPHony"
+                Cancel_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, can_sel)))
+                Cancel_btn.click()
+            except Exception as e:
+                print(f"[ERROR] Failed to click Cancel. Error: {e}")
+                #input(f"Press ENTER to use PyAutoGUI at {COORD_CANCEL_BTN} for Cancel...")
+                pyautogui.click(x=COORD_CANCEL_BTN[0], y=COORD_CANCEL_BTN[1]) 
+                time.sleep(1)
+
+
+        # PHASE 2: CITATIONS
+
+        print("\n[DEBUG] --- STARTING CITATIONS ---")
+        try:
+            print("[DEBUG] Deselecting all references...")
+            desel = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div.AnimatedContainer__Container-sc-14fxw03-0.dFOrZB.TrailOverlay__Container-sc-luu1ph-2.ksERhF.ac-enter-done > div > div.Trail__TrailSeriesContainer-sc-15tt5id-1.geKCMy.flex > div > div > div > div > div.HorizontalPanels__Left-sc-hpadpu-1.kTAYzy > div > div.FilterBar__Container-sc-1my43bp-0.erRziy > div > div.flex-container-centered.relative > div.HintContainer__Container-sc-1k7coz6-0.ijyWYF.Button__Container-sc-1tzjyng-0.eWxZmP.BulkSelection__StyledButton-sc-1is618j-0.bVzOiw"
+            Deselect_all_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, desel)))
+            Deselect_all_btn.click()
+            time.sleep(0.5)
+        except Exception as e:
+            print(f"[ERROR] Failed to deselect. Error: {e}")
+            #input("Please manually deselect the items, then press ENTER...")
+            time.sleep(2)
+            try:
+                desel = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div.AnimatedContainer__Container-sc-14fxw03-0.dFOrZB.TrailOverlay__Container-sc-luu1ph-2.ksERhF.ac-enter-done > div > div.Trail__TrailSeriesContainer-sc-15tt5id-1.geKCMy.flex > div > div > div > div > div.HorizontalPanels__Left-sc-hpadpu-1.kTAYzy > div > div.FilterBar__Container-sc-1my43bp-0.erRziy > div > div.flex-container-centered.relative > div.HintContainer__Container-sc-1k7coz6-0.ijyWYF.Button__Container-sc-1tzjyng-0.eWxZmP.BulkSelection__StyledButton-sc-1is618j-0.bVzOiw"
+                Deselect_all_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, desel)))
+                Deselect_all_btn.click()
+            except:
+                print("there must have been 0 references")
+
+        try:
+            print("[DEBUG] Checking citation count...")
+            cit_num_sel = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div.AnimatedContainer__Container-sc-14fxw03-0.dFOrZB.TrailOverlay__Container-sc-luu1ph-2.ksERhF.ac-enter-done > div > div.Trail__TrailSeriesContainer-sc-15tt5id-1.geKCMy.flex > div > div > div > div > div.HorizontalPanels__Left-sc-hpadpu-1.kTAYzy > div > div.InlineRadioBar__Container-sc-1y7e0al-0.hjhFZc > div > div:nth-child(3) > span > span"
+            Citations_number = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, cit_num_sel)))
+            cit_count = parse_k_count(Citations_number.text)
+            print(f"[DEBUG] Found {cit_count} citations.")
+        except Exception as e:
+            print(f"[ERROR] Failed to read citation count. Error: {e}")
+            #cit_val = input("Please type the number of citations you see (type 0 if none): ")
+            #cit_count = parse_k_count(cit_val)
+
+        if cit_count > 0:
+            try:
+                print("[DEBUG] Clicking Citations tab...")
+                cit_tab_sel = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div.AnimatedContainer__Container-sc-14fxw03-0.dFOrZB.TrailOverlay__Container-sc-luu1ph-2.ksERhF.ac-enter-done > div > div.Trail__TrailSeriesContainer-sc-15tt5id-1.geKCMy.flex > div > div > div > div > div.HorizontalPanels__Left-sc-hpadpu-1.kTAYzy > div > div.InlineRadioBar__Container-sc-1y7e0al-0.hjhFZc > div > div:nth-child(3)"
+                Citations_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, cit_tab_sel)))
+                Citations_btn.click()
+                
+                print("[DEBUG] Waiting for Citation articles to populate in the pop-up...")
+                WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, POPUP_ARTICLE_WAIT_SEL)))
+                time.sleep(1) # Extra second for UI to settle
+                WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, POPUP_ARTICLE_WAIT_SEL2)))
+            except Exception as e:
+                print(f"[ERROR] Failed. Error: {e}")
+                #input("Please manually click the Citations tab, wait for it to load, then press ENTER...")
+
+            try:
+                print("[DEBUG] Clicking Select All for Citations...")
+                sel_all2 = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div.AnimatedContainer__Container-sc-14fxw03-0.dFOrZB.TrailOverlay__Container-sc-luu1ph-2.ksERhF.ac-enter-done > div > div.Trail__TrailSeriesContainer-sc-15tt5id-1.geKCMy.flex > div > div > div > div > div.HorizontalPanels__Left-sc-hpadpu-1.kTAYzy > div > div.FilterBar__Container-sc-1my43bp-0.hhrXuk > div.flex.flex-container-centered > div.flex-container-centered.relative > div"
+                select_all_btn2 = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, sel_all2)))
+                select_all_btn2.click()
+            except Exception as e:
+                print(f"[ERROR] Failed. Error: {e}")
+                #input("Please manually click 'Select All' for citations, then press ENTER...")
+
+            try:
+                print("[DEBUG] Clicking Three Dots for Citations...")
+                dots2 = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div.AnimatedContainer__Container-sc-14fxw03-0.dFOrZB.TrailOverlay__Container-sc-luu1ph-2.ksERhF.ac-enter-done > div > div.Trail__TrailSeriesContainer-sc-15tt5id-1.geKCMy.flex > div > div > div > div > div.HorizontalPanels__Left-sc-hpadpu-1.kTAYzy > div > div.FilterBar__Container-sc-1my43bp-0.erRziy > div > div.HintContainer__Container-sc-1k7coz6-0.ijyWYF.Button__Container-sc-1tzjyng-0.eWxZmP.StandardDropdownButton__StyledButton-sc-p4nli5-0.fYOHUq"
+                three_dots_btn2 = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, dots2)))
+                three_dots_btn2.click()
+                time.sleep(1)
+            except Exception as e:
+                print(f"[ERROR] Failed. Error: {e}")
+                #input("Please manually click 'Three Dots', then press ENTER...")
+
+            try:
+                print("[DEBUG] Clicking Export for Citations...")
+                exp2 = "#litmaps-portals > div > div > div > div:nth-child(1) > div:nth-child(2) > div > div"
+                export_btn2 = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, exp2)))
+                export_btn2.click()
+                time.sleep(1)
+            except Exception as e:
+                print(f"[ERROR] Selenium click failed. Error: {e}")
+                #input(f"Press ENTER to trigger PyAutoGUI fallback clicking at {COORD_EXPORT_BTN}...")
+                pyautogui.click(x=COORD_EXPORT_BTN[0], y=COORD_EXPORT_BTN[1])
+                time.sleep(1)
+
+            try:
+                print("[DEBUG] Checking Format text for Citations...")
+                fmt_txt_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div:nth-child(1) > div.Dropdown__Container-sc-hsgncl-0.bJuCdp.useExporter__FormatDropdown-sc-paqtm1-1.kylfGx > div.Dropdown__Hero-sc-hsgncl-3.xUCAY.flex-container-centered > div.flex.overflow-hidden > div > div > div > div.flex-container-centered > div > span"
+                format_txt = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, fmt_txt_sel)))
+                
+                if format_txt.text != "RIS":
+                    print("[DEBUG] Format is not RIS, changing it...")
+                    try:
+                        fmt_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div:nth-child(1) > div.Dropdown__Container-sc-hsgncl-0.bJuCdp.useExporter__FormatDropdown-sc-paqtm1-1.kylfGx > div.Dropdown__Hero-sc-hsgncl-3.xUCAY.flex-container-centered"
+                        format_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, fmt_sel)))
+                        format_btn.click()
+                        time.sleep(1)
+
+                        ris_sel = "#litmaps-portals > div.AnimatedContainer__Container-sc-14fxw03-0.jXCtbw.ac-enter-done > div > div > div:nth-child(1) > div:nth-child(3)"
+                        RIS_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, ris_sel)))
+                        RIS_btn.click()
+                        time.sleep(1)
+                    except Exception as e:
+                        print(f"[ERROR] Failed to click Format. Error: {e}")
+                        #input(f"Press ENTER to use PyAutoGUI at {COORD_FORMAT_DROPDOWN} for Format...")
+                        pyautogui.click(x=COORD_FORMAT_DROPDOWN[0], y=COORD_FORMAT_DROPDOWN[1]) 
+                        time.sleep(1)
+                        
+                        print(f"[ERROR] Failed to select RIS. Error: {e}")
+                        #input(f"Press ENTER to use PyAutoGUI at {COORD_RIS_OPTION} for RIS option...")
+                        pyautogui.click(x=COORD_RIS_OPTION[0], y=COORD_RIS_OPTION[1]) 
+                        time.sleep(1)
+                        
+            except Exception as e:
+                print(f"[ERROR] Failed to check format. Error: {e}")
+                #input("Please verify the format is RIS, then press ENTER...")
+
+            try:
+                print("[DEBUG] Waiting for export list items to load in the modal...")
+                export_item_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div.SelectionList__Root-sc-1f7phdr-0.fIZIgH.flex > div:nth-child(1) > div.SelectionList__ItemContainer-sc-1f7phdr-1.hOnvNA > div.ArticleCardTitle__Container-sc-wbi0h-0.jAxpaz > div > h4"
+                WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, export_item_sel)))
+                time.sleep(1) # Brief pause for UI to settle
+
+                print("[DEBUG] Waiting for second export list items to load in the modal...")
+                export_item_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div.SelectionList__Root-sc-1f7phdr-0.fIZIgH.flex > div:nth-child(4) > div.SelectionList__ItemContainer-sc-1f7phdr-1.hOnvNA > div.ArticleCardTitle__Container-sc-wbi0h-0.jAxpaz > div > h4"
+                WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, export_item_sel)))
+                time.sleep(1) # Brief pause for UI to settle
+
+                print("[DEBUG] Executing Citations Download...")
+                set_cdp_download_directory(driver, cited_dir)
+                files_before = set(os.listdir(cited_dir))
+                
+                dl_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div.flex-container-centered-justified > button.Button__Container-sc-1tzjyng-0.jespKV"
+                Download_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, dl_sel)))
+                Download_btn.click()
+                
+                print("[DEBUG] Waiting for file to appear...")
+                if not wait_for_new_download(cited_dir, files_before, timeout=15):
+                    print("[WARNING] Download timeout. Waiting 5s and retrying click...")
+                    time.sleep(5)
+                    Download_btn.click()
+                    if not wait_for_new_download(cited_dir, files_before, timeout=15):
+                        raise Exception("Second download attempt timed out.")
+                print("[DEBUG] Download confirmed.")
+            except Exception as e:
+                print(f"[ERROR] Failed to download citations. Error: {e}")
+                #input(f"Press ENTER to use PyAutoGUI at {COORD_DOWNLOAD_BTN} for Download...")
+                try:
+                    time.sleep(5)
+                    dl_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div.flex-container-centered-justified > button.Button__Container-sc-1tzjyng-0.jespKV"
+                    Download_btn = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, dl_sel)))
+                    Download_btn.click()
+                except:
+                    time.sleep(10)
+                    pyautogui.click(x=COORD_DOWNLOAD_BTN[0], y=COORD_DOWNLOAD_BTN[1]) 
+                    time.sleep(2)
+
+            try:
+                print("[DEBUG] Clicking Cancel to close Export popup...")
+                can_sel = "#litmaps-portals > div > div > div > div.Modal__Content-sc-1eq7u4g-3.iykshE.useSingletonModal__SingletonModal-sc-10n2z6s-0.useExporter__StyledModal-sc-paqtm1-0.elCwwz.dbesAN > div.flex-container-centered-justified > button.Button__Container-sc-1tzjyng-0.bPHony"
+                Cancel_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, can_sel)))
+                Cancel_btn.click()
+            except Exception as e:
+                print(f"[ERROR] Failed to click Cancel. Error: {e}")
+                #input(f"Press ENTER to use PyAutoGUI at {COORD_CANCEL_BTN} for Cancel...")
+                time.sleep(2)
+                pyautogui.click(x=COORD_CANCEL_BTN[0], y=COORD_CANCEL_BTN[1]) 
+                time.sleep(1)
+
+
+        # CLOSE ARTICLE
+
+        try:
+            print("[DEBUG] Closing the main article panel...")
+            X_btn_sel = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div.AnimatedContainer__Container-sc-14fxw03-0.dFOrZB.TrailOverlay__Container-sc-luu1ph-2.ksERhF.ac-enter-done > div > div.TrailHeader__Container-sc-1t5dhst-0.jTANfE > div.HintContainer__Container-sc-1k7coz6-0.ijyWYF.Button__Container-sc-1tzjyng-0.eWxZmP"
+            X_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, X_btn_sel)))
+            X_btn.click()
+            time.sleep(1)
+        except Exception as e:
+            print(f"[ERROR] Failed to close article panel. Error: {e}")
+            #input("Please manually click the 'X' to close the article details, then press ENTER...")
+
+
+    # PAGINATION (Hit Next Page)
+
+    try:
+        print("[DEBUG] Attempting to click Next Page...")
+        nxt_sel = "#root > div.App__Root-sc-1tc4o2e-0.lkywSs > div.Routes__Root-sc-cvkj4o-0.heOoIh > div > div.AppScaffold__ViewContainer-sc-176mpvk-2.egioHd > div > div > div > div.BrowseList__Container-sc-y5e0hm-0.btCRdv.flex > div.BrowseList__ListContainer-sc-y5e0hm-1.gJhQwO > div.sc-bdvvtL.hJMGgc > button:nth-child(3)"
+        next_btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, nxt_sel)))
+        next_btn.click()
+        page_number += 1
+        time.sleep(3) 
+    except Exception as e:
+        print(f"[ERROR] Could not click Next Page. Error: {e}")
+        #user_input = input("If there is a next page, click it now and type 'y' to continue. Type 'n' if it's the end of the list: ")
+        #if user_input.lower() != 'y':
+        #    break
+
+print("\n doshaofoaof EXTRACTION COMPLETE dkasjhiofobad")
+driver.quit()

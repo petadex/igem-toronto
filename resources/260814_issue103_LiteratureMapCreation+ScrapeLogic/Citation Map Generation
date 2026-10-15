@@ -1,0 +1,178 @@
+#changed graph in gephi after and added other details using LLM outputs, not going to put these here cuz there's too many scripts and they're all just the same thing as "Confirm Relevancy with Novalite" with a different prompt
+import os
+import json
+import pandas as pd
+import networkx as nx
+import re
+
+# DIRECTORIES
+EXPORTS_DIR = r"C:\Users\somna\Downloads\Litmaps_Exports"
+TRIAGED_CSV = os.path.join(EXPORTS_DIR, "Master_Papers_Triaged.csv")
+OUTPUT_GRAPH = os.path.join(EXPORTS_DIR, "Plastic_Enzymes_Citation_Map.gexf")
+
+MUTOOLS_DIRS = [
+    r"C:\Users\somna\Downloads\Organized_Mutools_JSONs\Unsectioned",
+    r"C:\Users\somna\Downloads\Organized_Mutools_JSONs\Review_Papers",
+    r"C:\Users\somna\Downloads\Organized_Mutools_JSONs\Primary_Research"
+]
+
+def sanitize_doi_string(doi):
+    """Replicates the sanitization scheme: / to _ and : to -"""
+    if not isinstance(doi, str):
+        return ""
+    return doi.strip().lower().replace("/", "_").replace(":", "-")
+
+def load_true_doi_mapping():
+    """Scans the Mutools folders to map sanitized folder names back to true DOIs."""
+    mapping = {}
+    print("Phase 1: Scanning Mutools JSONs to resolve core 883 DOIs...")
+    for directory in MUTOOLS_DIRS:
+        if not os.path.exists(directory):
+            continue
+        for filename in os.listdir(directory):
+            if filename.endswith(".json"):
+                file_path = os.path.join(directory, filename)
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        true_doi = data.get("doi")
+                        if true_doi:
+                            true_doi_clean = true_doi.strip()
+                            sanitized = sanitize_doi_string(true_doi_clean)
+                            mapping[sanitized] = true_doi_clean
+                except Exception:
+                    continue
+    print(f"Found true DOI resolutions for {len(mapping)} core items.")
+    return mapping
+
+def main():
+    # 1. Map sanitized folder strings to actual DOIs
+    sanitized_to_true_doi = load_true_doi_mapping()
+
+    # 2. Extract allowed target DOIs from the triage sheet
+    print("\nPhase 2: Extracting 'Definitely Yes' targets from triage CSV...")
+    if not os.path.exists(TRIAGED_CSV):
+        print(f"Critical Error: Cannot find master triage file at {TRIAGED_CSV}")
+        return
+
+    df = pd.read_csv(TRIAGED_CSV)
+    
+    # Track standard lowercased DOIs for fast matching checks
+    allowed_nodes = set()
+    doi_metadata = {}
+
+    for _, row in df.iterrows():
+        doi_val = row.get('DOI')
+        if pd.isna(doi_val):
+            continue
+        doi_str = str(doi_val).strip()
+        doi_lower = doi_str.lower()
+        
+        classification = str(row.get('Classification', '')).strip()
+        
+        if classification == 'Definitely Yes':
+            allowed_nodes.add(doi_lower)
+            doi_metadata[doi_lower] = {
+                'title': str(row.get('Title', 'Unknown')),
+                'year': str(row.get('Year', 'Unknown')),
+                'journal': str(row.get('Journal', 'Unknown')),
+                'type': 'Confirmed_Plastic'
+            }
+
+    # Always allow your core seed papers in the graph pool
+    for true_doi in sanitized_to_true_doi.values():
+        doi_lower = true_doi.lower()
+        allowed_nodes.add(doi_lower)
+        if doi_lower not in doi_metadata:
+            doi_metadata[doi_lower] = {
+                'title': 'Core Seed Paper',
+                'year': 'Unknown',
+                'journal': 'Unknown',
+                'type': 'Seed'
+            }
+        else:
+            doi_metadata[doi_lower]['type'] = 'Seed'
+
+    print(f"Total allowed unique nodes in graph target pool: {len(allowed_nodes)}")
+
+    # 3. Initialize Graph
+    G = nx.DiGraph()
+
+    # Add allowed nodes with metadata properties
+    for node_doi, meta in doi_metadata.items():
+        G.add_node(node_doi, title=meta['title'], year=meta['year'], journal=meta['journal'], type=meta['type'])
+
+    # 4. Traverse the subfolders to map citation links
+    print("\nPhase 3: Parsing citation connections from subfolders...")
+    edge_count = 0
+    
+    # Skip helper items or configuration sheets inside the Downloads destination
+    excluded_names = {'novalite_abstract_triage', 'master_papers_triaged.csv', 'errorlog.csv', 'missing_abstract_dois.csv'}
+
+    for folder_name in os.listdir(EXPORTS_DIR):
+        folder_lower = folder_name.lower()
+        if folder_lower in excluded_names:
+            continue
+            
+        folder_path = os.path.join(EXPORTS_DIR, folder_name)
+        if not os.path.isdir(folder_path):
+            continue
+
+        # Convert sanitized folder back to true core DOI
+        true_core_doi = sanitized_to_true_doi.get(folder_name)
+        if not true_core_doi:
+            # Fallback if folder naming convention matches directly
+            true_core_doi = folder_name 
+            
+        core_doi_lower = true_core_doi.lower()
+
+        # Process References Folder (Core paper points TO its reference)
+        refs_dir = os.path.join(folder_path, "refs")
+        if os.path.exists(refs_dir):
+            for filename in os.listdir(refs_dir):
+                if filename.endswith(".json"):
+                    file_path = os.path.join(refs_dir, filename)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            ref_data = json.load(f)
+                            target_doi = ref_data.get("doi")
+                            if target_doi:
+                                target_lower = target_doi.strip().lower()
+                                if target_lower in allowed_nodes:
+                                    G.add_edge(core_doi_lower, target_lower)
+                                    edge_count += 1
+                    except Exception:
+                        continue
+
+        # Process Cited By Folder (Citing paper points TO the core paper)
+        cited_by_dir = os.path.join(folder_path, "cited by")
+        if os.path.exists(cited_by_dir):
+            for filename in os.listdir(cited_by_dir):
+                if filename.endswith(".json"):
+                    file_path = os.path.join(cited_by_dir, filename)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            cite_data = json.load(f)
+                            source_doi = cite_data.get("doi")
+                            if source_doi:
+                                source_lower = source_doi.strip().lower()
+                                if source_lower in allowed_nodes:
+                                    G.add_edge(source_lower, core_doi_lower)
+                                    edge_count += 1
+                    except Exception:
+                        continue
+
+    print(f"Successfully tracked {edge_count} internal citation links.")
+
+    # 5. Clean up isolated nodes (Optional: removes papers that have zero connections)
+    isolated_nodes = [node for node in G.nodes() if G.degree(node) == 0]
+    G.remove_nodes_from(isolated_nodes)
+    print(f"Removed {len(isolated_nodes)} unconnected items to optimize chart layout.")
+
+    # 6. Save data file
+    print(f"\nPhase 4: Exporting GEXF network file to: {OUTPUT_GRAPH}")
+    nx.write_gexf(G, OUTPUT_GRAPH)
+    print("Graph execution complete. Open Gephi to render visualization layouts!")
+
+if __name__ == "__main__":
+    main()

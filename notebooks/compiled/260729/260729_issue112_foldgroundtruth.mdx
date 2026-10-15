@@ -1,0 +1,67 @@
+---
+    title: 260729_issue112_foldgroundtruth
+    section: "Dry Lab"
+    path: "/dry-lab/issue/112"
+    navTitle: "Issue 112"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+# Issue 6c: ESMFold2 Ground-Truth Data Graphs.
+
+> **Author:** Alexander Leonardos\
+> **Date Started:** July 29th, 2026\
+> **Date Finished:** July 30th, 2026 NOTE: This is just the validation that the graphs show up properly using test sets, NOT that the actual analysis is fully done.\
+> **Input:** `s3://petadex-protein-structures/esmfold2-centroids/`\
+> **Output:** Graph analysis.
+
+---
+
+## Objective
+
+The goal of this notebook is to graph the following ESMFold2 sub-experiment:
+
+### Group C: Compares the predictions to ground truth data when the crystal structures exist.  Note that we treat pLDDT/pTM as proxies for the rest of the analysis, but this ground truth comparison is valid as these graphs compares base to MSA addition group relative to each other (points relative to y=x on a scatterplot), not absolutely.
+
+#### *Ground Truth Note 1: Determining which structures have ground truth data:*
+
+1. Source 1: Cores file
+    The cores file has various types of accessions which can be mapped to PDB accessions. This can then by reverse mapped by ORFid.
+2. Source 2: ORFs file
+    The ORFs file has GenBank accessions which can be mapped to PDB accessions. This can then be reverse mapped by ORFid.
+
+#### *Ground Truth Note 2: Determining which PDBs (if any) minimize data leakage*
+
+1. Method 1: ESMFold2 Training cutoff is 2023, so anything after that is guaranteed not in the training set. (this probably isn't very many)
+    Another issue: it was trained on AFDB.
+
+2. Method 2: No near-neighbor advantage: Exclude anything that clusters with a training chain at 40pid (paper does this). Could also do FoldSeek and take the lowest?
+
+    Rationale for this is that you just want to directly minimize leakage.
+
+    Doesn't make as much sense, since &lt;40pid would be much too low for most PETases. Also, we don't need a fully novel fold for this initial benchmark. This is why it wasn't really considered for this first test set.
+
+**This has been completed!**
+
+![alt text](image.png)
+
+- [ ] **Ca**. *Difference in Quality (lDDT)*:
+  - Scatterplot with x axis corresponding to base and y corresponding to MSA. Coord value along an axis is a mean lDDT comparison metric of the axis' model's prediction vs the crystal structure.
+  - Concretely, x coord: mean-lDDT(base_pred, crystal structure), y coord: mean-lDDT(msa_pred, crystal structure)
+  - Want points above y=x
+
+- [ ] **Cb**. *Difference in Quality*: Same as Ca but with TM-score vs the crystal structure as the comparison function.
+  - Concretely, x coord: TM-score(base_pred, crystal structure), y coord: TM-score(msa_pred, crystal structure)
+  - Want points above y=x
+
+
+## Note
+
+For this initial commit, outputs from experiment A will be used as the test data.
+
+Set 1: `s3://petadex-protein-structures/esmfold2_paramsweep/s100_l20/` (will be the full baseline folds)
+
+Set 2: `s3://petadex-protein-structures/esmfold2_paramsweep/s32_l5/` (will be the MSA folds)

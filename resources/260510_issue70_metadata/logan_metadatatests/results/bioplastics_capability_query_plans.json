@@ -1,0 +1,146 @@
+{
+  "candidate_sequences_by_reference_plastic": [
+    [
+      9,
+      0,
+      223,
+      "SCAN a USING INDEX idx_annotations_plastic"
+    ],
+    [
+      12,
+      0,
+      55,
+      "SEARCH h USING COVERING INDEX idx_hits_reference (reference_id=?)"
+    ],
+    [
+      47,
+      0,
+      0,
+      "USE TEMP B-TREE FOR count(DISTINCT)"
+    ],
+    [
+      50,
+      0,
+      0,
+      "USE TEMP B-TREE FOR ORDER BY"
+    ]
+  ],
+  "candidate_sequences_by_reference_enzyme_family": [
+    [
+      9,
+      0,
+      223,
+      "SCAN a USING INDEX idx_annotations_family"
+    ],
+    [
+      12,
+      0,
+      55,
+      "SEARCH h USING COVERING INDEX idx_hits_reference (reference_id=?)"
+    ],
+    [
+      47,
+      0,
+      0,
+      "USE TEMP B-TREE FOR count(DISTINCT)"
+    ],
+    [
+      50,
+      0,
+      0,
+      "USE TEMP B-TREE FOR ORDER BY"
+    ]
+  ],
+  "candidate_sequences_matching_bioplastic_or_biodegradable_references": [
+    [
+      3,
+      0,
+      0,
+      "USE TEMP B-TREE FOR count(DISTINCT)"
+    ],
+    [
+      7,
+      0,
+      61,
+      "SEARCH a USING INDEX idx_annotations_class (plastic_class=?)"
+    ],
+    [
+      12,
+      0,
+      55,
+      "SEARCH h USING COVERING INDEX idx_hits_reference (reference_id=?)"
+    ]
+  ],
+  "hits_by_study_context": [
+    [
+      9,
+      0,
+      213,
+      "SCAN h USING COVERING INDEX idx_hits_reference"
+    ],
+    [
+      11,
+      0,
+      45,
+      "SEARCH q USING PRIMARY KEY (sequence_id=?)"
+    ],
+    [
+      15,
+      0,
+      45,
+      "SEARCH s USING PRIMARY KEY (run_accession=?)"
+    ],
+    [
+      19,
+      0,
+      0,
+      "USE TEMP B-TREE FOR GROUP BY"
+    ],
+    [
+      57,
+      0,
+      0,
+      "USE TEMP B-TREE FOR count(DISTINCT)"
+    ]
+  ],
+  "reference_biochemistry_by_plastic_class": [
+    [
+      9,
+      0,
+      223,
+      "SCAN a USING INDEX idx_annotations_class"
+    ],
+    [
+      12,
+      0,
+      45,
+      "SEARCH r USING PRIMARY KEY (reference_id=?)"
+    ],
+    [
+      61,
+      0,
+      0,
+      "USE TEMP B-TREE FOR count(DISTINCT)"
+    ]
+  ],
+  "reference_coverage_by_source": [
+    [
+      7,
+      0,
+      216,
+      "SCAN a"
+    ],
+    [
+      9,
+      0,
+      0,
+      "USE TEMP B-TREE FOR GROUP BY"
+    ],
+    [
+      49,
+      0,
+      0,
+      "USE TEMP B-TREE FOR count(DISTINCT)"
+    ]
+  ]
+}

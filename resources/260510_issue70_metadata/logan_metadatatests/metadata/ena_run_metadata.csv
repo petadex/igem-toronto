@@ -1,0 +1,7 @@
+run_accession,study_accession,sample_accession,scientific_name,tax_id,instrument_platform,instrument_model,library_source,library_strategy,library_layout,collection_date,country,host,environment_biome,environment_feature,environment_material
+DRR001152,PRJDA68269,SAMD00003357,Canis lupus familiaris,9615,ILLUMINA,Illumina Genome Analyzer IIx,TRANSCRIPTOMIC,RNA-Seq,SINGLE,,,,,,
+DRR000584,PRJDA50789,SAMD00012326,Botryococcus braunii,38881,LS454,454 GS FLX,TRANSCRIPTOMIC,EST,SINGLE,2004-04-22,,,,,
+DRR001026,PRJDA67119,SAMD00008650,Oryza sativa Japonica Group,39947,ILLUMINA,Illumina Genome Analyzer IIx,TRANSCRIPTOMIC,RNA-Seq,SINGLE,,,,,,
+DRR001104,PRJDA63487,SAMD00013914,Pinctada fucata,50426,LS454,454 GS FLX,TRANSCRIPTOMIC,EST,SINGLE,,,,,,
+DRR000185,PRJDA42805,SAMD00009112,Bacillus anthracis,1392,ILLUMINA,Illumina Genome Analyzer II,GENOMIC,WGS,SINGLE,,,,,,
+DRR001199,PRJDB2651,SAMD00013521,Mus musculus,10090,LS454,454 GS FLX Titanium,TRANSCRIPTOMIC,AMPLICON,SINGLE,,,,,,
