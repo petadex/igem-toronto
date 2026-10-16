@@ -1,0 +1,115 @@
+{
+  "counts": {
+    "labels": 13092,
+    "sequences": 1219,
+    "split_rows": 1137,
+    "cluster_rows": 1219,
+    "fasta_records": 1219,
+    "refs": 696
+  },
+  "summary_agrees": {
+    "labels": true,
+    "sequences": true,
+    "clean": true
+  },
+  "negatives": {
+    "labels_by_fold": {
+      "test": 7,
+      "train": 176,
+      "val": 13,
+      "DROPPED": 4
+    },
+    "sequences_by_fold": {
+      "test": 5,
+      "train": 163,
+      "val": 12,
+      "DROPPED": 4
+    },
+    "halo_labels_by_fold": {
+      "DROPPED": 7,
+      "train": 178,
+      "val": 12
+    },
+    "fold_sizes": {
+      "DROPPED": 82,
+      "train": 796,
+      "val": 171,
+      "test": 170
+    }
+  },
+  "fragments": {
+    "dropped_sequences": 82,
+    "remappable_sequences": 73,
+    "orphaned_labels": 3188,
+    "recoverable_labels": 3150,
+    "lost_labels": 38
+  },
+  "units": {
+    "µM": 1516,
+    "%": 1370,
+    "percent": 917,
+    "mM": 781,
+    "fraction of folded protein": 751,
+    "M": 459,
+    "1/s": 454,
+    "1/s/M": 434,
+    "% relative activity": 369,
+    "kcal/mol": 354,
+    "U/mg": 339,
+    "s⁻¹": 283,
+    "z vs empty vector": 197,
+    "°C": 195,
+    "µmol/L": 188,
+    "min⁻¹": 178,
+    "µg product/mg PET": 176,
+    "mmol": 135,
+    "U/mL": 130,
+    "µmol": 129
+  },
+  "substrates": {
+    "PET": 4287,
+    "pNPB": 1078,
+    "": 1027,
+    "BHET": 822,
+    "pNP-C8": 314,
+    "p-NP-C4": 291,
+    "PCL": 263,
+    "MHET": 204,
+    "p-NP-C2": 183,
+    "gfPET": 176,
+    "PBSA": 161,
+    "PBAT": 161
+  },
+  "tasks": {
+    "quantitative": 12895,
+    "binary": 197
+  },
+  "condition_coverage": {
+    "ph": 6972,
+    "temperature_c": 3894,
+    "time_h": 1308
+  },
+  "clusters_30": {
+    "train": {
+      "clusters": 70,
+      "sequences": 796,
+      "mean_size": 11.37,
+      "max_size": 124,
+      "top3_share_pct": 43.84
+    },
+    "test": {
+      "clusters": 63,
+      "sequences": 170,
+      "mean_size": 2.7,
+      "max_size": 14,
+      "top3_share_pct": 22.94
+    },
+    "val": {
+      "clusters": 63,
+      "sequences": 171,
+      "mean_size": 2.71,
+      "max_size": 16,
+      "top3_share_pct": 23.39
+    }
+  }
+}
