@@ -8,8 +8,9 @@ centroid is also a 90% centroid, so centroids90 holds all sequences.
 Tiers (Part II decision, notebook Step 15):
   short_full.fa   L <  --split (150)            -> ESMFold2 Full,  32 steps / 3 loops
   mid_fast.fa     --split <= L <= --l40s-cap    -> ESMFold2-Fast,  32 steps / 3 loops
-  tail_h100.fa    L >  --l40s-cap (1740)        -> H100 (separate run)
+  tail_h100.fa    --l40s-cap < L <= --hard-cap  -> H100 (separate run)
 Skipped (recorded in manifest.tsv, not written to any FASTA):
+  hard_cap   L > --hard-cap (2500): not folded (decision 2026-10-16)
   afdb       centroid has its own AFDB structure (unless --include-afdb)
   duplicate  exact sequence (md5) already present under a lower orf_id
 
@@ -28,6 +29,10 @@ def main():
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--split", type=int, default=150, help="Full below this length, Fast at or above")
     ap.add_argument("--l40s-cap", type=int, default=1740, help="longer sequences go to the H100 tier")
+    ap.add_argument("--hard-cap", type=int, default=2500,
+                    help="never fold sequences longer than this (memory grows as L^2; above ~2500 aa ESMFold2 "
+                         "needs multi-GPU Fold-CP, and these catalytic ORFs are mostly fusions or mis-assemblies). "
+                         "Recorded in manifest.tsv as skip_reason=hard_cap")
     ap.add_argument("--include-afdb", action="store_true",
                     help="also fold centroids that already have their own AFDB structure")
     args = ap.parse_args()
@@ -52,7 +57,8 @@ def main():
         raise SystemExit(f"{n_ids - n_found} centroid ids have no sequence in centroids90")
 
     c.sql(f"""create table M as select *, length(seq) L,
-        case when afdb_s3_key is not null and not {str(args.include_afdb).lower()} then 'afdb'
+        case when length(seq) > {args.hard_cap} then 'hard_cap'
+             when afdb_s3_key is not null and not {str(args.include_afdb).lower()} then 'afdb'
              when row_number() over (partition by md5 order by orf_id) > 1 then 'duplicate'
              else null end skip_reason,
         case when length(seq) < {args.split} then 'short_full'
