@@ -12,6 +12,9 @@ while ((${#PEND[@]})); do
   for j in "${!PEND[@]}"; do
     if ! squeue -h -j "$j" 2>/dev/null | grep -q .; then
       st=$(sacct -X -n -j "$j" -o State%12 | awk '{print $1}' | tail -1)
+      # accounting lags the queue: decide only once sacct shows a terminal state (bug on 02:02:
+      # shards 1-2 read as RUNNING right after timing out and were skipped)
+      [[ "$st" =~ ^(RUNNING|PENDING|COMPLETING|REQUEUED|CONFIGURING|SUSPENDED)?$ ]] && continue
       k=${PEND[$j]}
       if [[ "$st" == TIMEOUT ]]; then
         new=$(sbatch --parsable --exclude=kn140 --job-name=fold60-mid_fast --array="$k" \
