@@ -17,16 +17,29 @@ Assignment rules, in order:
 
 Usage: python3 split_components.py <remapped_dir> <components_csv> <out_dir>
 """
-import csv, json, os, sys, collections
+import csv, json, os, re, sys, collections, unicodedata
 
-CONC = {"µM", "mM", "nM", "M", "µmol/L", "mM/L"}
-AMOUNT = {"µmol", "mmol", "mol"}
+# The unit spellings are shared with step 3 through target_units.json so the
+# two steps cannot drift. The release spells the same unit several ways, so a
+# raw string match silently misses labels: the micro sign U+00B5 and Greek mu
+# U+03BC both occur in "uM".
+_DEF = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   "target_units.json")))
+CONC = set(_DEF["concentration_to_uM"])
+AMOUNT = set(_DEF["excluded_amount_units"])
+TOKEN = _DEF["target_substrate_token"]
+_DASHES = dict.fromkeys(map(ord, "\u2212\u2013\u2014\u2010\u2011"), "-")
+
+def unit_key(raw):
+    u = unicodedata.normalize("NFKC", raw).translate(_DASHES)
+    return re.sub(r"\s+", " ", u).strip()
 
 def tok(l):
     return [x.strip() for x in l["substrate"].split(";")]
 
 def is_target(l):
-    return "PET" in tok(l) and l["task"] == "quantitative" and l["unit"] in CONC
+    return (TOKEN in tok(l) and l["task"] == "quantitative"
+            and unit_key(l["unit"]) in CONC)
 
 def is_eval(l):
     """The evaluated set: target labels that are not LLM extractions.
@@ -170,6 +183,7 @@ def main(src, comp_csv, out):
         "headline_target": "PET monomer release, quantitative, concentration units",
         "evaluated_set": "target labels with source != llm; LLM target labels are train-only",
         "target_units": sorted(CONC),
+        "target_units_source": "target_units.json",
         "excluded_amount_units": sorted(AMOUNT),
         "halo": "train-only, not evaluated: 187 of 197 halo labels fall in the train component",
         "unit": "connected component over cluster_90, cluster_50 and cluster_30",

@@ -1,0 +1,16 @@
+{
+  "_comment": "Single source of truth for the unit spellings that make up the evaluated regression target. Loaded by both split_components.py (step 2) and normalise_units.py (step 3) so the two cannot drift. Keys are unit_key() output: NFKC folded, dashes unified, whitespace collapsed, case preserved. Values convert to micromolar.",
+  "concentration_to_uM": {
+    "nM": 0.001,
+    "nmol/L": 0.001,
+    "μM": 1.0,
+    "μmol/L": 1.0,
+    "μmol L-1": 1.0,
+    "mM": 1000.0,
+    "mM/L": 1000.0,
+    "M": 1000000.0
+  },
+  "target_substrate_token": "PET",
+  "excluded_amount_units": ["μmol", "mmol", "mol"],
+  "excluded_substrate_variants": "gfPET, pcPET, hcPET, 3PET, PET-02mer and the rest are PET in some form but heterogeneous in morphology and oligomer length. Including them adds 129 human-curated labels, all of which fall in train, so they cannot improve evaluation. Left out of the target and available as training-only augmentation."
+}
