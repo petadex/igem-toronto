@@ -86,6 +86,19 @@ def main():
     ap.add_argument("--fast", action="store_true",
                     help="use biohub/ESMFold2-Fast (lighter 24-layer trunk) instead of the "
                          "full 48-layer biohub/ESMFold2. Same ESMC-6B backbone, same fold API.")
+    # --backend hf is the Biohub transformers fork in ~/petabite (the Aug 2026 calibration).
+    # --backend native is esm>=3.4.1's own EsmFold2Model in ~/esmfold2-341: bf16 trunk autocast,
+    # chunked L^2 ops and fused kernels. --dtype applies to hf only; native uses --esmc-precision.
+    ap.add_argument("--backend", choices=["hf", "native"], default="hf")
+    ap.add_argument("--esmc-precision", choices=["bf16", "fp32", "fp8"], default="bf16",
+                    help="native only: ESMC-6B backbone precision (fp8 needs H100 + TransformerEngine)")
+    ap.add_argument("--kernel", choices=["none", "fused", "cuequivariance"], default="none",
+                    help="native only: trunk kernel backend")
+    ap.add_argument("--chunk", default="auto",
+                    help="native only: token-axis chunk for L^2 ops; 'none' (fastest, most memory), "
+                         "an int, or 'auto' = none up to --chunk-above aa, 64 beyond it")
+    ap.add_argument("--chunk-above", type=int, default=1000,
+                    help="native --chunk auto: sequence length above which chunk=64 is used")
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--load-only", action="store_true", help="load model, report load/VRAM, exit")
@@ -97,7 +110,6 @@ def main():
         RDLogger.DisableLog("rdApp.*")
     except Exception:
         pass
-    from transformers.models.esmfold2.modeling_esmfold2 import ESMFold2Model
     from esm.models.esmfold2 import (
         ESMFold2InputBuilder,
         ProteinInput,
@@ -114,8 +126,17 @@ def main():
         torch.cuda.reset_peak_memory_stats(device)
     t0 = time.perf_counter()
     repo = "biohub/ESMFold2-Fast" if args.fast else "biohub/ESMFold2"
-    model = ESMFold2Model.from_pretrained(repo, torch_dtype=dtype).to(device).eval()
-    print(f"model loaded in {time.perf_counter() - t0:.1f}s ({repo})", flush=True)
+    if args.backend == "hf":
+        from transformers.models.esmfold2.modeling_esmfold2 import ESMFold2Model
+        model = ESMFold2Model.from_pretrained(repo, torch_dtype=dtype).to(device).eval()
+    else:
+        from esm.models.esmfold2 import EsmFold2Model
+        model = EsmFold2Model.from_pretrained(
+            repo, device=device, esmc_precision=args.esmc_precision).eval()
+        model.set_kernel_backend(None if args.kernel == "none" else args.kernel)
+        if args.chunk != "auto":
+            model.set_chunk_size(None if args.chunk == "none" else int(args.chunk))
+    print(f"model loaded in {time.perf_counter() - t0:.1f}s ({repo}, backend={args.backend})", flush=True)
     if device.type == "cuda":
         print(f"peak VRAM after load: {torch.cuda.max_memory_allocated(device) / 1e9:.1f} GB", flush=True)
     if args.load_only:
@@ -144,7 +165,7 @@ def main():
     os.makedirs(struct_dir, exist_ok=True)
     os.makedirs(metrics_dir, exist_ok=True)
     progress_path = os.path.join(args.outdir, f"progress{tag}.csv")
-    progress_cols = ["id", "seq_len", "wall_s", "residues_per_s", "mean_plddt", "ptm", "iptm", "status"]
+    progress_cols = ["id", "seq_len", "wall_s", "residues_per_s", "peak_vram_gb", "mean_plddt", "ptm", "iptm", "status"]
     new_progress = not os.path.exists(progress_path)
     pf = open(progress_path, "a", newline="")
     pw = csv.DictWriter(pf, fieldnames=progress_cols)
@@ -168,7 +189,11 @@ def main():
             print(f"[{i}/{len(records)}] {rid} len={len(seq)} skipped_too_long (>{args.max_len})", flush=True)
             continue
         try:
+            if device.type == "cuda":
+                torch.cuda.reset_peak_memory_stats(device)
             t = time.perf_counter()
+            if args.backend == "native" and args.chunk == "auto":
+                model.set_chunk_size(None if len(seq) <= args.chunk_above else 64)
             spi = StructurePredictionInput(sequences=[ProteinInput(id="A", sequence=seq)])
             result = builder.fold(model, spi, seed=args.seed, **params)
             wall = time.perf_counter() - t
@@ -185,7 +210,13 @@ def main():
             metrics = {
                 "id": rid, "seq_len": len(seq),
                 "num_sampling_steps": args.num_sampling_steps, "num_loops": args.num_loops,
-                "dtype": args.dtype, "seed": args.seed,
+                "dtype": args.dtype, "seed": args.seed, "backend": args.backend,
+                "esmc_precision": args.esmc_precision if args.backend == "native" else None,
+                "kernel": args.kernel if args.backend == "native" else None,
+                "chunk": args.chunk if args.backend == "native" else None,
+                "fast": args.fast,
+                "peak_vram_gb": round(torch.cuda.max_memory_allocated(device) / 1e9, 2)
+                                if device.type == "cuda" else None,
                 "wall_s": round(wall, 3), "residues_per_s": round(len(seq) / wall, 2),
                 "mean_plddt": round(mean_plddt, 3),
                 "ptm": round(ptm, 4) if ptm is not None else None,
