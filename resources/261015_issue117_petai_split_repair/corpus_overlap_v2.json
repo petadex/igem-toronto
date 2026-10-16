@@ -1,0 +1,76 @@
+{
+  "found": 120,
+  "by_fold": {
+    "train": 105,
+    "test": 7,
+    "val": 8
+  },
+  "eval_in_corpus": [
+    "572db808330016b2e517a2e6db0d8477",
+    "63f3bcdf9d4e41b30836917c8f069d43",
+    "7d43cc8143961b92bacba0d218fe7818",
+    "91fdd1b5e2e32c2e3842e6b87058f3ad",
+    "a0904c35f59716a292ebfca5adfcbc0e",
+    "aa1b463709fa62d66034d00d46f2bb52",
+    "ab6b2d53513cc127c20db4ff15e7a322",
+    "b2ce4b3f3cb218404c049bd6ca3c3fef",
+    "b8d2efe3a6d76dcf58f691a374d528ed",
+    "c0173ba184ddb729e7ef9122ecff0145",
+    "d03a36b0671215d716f1df2ade24268f",
+    "e49911a7e5738e9056e9fb9c5a9aa7ae",
+    "f0ef5b5426c1171b0f229df593d4d810",
+    "fcafc8f695c58e71718b19c1a7c315ba",
+    "fe1766a388c03c1e83be5dd8c749ba4b"
+  ],
+  "exclude_c60": [
+    14,
+    18,
+    23,
+    25,
+    32,
+    35,
+    37,
+    39,
+    42,
+    60,
+    172450,
+    172637,
+    195310,
+    203162
+  ],
+  "exclude_c30": [
+    3,
+    5,
+    6,
+    7,
+    11,
+    12,
+    13,
+    23,
+    2275
+  ],
+  "method": "Exact md5 join of the 1,137 v2 sequences against centroid_md5 of the 18,172,960 90%-centroids in the local centroids90.parquet. The join key was verified: all 1,137 md5s reproduce as the md5 of the uppercase sequence from sequences.fasta.",
+  "note_vs_brief": "The brief reports 401 of 1,219 (32.90%) found in the corpus. That join was against all 131 orfs shards, so all 307M ORFs. This join is against the 18.17M 90%-centroids only, so it counts labelled sequences that are themselves centroids. The difference, roughly 280 sequences, are cluster members rather than centroids: they are at least 90% identical to something in a centroid-only pretraining set but never appear in it verbatim.",
+  "by_origin": {
+    "PAZy": 80,
+    "NR": 40,
+    "Logan": 0
+  },
+  "exclusion_cost": {
+    "c60_cut": {
+      "clusters": 14,
+      "centroid_rows": 2120,
+      "pct_of_corpus": 0.0117,
+      "underlying_orfs": 84701,
+      "verdict": "effectively free, removes verbatim val/test sequences"
+    },
+    "c30_cut": {
+      "clusters": 9,
+      "centroid_rows": 693545,
+      "pct_of_corpus": 3.82,
+      "underlying_orfs": 14882420,
+      "largest_cluster_orfs": 7033921,
+      "verdict": "not free, and counterproductive: the 9 clusters are the core PET hydrolase families, so the cut removes the signal the corpus exists to provide"
+    }
+  }
+}
