@@ -11,6 +11,7 @@ if [[ "$(hostname -s)" == klogin02 ]]; then W=$(eval "$FINDW")
 else W=$(ssh -o BatchMode=yes -o ConnectTimeout=5 klogin02 "$FINDW" 2>/dev/null); fi
 if [[ -n "$W" ]]; then echo "watcher: alive (pid $W on klogin02)"; else echo "watcher: NOT RUNNING"; fi
 echo "watcher log (last 3):"; tail -3 logs/fold60_watch.log | sed 's/^/  /'
+[ -f logs/fold60_timeout.log ] && { echo "timeout-resume log:"; tail -5 logs/fold60_timeout.log | sed 's/^/  /'; }
 
 # queue and job outcomes since launch
 echo "queue: $(squeue -h -u "$USER" -n fold60-short_full,fold60-mid_fast -o %T | sort | uniq -c | xargs)"
@@ -43,4 +44,4 @@ for t, (a, b) in FIT.items():
           f"{c_done:6.0f} / {c_all:4.0f} GPU-h of folding ({c_done/c_all:5.1%}); per-seq failures {fails or 0}; in-flight .tmp {tmp}")
 print(f"OVERALL   : {done_cost/tot_cost:5.1%} of predicted fold time done ({done_cost:.0f} / {tot_cost:.0f} GPU-h)")
 EOF
-echo "disk: $(du -sh data/fold60pid 2>/dev/null | cut -f1) | aip-qmorris /project: $(diskusage_report 2>/dev/null | awk '/project aip-qmorris/ {print $5" space, "$6$7" files"; exit}')"
+echo "disk: $(du -sh data/fold60pid 2>/dev/null | cut -f1) | aip-qmorris /project: $(diskusage_report 2>/dev/null | awk '/project aip-qmorris/ {print $4" space, "$5" "$6" files"; exit}')"
