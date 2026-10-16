@@ -28,6 +28,16 @@ esac
 echo "tier=$TIER shard ${SLURM_ARRAY_TASK_ID}/${NSHARDS} on $(hostname)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
+# Preflight. A node whose GPU is visible to nvidia-smi but not to CUDA (kn140, 2026-10-15) makes
+# every task fail in ~16 s, and the instantly freed slot pulls the next task onto the same node
+# (43 shards lost there in 20 min). Hold the slot for 15 min before failing, so the array drains
+# slowly, and print the node so fold60_watch.sh / a human can exclude it.
+if ! python -c "import torch, sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
+  echo "PREFLIGHT FAILED: CUDA unavailable on $(hostname); holding 15 min, then exiting 1"
+  sleep 900
+  exit 1
+fi
+
 python fold.py "$INPUT" --outdir "$OUTDIR" --shard "${SLURM_ARRAY_TASK_ID}/${NSHARDS}" \
     --backend native $MODEL --esmc-precision bf16 --kernel fused --chunk auto \
     --num-sampling-steps 32 --num-loops 3 --seed 0 --max-len "$MAXLEN" \
