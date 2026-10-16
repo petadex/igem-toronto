@@ -1,0 +1,86 @@
+{
+  "v1_untouched": {
+    "clusters.csv": "f209151ce6de472537000af80f4dadbf",
+    "labels.csv": "ba1cc467efecdd0a33e30350922561cc",
+    "sequences.csv": "54fd91bc25adcf5faaf2ad5895b30027",
+    "sequences.fasta": "480ae673a1c6905f57f239fd8d3e39c5",
+    "split.csv": "85b36367f2e6f82245995a8f004cf46f",
+    "summary.json": "8b78715787bee4203849b0902e56b421"
+  },
+  "labels": {
+    "v1": 13092,
+    "v2": 13054,
+    "dropped_sequences": 9,
+    "dropped_labels": 38
+  },
+  "remap": {
+    "labels_remapped": 3150,
+    "fragments": 73,
+    "parents": 64
+  },
+  "negatives": {
+    "v1": 200,
+    "v2": 200
+  },
+  "leakage": {
+    "cluster_30": {
+      "groups": 196,
+      "spanning_folds": 0
+    },
+    "cluster_50": {
+      "groups": 318,
+      "spanning_folds": 0
+    },
+    "cluster_90": {
+      "groups": 613,
+      "spanning_folds": 0
+    },
+    "component": {
+      "groups": 184,
+      "spanning_folds": 0
+    }
+  },
+  "folds": {
+    "train": {
+      "sequences": 956,
+      "labels": 11700,
+      "components": 168,
+      "target_labels": 1782,
+      "eval_labels": 1564,
+      "eval_sequences": 123,
+      "eval_llm_labels": 0,
+      "halo_labels": 197,
+      "negative_labels": 191,
+      "llm_share_all_labels": 39.5
+    },
+    "val": {
+      "sequences": 130,
+      "labels": 629,
+      "components": 4,
+      "target_labels": 93,
+      "eval_labels": 90,
+      "eval_sequences": 27,
+      "eval_llm_labels": 0,
+      "halo_labels": 0,
+      "negative_labels": 0,
+      "llm_share_all_labels": 14.1
+    },
+    "test": {
+      "sequences": 51,
+      "labels": 725,
+      "components": 12,
+      "target_labels": 92,
+      "eval_labels": 89,
+      "eval_sequences": 16,
+      "eval_llm_labels": 0,
+      "halo_labels": 0,
+      "negative_labels": 9,
+      "llm_share_all_labels": 23.2
+    }
+  },
+  "fasta": {
+    "records": 1137,
+    "matches_table": true
+  },
+  "verdict": "all assertions passed"
+}
