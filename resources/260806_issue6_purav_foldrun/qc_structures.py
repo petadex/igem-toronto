@@ -77,7 +77,9 @@ def check(job):
         res = [x for x in chains[0] if x.id[0] == " "]
         fseq = "".join(THREE2ONE.get(x.get_resname(), "X") for x in res)
         r["n_res"], r["seq_len"] = len(res), len(seq)
-        if fseq != seq:
+        # ambiguity codes (B, Z, J, U, O, X) are written as UNK by the model; compare them as X
+        norm = "".join(c if c in "ACDEFGHIKLMNPQRSTVWY" else "X" for c in seq)
+        if fseq != norm:
             r["issues"].append("sequence_mismatch" if len(fseq) == len(seq) else f"length_mismatch({len(fseq)}vs{len(seq)})")
         miss_bb = sum(1 for x in res if not all(a in x for a in ("N", "CA", "C", "O")))
         if miss_bb:
@@ -93,7 +95,10 @@ def check(job):
         ca = np.array([x["CA"].coord for x in res if "CA" in x])
         d = np.linalg.norm(np.diff(ca, axis=0), axis=1)
         r["ca_ca_med"] = float(np.median(d)) if len(d) else None
-        r["breaks"] = int((d > 4.2).sum())
+        # > 6 A is a real gap (a missing residue); 4.2-6 A is a stretched bond, which the model
+        # produces in low-confidence loops of very long chains (tail_h100 QC, 2026-10-16)
+        r["breaks"] = int((d > 6.0).sum())
+        r["stretched"] = int(((d > 4.2) & (d <= 6.0)).sum())
         r["ca_clash"] = int((d < 2.9).sum())
         if r["breaks"]:
             r["issues"].append(f"chain_breaks={r['breaks']}")
@@ -175,7 +180,7 @@ def main():
             print(f"   models={dict(Counter(r['model'] for r in ok))} cfg={dict(Counter(r['cfg'] for r in ok))}")
             print(f"   length {min(f('seq_len'))}-{max(f('seq_len'))} aa; residues match input: "
                   f"{sum(r['n_res']==r['seq_len'] for r in ok)}/{len(ok)}; heavy-atom completeness median {st.median(f('heavy_frac')):.3f}")
-            print(f"   CA-CA median {st.median(f('ca_ca_med')):.3f} A; chain breaks {sum(f('breaks'))}; "
+            print(f"   CA-CA median {st.median(f('ca_ca_med')):.3f} A; chain breaks (>6 A) {sum(f('breaks'))}; stretched 4.2-6 A {sum(f('stretched'))}; "
                   f"|B-factor mean - JSON pLDDT| max {max(f('b_vs_json')):.3f}")
             pl = sorted(f("plddt_json"))
             print(f"   mean pLDDT median {st.median(pl):.1f} (p10 {pl[len(pl)//10]:.1f}, p90 {pl[9*len(pl)//10]:.1f}); "
