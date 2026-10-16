@@ -13,7 +13,7 @@
 #SBATCH --mem=64gb
 #SBATCH --time=12:00:00
 #SBATCH --output=logs/sweep-%A_%a.out
-set -u
+set -u -o pipefail   # a python failure must fail the task, not be masked by the grep pipe
 export PYTHONUNBUFFERED=1 PYTHONFAULTHANDLER=1 HF_HUB_OFFLINE=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 cd "${SLURM_SUBMIT_DIR}"
