@@ -1,0 +1,352 @@
+---
+    title: 260806_issue6_purav_foldrun
+    section: "Dry Lab"
+    path: "/dry-lab/issue/6"
+    navTitle: "Issue 6"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+## Issue 6 (Purav): Production ESMFold2 fold of the 90pid centroids
+
+Lead     : `Purav Gupta`
+
+Issue    : [Github Issue #6](https://github.com/petadex/igem-toronto/issues/6) — _fold the family-cluster centroids_
+
+Start    : `2026-08-06`
+
+Complete : `N/A`
+
+Files    : `resources/260806_issue6_purav_foldrun/data/` — local working dir on Compute Canada `/project` (git-ignored)
+
+S3 files : `s3://petadex-protein-structures/esmfold2-centroids/` — remote archive (synced after batches, not during)
+
+---
+
+### Data Accessed: 2026-06-21
+Input is the 90pid catalytic-core FASTA already on disk (`90pid_catalytic_orfs.fa`, 18,172,960 records), derived earlier from SQL. That table was then saved at `s3://petabite/petadex/90pid_enzymes_clusters.csv`
+
+```bash
+cat 90pid_enzymes_clusters.csv | cut -f 2 -d ',' > 90_orfs.txt
+aws s3 cp s3://petadex/logan/petadex.catalytic_orfs.v1.1.fa - --no-sign-request \
+  | seqkit grep --id-regexp '^([^|]+)' -f 90_orfs.txt > 90pid_catalytic_orfs.fa
+```
+
+## Introduction
+
+Issue 6 built the ESMFold2 folding pipeline; Issue 6a settled the hyperparameters (**68 diffusion steps / 10 refinement loops**). This notebook takes the full **90pid centroid** set — 18,172,960 catalytic-core sequences — and attempts to benchmarking folding on the Compute Canada / Vector **Killarney** cluster (L40S GPUs, `/project` with ~740 GB disk space free).
+
+Rather than reuse the AWS-fleet driver from Issue 6, this run uses a fresh, self-contained script (`resources/260806_issue6_purav_foldrun/fold.py`) with no S3/spot machinery: load ESMFold2 once, fold a length-banded shard of the input, write structures locally. Output goes to `/project` first; S3 archival is a separate, later step.
+
+## Objectives
+
+1. Build the ORFid-keyed fold input from the existing catalytic-core FASTA.
+2. Run a **100-sequence test on one L40S** to measure folding throughput and per-structure disk.
+3. **Extrapolate** GPU-hours and total storage to all 18.17M centroids, and size the fleet.
+4. Scale out via a SLURM job array (one length-band shard per GPU) and archive to S3.
+
+---
+
+## Materials and Methods
+
+### Step 0: Environment
+
+The petabite venv (Python 3.12, torch + Biohub `esm`/`transformers` forks) is activated by `activate_petabite.sh`, which also sets `PYTHONNOUSERSITE=1` (keeps `~/.local` from shadowing the venv) and loads the cluster modules. The HuggingFace cache lives on `/project` (home is quota-limited).
+
+```bash
+source activate_petabite.sh
+export HF_HOME=/home/purav/projects/aip-wanglab/purav/hf_cache   # already in ~/.bashrc
+
+# sanity: the ESMFold2 model class imports cleanly
+python -c "from transformers.models.esmfold2.modeling_esmfold2 import ESMFold2Model; print('ok')"
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+```
+
+> **Precision: fp32 required.** ESMFold2 wraps the 6.3B-param ESMC-6B backbone. bf16 *loads* fine (~13 GB peak VRAM) but its **fold forward pass errors on this build**: `RuntimeError: mat1 and mat2 must have the same dtype, but got Float and BFloat16` (an uncasted fp32 tensor meets a bf16 weight, every sequence, regardless of length). So we fold in **fp32** (~25 GB weights, fits the 46 GB L40S with room for activations on these short cores). `--dtype fp32` is the default in `fold.py`.
+
+
+### Step 1: Build the fold input
+
+`make_fold_input.sh` rewrites the catalytic-core FASTA headers so every record is keyed by its ORFid (`>3|7QJM|||||/95-371` → `>orf3`) — that `>orf<id>` becomes the output filename, so structures join back on ORFid. It then prints `seqkit stats`, from which we record **num_seqs** (expect 18,172,960) and **sum_len** (total residues — the key input to the time estimate).
+
+```bash
+cd resources/260806_issue6_purav_foldrun
+./make_fold_input.sh
+# -> data/90pid_catalytic_orfs.orfid.fa
+# note the num_seqs and sum_len it prints; plug them into Step 3.
+```
+
+> rewriting headers: /home/purav/projects/aip-wanglab/purav/igem-toronto/90pid_catalytic_orfs.fa -> /home/purav/projects/aip-wanglab/purav/igem-toronto/resources/260806_issue6_purav_foldrun/data/90pid_catalytic_orfs.orfid.fa
+
+> === seqkit stats (num_seqs should be 18,172,960; sum_len = total residues) ===
+
+> file    format  type    num_seqs        sum_len min_len avg_len max_len
+
+> /home/purav/projects/aip-wanglab/purav/igem-toronto/resources/260806_issue6_purav_foldrun/data/90pid_catalytic_orfs.orfid.fa
+
+> FASTA   Protein 18172960       4998232825      29      275.0   59275
+
+### Step 2: Test run — 100 sequences on 1 GPU
+
+Grab one L40S, confirm the model loads (`--load-only`), then fold the first 100 records. `--s3` doesn't exist in this script — output is always local.
+
+```bash
+salloc --gres=gpu:1 --cpus-per-task=4 --mem=48G --time=1:00:00   # + your --account/--partition
+
+cd resources/260806_issue6_purav_foldrun
+
+# 1) confirm weights resolve + measure load/VRAM (no folding)
+python fold.py data/90pid_catalytic_orfs.orfid.fa --outdir data/test100 --load-only
+```
+`torch_dtype` is deprecated! Use `dtype` instead!
+`torch_dtype` is deprecated! Use `dtype` instead!
+ESMC: transformer_engine is not installed; falling back to pure-PyTorch LayerNorm+Linear / LayerNorm+MLP. Outputs will differ numerically — measured on the unnormalized residual stream (before the final LayerNorm), ~O(10) max-diff in fp32 and ~O(100) in bf16; after the final LayerNorm these shrink to a few ULP and perplexity stays within rounding noise. Install with `pip install transformer-engine[pytorch]` to enable fused fp32-reduction LayerNorm.
+ESMC: neither xformers nor flash-attn is installed; falling back to PyTorch ``F.scaled_dot_product_attention``. The attention reduction order in bf16 differs from a fused kernel by ~1 bf16 ULP per attention block; compounded across the 80-block stack this reaches ~O(100) max-diff on the unnormalized residual stream. Install xformers (preferred) with `pip install xformers` for a fused attention kernel.
+ESMC: flash-attn rotary kernel not installed; falling back to pure-PyTorch RoPE. For faster GPU inference run `pip install flash-attn`.
+🚨 No checkpoint found for ESMCForSequenceClassification.forward. Please add a `checkpoint` arg to `auto_docstring` or add one in ESMCConfig's docstring
+🚨 No checkpoint found for ESMCForTokenClassification.forward. Please add a `checkpoint` arg to `auto_docstring` or add one in ESMCConfig's docstring
+Loading checkpoint shards: 100%|████████████████████████████████████████████████████████████████████████████████| 6/6 [00:00&lt;00:00,  8.34it/s]
+model loaded in 36.5s
+peak VRAM after load: 13.3 GB
+
+```python
+# 2) fold 100 (bf16; fall back to --dtype fp32 only if bf16 errors)
+python fold.py data/90pid_catalytic_orfs.orfid.fa --outdir data/test100 \
+    --limit 100 --num-sampling-steps 68 --num-loops 10 --dtype fp32
+```
+shard 1/1: 100 sequences, length band 29-34aa
+fold params: \{'num_loops': 10, 'num_sampling_steps': 68\}
+[1/100] orf246146685 len=29 ok | 1 done 0 skip 0 fail | 997 folds/h | ETA 0.1h
+[2/100] orf373788759 len=30 ok | 2 done 0 skip 0 fail | 1320 folds/h | ETA 0.1h
+[3/100] orf1094603981 len=31 ok | 3 done 0 skip 0 fail | 1480 folds/h | ETA 0.1h
+[4/100] orf1337522274 len=31 ok | 4 done 0 skip 0 fail | 1577 folds/h | ETA 0.1h
+[5/100] orf399207491 len=31 ok | 5 done 0 skip 0 fail | 1642 folds/h | ETA 0.1h
+[6/100] orf551286747 len=31 ok | 6 done 0 skip 0 fail | 1686 folds/h | ETA 0.1h
+[7/100] orf907870599 len=31 ok | 7 done 0 skip 0 fail | 1721 folds/h | ETA 0.1h
+[8/100] orf1064464708 len=32 ok | 8 done 0 skip 0 fail | 1746 folds/h | ETA 0.1h
+[9/100] orf1118170424 len=32 ok | 9 done 0 skip 0 fail | 1769 folds/h | ETA 0.1h
+[10/100] orf1119208403 len=32 ok | 10 done 0 skip 0 fail | 1786 folds/h | ETA 0.1h
+[11/100] orf1223221293 len=32 ok | 11 done 0 skip 0 fail | 1802 folds/h | ETA 0.0h
+[12/100] orf394082600 len=32 ok | 12 done 0 skip 0 fail | 1813 folds/h | ETA 0.0h
+[13/100] orf481676691 len=32 ok | 13 done 0 skip 0 fail | 1824 folds/h | ETA 0.0h
+[14/100] orf572966535 len=32 ok | 14 done 0 skip 0 fail | 1833 folds/h | ETA 0.0h
+[15/100] orf681720665 len=32 ok | 15 done 0 skip 0 fail | 1841 folds/h | ETA 0.0h
+[16/100] orf688265870 len=32 ok | 16 done 0 skip 0 fail | 1848 folds/h | ETA 0.0h
+[17/100] orf730877228 len=32 ok | 17 done 0 skip 0 fail | 1854 folds/h | ETA 0.0h
+[18/100] orf751000128 len=32 ok | 18 done 0 skip 0 fail | 1860 folds/h | ETA 0.0h
+[19/100] orf761075728 len=32 ok | 19 done 0 skip 0 fail | 1866 folds/h | ETA 0.0h
+[20/100] orf782692741 len=32 ok | 20 done 0 skip 0 fail | 1871 folds/h | ETA 0.0h
+[21/100] orf789796515 len=32 ok | 21 done 0 skip 0 fail | 1875 folds/h | ETA 0.0h
+[22/100] orf798016770 len=32 ok | 22 done 0 skip 0 fail | 1880 folds/h | ETA 0.0h
+[23/100] orf817016036 len=32 ok | 23 done 0 skip 0 fail | 1883 folds/h | ETA 0.0h
+[24/100] orf841117876 len=32 ok | 24 done 0 skip 0 fail | 1886 folds/h | ETA 0.0h
+[25/100] orf843176993 len=32 ok | 25 done 0 skip 0 fail | 1890 folds/h | ETA 0.0h
+[26/100] orf8624137 len=32 ok | 26 done 0 skip 0 fail | 1892 folds/h | ETA 0.0h
+[27/100] orf935570174 len=32 ok | 27 done 0 skip 0 fail | 1895 folds/h | ETA 0.0h
+[28/100] orf974786749 len=32 ok | 28 done 0 skip 0 fail | 1897 folds/h | ETA 0.0h
+[29/100] orf1000506606 len=33 ok | 29 done 0 skip 0 fail | 1899 folds/h | ETA 0.0h
+[30/100] orf1030352263 len=33 ok | 30 done 0 skip 0 fail | 1901 folds/h | ETA 0.0h
+[31/100] orf1035041489 len=33 ok | 31 done 0 skip 0 fail | 1903 folds/h | ETA 0.0h
+[32/100] orf1060934619 len=33 ok | 32 done 0 skip 0 fail | 1905 folds/h | ETA 0.0h
+[33/100] orf1066366950 len=33 ok | 33 done 0 skip 0 fail | 1907 folds/h | ETA 0.0h
+[34/100] orf1070673191 len=33 ok | 34 done 0 skip 0 fail | 1908 folds/h | ETA 0.0h
+[35/100] orf1088469893 len=33 ok | 35 done 0 skip 0 fail | 1910 folds/h | ETA 0.0h
+[36/100] orf1115848849 len=33 ok | 36 done 0 skip 0 fail | 1911 folds/h | ETA 0.0h
+[37/100] orf1123977493 len=33 ok | 37 done 0 skip 0 fail | 1913 folds/h | ETA 0.0h
+[38/100] orf1150853387 len=33 ok | 38 done 0 skip 0 fail | 1914 folds/h | ETA 0.0h
+[39/100] orf1159530153 len=33 ok | 39 done 0 skip 0 fail | 1915 folds/h | ETA 0.0h
+[40/100] orf1246706460 len=33 ok | 40 done 0 skip 0 fail | 1916 folds/h | ETA 0.0h
+[41/100] orf1280814051 len=33 ok | 41 done 0 skip 0 fail | 1917 folds/h | ETA 0.0h
+[42/100] orf1294342113 len=33 ok | 42 done 0 skip 0 fail | 1919 folds/h | ETA 0.0h
+[43/100] orf1300604916 len=33 ok | 43 done 0 skip 0 fail | 1920 folds/h | ETA 0.0h
+[44/100] orf1310082104 len=33 ok | 44 done 0 skip 0 fail | 1921 folds/h | ETA 0.0h
+[45/100] orf1325551358 len=33 ok | 45 done 0 skip 0 fail | 1921 folds/h | ETA 0.0h
+[46/100] orf1328493059 len=33 ok | 46 done 0 skip 0 fail | 1922 folds/h | ETA 0.0h
+[47/100] orf1367132311 len=33 ok | 47 done 0 skip 0 fail | 1923 folds/h | ETA 0.0h
+[48/100] orf1370538941 len=33 ok | 48 done 0 skip 0 fail | 1924 folds/h | ETA 0.0h
+[49/100] orf228607754 len=33 ok | 49 done 0 skip 0 fail | 1925 folds/h | ETA 0.0h
+[50/100] orf239812192 len=33 ok | 50 done 0 skip 0 fail | 1925 folds/h | ETA 0.0h
+[51/100] orf279974363 len=33 ok | 51 done 0 skip 0 fail | 1926 folds/h | ETA 0.0h
+[52/100] orf280242230 len=33 ok | 52 done 0 skip 0 fail | 1927 folds/h | ETA 0.0h
+[53/100] orf395374308 len=33 ok | 53 done 0 skip 0 fail | 1927 folds/h | ETA 0.0h
+[54/100] orf415749791 len=33 ok | 54 done 0 skip 0 fail | 1928 folds/h | ETA 0.0h
+[55/100] orf468368065 len=33 ok | 55 done 0 skip 0 fail | 1928 folds/h | ETA 0.0h
+[56/100] orf551211444 len=33 ok | 56 done 0 skip 0 fail | 1929 folds/h | ETA 0.0h
+[57/100] orf620230033 len=33 ok | 57 done 0 skip 0 fail | 1930 folds/h | ETA 0.0h
+[58/100] orf651379585 len=33 ok | 58 done 0 skip 0 fail | 1930 folds/h | ETA 0.0h
+[59/100] orf652239882 len=33 ok | 59 done 0 skip 0 fail | 1931 folds/h | ETA 0.0h
+[60/100] orf672359407 len=33 ok | 60 done 0 skip 0 fail | 1931 folds/h | ETA 0.0h
+[61/100] orf677746394 len=33 ok | 61 done 0 skip 0 fail | 1931 folds/h | ETA 0.0h
+[62/100] orf690823641 len=33 ok | 62 done 0 skip 0 fail | 1932 folds/h | ETA 0.0h
+[63/100] orf706981918 len=33 ok | 63 done 0 skip 0 fail | 1932 folds/h | ETA 0.0h
+[64/100] orf722018856 len=33 ok | 64 done 0 skip 0 fail | 1932 folds/h | ETA 0.0h
+[65/100] orf729087623 len=33 ok | 65 done 0 skip 0 fail | 1933 folds/h | ETA 0.0h
+[66/100] orf752318516 len=33 ok | 66 done 0 skip 0 fail | 1933 folds/h | ETA 0.0h
+[67/100] orf782455760 len=33 ok | 67 done 0 skip 0 fail | 1933 folds/h | ETA 0.0h
+[68/100] orf783511306 len=33 ok | 68 done 0 skip 0 fail | 1933 folds/h | ETA 0.0h
+[69/100] orf799256232 len=33 ok | 69 done 0 skip 0 fail | 1934 folds/h | ETA 0.0h
+[70/100] orf803482319 len=33 ok | 70 done 0 skip 0 fail | 1934 folds/h | ETA 0.0h
+[71/100] orf809279727 len=33 ok | 71 done 0 skip 0 fail | 1935 folds/h | ETA 0.0h
+[72/100] orf818805782 len=33 ok | 72 done 0 skip 0 fail | 1935 folds/h | ETA 0.0h
+[73/100] orf835863643 len=33 ok | 73 done 0 skip 0 fail | 1935 folds/h | ETA 0.0h
+[74/100] orf836958147 len=33 ok | 74 done 0 skip 0 fail | 1936 folds/h | ETA 0.0h
+[75/100] orf850271039 len=33 ok | 75 done 0 skip 0 fail | 1936 folds/h | ETA 0.0h
+[76/100] orf853456667 len=33 ok | 76 done 0 skip 0 fail | 1937 folds/h | ETA 0.0h
+[77/100] orf884830333 len=33 ok | 77 done 0 skip 0 fail | 1937 folds/h | ETA 0.0h
+[78/100] orf908328668 len=33 ok | 78 done 0 skip 0 fail | 1937 folds/h | ETA 0.0h
+[79/100] orf922025084 len=33 ok | 79 done 0 skip 0 fail | 1938 folds/h | ETA 0.0h
+[80/100] orf927117552 len=33 ok | 80 done 0 skip 0 fail | 1938 folds/h | ETA 0.0h
+[81/100] orf967673150 len=33 ok | 81 done 0 skip 0 fail | 1939 folds/h | ETA 0.0h
+[82/100] orf972086799 len=33 ok | 82 done 0 skip 0 fail | 1939 folds/h | ETA 0.0h
+[83/100] orf985328603 len=33 ok | 83 done 0 skip 0 fail | 1939 folds/h | ETA 0.0h
+[84/100] orf1005607650 len=34 ok | 84 done 0 skip 0 fail | 1939 folds/h | ETA 0.0h
+[85/100] orf1012902936 len=34 ok | 85 done 0 skip 0 fail | 1940 folds/h | ETA 0.0h
+[86/100] orf1021079496 len=34 ok | 86 done 0 skip 0 fail | 1940 folds/h | ETA 0.0h
+[87/100] orf1031436874 len=34 ok | 87 done 0 skip 0 fail | 1941 folds/h | ETA 0.0h
+[88/100] orf1033435976 len=34 ok | 88 done 0 skip 0 fail | 1941 folds/h | ETA 0.0h
+[89/100] orf1052132837 len=34 ok | 89 done 0 skip 0 fail | 1941 folds/h | ETA 0.0h
+[90/100] orf1082827985 len=34 ok | 90 done 0 skip 0 fail | 1941 folds/h | ETA 0.0h
+[91/100] orf1102216594 len=34 ok | 91 done 0 skip 0 fail | 1941 folds/h | ETA 0.0h
+[92/100] orf1113884710 len=34 ok | 92 done 0 skip 0 fail | 1942 folds/h | ETA 0.0h
+[93/100] orf1120039512 len=34 ok | 93 done 0 skip 0 fail | 1942 folds/h | ETA 0.0h
+[94/100] orf1120039878 len=34 ok | 94 done 0 skip 0 fail | 1942 folds/h | ETA 0.0h
+[95/100] orf1129902641 len=34 ok | 95 done 0 skip 0 fail | 1942 folds/h | ETA 0.0h
+[96/100] orf1164655980 len=34 ok | 96 done 0 skip 0 fail | 1943 folds/h | ETA 0.0h
+[97/100] orf1181337627 len=34 ok | 97 done 0 skip 0 fail | 1943 folds/h | ETA 0.0h
+[98/100] orf1196230560 len=34 ok | 98 done 0 skip 0 fail | 1943 folds/h | ETA 0.0h
+[99/100] orf1200708066 len=34 ok | 99 done 0 skip 0 fail | 1943 folds/h | ETA 0.0h
+[100/100] orf1202344569 len=34 ok | 100 done 0 skip 0 fail | 1943 folds/h | ETA 0.0h
+
+shard 1/1 complete: 100 folded, 0 skipped, 0 failed
+This writes `data/test100/structures/*.cif`, `data/test100/metrics/*.json`, and `data/test100/progress.shard1of1.csv`. Re-running is a no-op (finished `.cif` files are skipped).
+
+### Step 3: A representative, length-stratified sample
+
+The 100-seq test folded only 29-34aa cores (`fold.py` sorts by length, so `--limit` takes the shortest). Fold cost is super-linear in length, so that throughput is ~20x too optimistic. Added `fold.py --sample`, which picks N sequences evenly spaced across the length range for an unbiased timing curve.
+
+```bash
+python fold.py data/90pid_catalytic_orfs.orfid.fa --outdir data/sample --sample 80 --max-len 2048
+```
+
+
+**Estimate.** `estimate_fleet.py` fits `wall = a * L^b` from the sample and integrates it over the true length histogram (throughput x total residues, not mean-time x count).
+
+```bash
+python estimate_fleet.py --test-dir data/sample --length-hist data/length_hist.tsv --max-len 2048
+```
+
+=== power-law fit from 79 folds (len 29-833aa) ===
+wall_s = 0.004641 * L^1.399   (R^2=0.842 in log space)
+  implied: 2.92s at 100aa, 11.34s at 264aa (median), 199.3s at 2048aa
+disk: 640.9 B/residue (cif) + 194 B/seq (json)
+
+=== full input ===
+foldable (&lt;= 2048aa): 18,164,464 seqs, 4,973,159,505 residues
+skipped  (>  2048aa): 8,496 seqs (0.05%), handle separately
+
+=== projection (foldable only) ===
+total GPU-time : 67,355 GPU-hours  (2,806 GPU-days)
+total storage  : 3,191 GB
+fits in 740 GB? NO -> fold-wave then sync_to_s3.sh + delete
+                 (~5 offload waves)
+
+=== wall-clock by fleet size (100% GPU efficiency) ===
+  GPUs     days
+     8    350.8
+    16    175.4
+    32     87.7
+    64     43.9
+   128     21.9
+(real wall-clock is longer: queue waits, per-job model load ~1-2 min, preemption.)
+> **Note.** This first estimate used a provisional 2048aa cap and had not yet measured the real OOM ceiling or tested ESMFold2-Fast. The `calibrate.sbatch` job below did both in one unattended run, and the numbers were refined (see the calibration note).
+
+
+### Step 4: Test ESMFold2-Fast
+
+`biohub/ESMFold2-Fast` is not MSA-conditioned and has a lighter 24-layer trunk (vs 48). It relies directly on the protein language model embedding and reportedly matches ESMFold2 with little quality loss, so it should fold faster. Same model class, same fold API, same params, only the repo id changes (`fold.py --fast`).
+
+
+These manual runs are what `calibrate.sbatch` bundles (stratified sample + ladder OOM probe + estimate + quality diff) into one unattended job, for both models.
+
+```bash
+# Fast on the same stratified 80 (seed 0 -> identical sequences as data/sample)
+python fold.py data/90pid_catalytic_orfs.orfid.fa --outdir data/sample_fast --sample 80 --max-len 1280 --fast
+
+# estimate + quality diff (mean pLDDT / pTM, full vs Fast on the shared seqs)
+python estimate_fleet.py --test-dir data/sample_fast --length-hist data/length_hist.tsv --max-len 1280
+```
+
+
+### Calibration results (2026-08-07)
+
+One `calibrate.sbatch` job on one L40S produced all of this: stratified samples for both models, a length-ladder OOM probe, the estimates, and a quality diff.
+
+- **bf16 unusable** on this build (Float/BFloat16 matmul in the fold pass); **fp32 mandatory** (~25 GB).
+- **fp32 OOM ceiling ~1300aa** (1285 folds, 1529 OOMs), same for both models (memory = shared ESMC-6B backbone + L^2 pair tensor). Cap `--max-len 1280` keeps 99.75%; OOMs cost ~25 min each, so cap below the ceiling.
+- **Fast vs Full** (79 shared seqs): 1.78x faster (median 4.79s vs 8.52s) for -2.05 pLDDT (81.8 vs 83.9) and -0.022 pTM.
+
+**Projection** (foldable &lt;=1280aa: 18,128,069 seqs, 4.92 B residues):
+
+| | Full | **Fast (chosen)** |
+|---|---|---|
+| GPU-hours | 66,001 | **36,034** |
+| @64 / 128 GPUs | ~43 / 21.5 d | **~24 / 12 d** |
+| storage | 3.15 TB | 3.15 TB (~5 offload waves) |
+
+**Decision: ESMFold2-Fast** — nearly half the compute for ~2 pLDDT, advantage grows with length. The 44,891 seqs >1280aa (0.25%) are deferred to an H100 run.
+
+
+### Step 5: Scale out (SLURM job array)
+
+Locked config in `submit_fold.sh`: **`FAST=1`** (ESMFold2-Fast), **`NSHARDS=1000`** (Killarney `MaxArraySize`=1001), `--max-len 1280`, fp32. Each array task folds one **cost-balanced** shard (`select_shard` splits by `L^1.2` cost, not count, so every shard is ~37 GPU-h despite the 15× length skew) on one L40S. The 2-day partition (`gpubase_l40s_b4`) fits a shard in one job → single pass, no resubmits. `#SBATCH --account=aip-wanglab` is already set (matches `boltz_petase`).
+
+```bash
+cd resources/260806_issue6_purav_foldrun
+TESTN=2 ./submit_fold.sh     # validate plumbing on 2 shards first
+squeue --me
+tail -f logs/fold90pid-<jobid>_1.out   # expect: loaded (biohub/ESMFold2-Fast) + folds ticking
+
+./submit_fold.sh             # all 1000 shards; set MAXCONCURRENT to your allocation's GPU limit
+```
+
+**Resume is free**: a killed/preempted shard re-runs from where it stopped (finished `.cif` files are skipped). Wall-clock ≈ 36,069 GPU-h / MAXCONCURRENT (16→94d, 32→47d, 64→24d).
+
+**Storage: ~5 waves.** 3.15 TB won't fit the 740 GB budget, so archive and clear per wave:
+```bash
+./sync_to_s3.sh          # dry-run
+./sync_to_s3.sh --go     # upload structures/ + metrics/, then delete the local wave
+```
+
+**Long tail.** The 44,891 seqs >1280aa (0.25%) are skipped on L40S; fold them later on an H100 partition (80 GB fits the L² tensor).
+
+OUT: `resources/260806_issue6_purav_foldrun/data/fold90pid/{structures,metrics}/`
+
+### Step 6: Analysis (stub)
+
+Downstream quality analysis (pLDDT/pTM distributions, comparison against experimental structures, FoldSeek novelty) to be added once a representative batch has folded.
+
+---
+
+## Results & Discussion
+
+**Key metrics** (ESMFold2-Fast, fp32, L40S, 68 steps / 10 loops):
+- Throughput fit `wall = 0.00812·L^1.202`; median fold 4.79 s; mean pLDDT 81.8, pTM 0.729.
+- Disk: 641 B/residue (cif) + 194 B/seq (json).
+
+**Projection** (foldable ≤1280aa: 18,128,069 seqs / 99.75%, 4.92 B residues):
+- **36,034 GPU-hours** (~24 days on 64 L40S) and **3.15 TB** total.
+
+**Observations**:
+- **bf16 is broken on this build** — loads fine, but the fold pass hits a Float/BFloat16 matmul on every sequence. fp32 is mandatory (~25 GB, fits the 46 GB L40S).
+- **fp32 OOM ceiling ≈ 1300aa** (1285 folds, 1529 OOMs), identical for Full and Fast — memory is dominated by the shared ESMC-6B backbone + the L² pair tensor. Cap at 1280 (keeps 99.75%); OOMs cost ~25 min each, so cap below the ceiling.
+- **Length is the dominant cost driver**: 29–59,275aa, median 264, and cost ~L^1.2, so a naive first-N test (all 29–34aa) over-estimated throughput ~20×. Sharding is cost-balanced to avoid a 15× straggler.
+- **Fast vs Full**: 1.78× faster for −2.05 pLDDT / −0.022 pTM. Chose Fast for the first-pass catalog.
+- **Storage doesn't fit** the 740 GB budget → ~5 fold-then-offload waves to S3.
+
+**Follow-up questions**:
+- How many concurrent L40S does the `aip-wanglab` allocation allow? (sets wall-clock)
+- Fold the 44,891 >1280aa sequences on H100 (80 GB), or leave deferred?
+- Final S3 layout, and dedup against ESM Atlas prefolds before or after?
