@@ -19,7 +19,7 @@ HERE="${SLURM_SUBMIT_DIR}"
 cd "$HERE"
 REPO="$(cd "$HERE/../.." && pwd)"
 source "$REPO/activate_petabite.sh"
-export HF_HOME=/home/purav/projects/aip-wanglab/purav/hf_cache
+export HF_HOME=/home/purav/projects/aip-qmorris/purav/hf_cache
 export PYTHONNOUSERSITE=1
 
 IN=data/90pid_catalytic_orfs.orfid.fa

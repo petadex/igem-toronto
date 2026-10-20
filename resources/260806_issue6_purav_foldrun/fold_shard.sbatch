@@ -25,7 +25,7 @@ REPO="$(cd "$HERE/../.." && pwd)"
 
 # Environment: modules + venv + user-site isolation, then HF cache on /project.
 source "$REPO/activate_petabite.sh"
-export HF_HOME=/home/purav/projects/aip-wanglab/purav/hf_cache
+export HF_HOME=/home/purav/projects/aip-qmorris/purav/hf_cache
 export PYTHONNOUSERSITE=1
 
 # INPUT / OUTDIR / NSHARDS come from submit_fold.sh (exported into the job env).
