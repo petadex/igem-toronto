@@ -1,0 +1,584 @@
+---
+    title: 261011_issue122_7_petadex_clustering
+    section: "Dry Lab"
+    path: "/dry-lab/issue/122"
+    navTitle: "Issue 122"
+    order: 20
+    description: ""
+    owners: ["Dry Lab"]
+    updated: "2026-05-16"
+    status: "draft"
+---
+    
+---
+project_title: petadex.v260701_creation
+experiment_name: 7_petadex_clustering
+author: Thomas Quigley
+type: experiment
+date_created: 2026-10-11
+progress: Draft
+date_finished:
+---
+# PETadex.v260701 Creation: 6. Cleaning the Logan-DIAMONDx results
+
+> **Author:** Thomas Quigley\
+> **Date Started:** October 4th, 2026\
+> **Date Finished:** 
+> **Input:** \
+> s3://serratus-rayan/beetles/logan_sep30_26_run/all-concat/peta*\
+> **Output:** \
+---
+
+## 1. Objective
+
+
+### 1.1. Place in the Project
+---
+
+
+## 2. Methods
+### 2.0. Install requirements
+---
+
+
+### 2.1. Return the Plasticome catalytic domain fasta
+---
+In the previous notebook (5_creating_logan_query), the PETadex HMMs were ran against both Plasticome and NCBI nr sequences. In this section, I will extract the catalytic domains from the Plasticome sequences (&lt;1.0e-5) that contain residues in each of the catalytic positions.
+
+This section will also split the catalytic domains into per-component.
+
+
+```python
+# ───────────── #
+# SCRIPT SET UP #
+# ───────────── #
+
+import os
+import re
+import csv
+from collections import Counter, defaultdict
+
+# ─── INPUT ─── #
+PLASTICOME_NR_CATALYTIC_ANNOTATIONS = "../s3/5_creating_logan_query/petadex-nr.v260701.catalytic_domain_annotations.csv"
+""" Columns:
+petadex_id = either the nr accessions or plasticome accession "PL{int}
+component_id = the component from the input fastaa
+hmm_name = the hmm that hit to the sequence
+hmm_evalue = hmm hit e-value
+hmm_target_start = amino acid position of the start of the hmm hit range
+hmm_target_end =  amino acid position of the end of the hmm hit range
+complete_catalytic_hit = TRUE or FALSE if the hmm hit range contains all the catalytic residue positons
+catalytic_site_identities = amino acid identities of the catalytic residues
+important_site_identities = amino acid identiities of the important residues, if they were annotated
+
+ex. PL1,C001,C001.hmm,9.3e-40,48,261,TRUE,S107(S160):D170(D206):H199(H237),
+"""
+
+PLASTICOME_SEQUENCES = "../s3/1_pazy_cleaning/petadex-plasticome.v260701.100pid-centroids.fastaa"
+""" Format:
+>{petadex_id}|{primary_gb_accession}|{secondary_gb_accesions}|{pazy_ids}|{component_id}
+aa_sequence
+
+ex. >PL1|WP_054022242.1||1|C001
+MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEA
+"""
+
+# ─── OUTPUT ─── #
+PLASTICOME_CATALYTIC_DOMAINS = "../s3/7_petadex_clustering/petadex-plasticome.v260701.catalytic_domain.fastaa"
+""" Format: 
+>{petadex_id}|{hmm_name}|{hmm_evalue}|{hmm_start}|{hmm_end}|{component_id}
+aa_sequence
+
+ex. >PL1|C001-1|1.0e-10|10|230|C001
+"""
+
+PLASTICOME_CATALYTIC_DOMAIN_COMPONENT_DIR = "./7_petadex_clustering/output/plasticome_catalytic_domain_per_component" # same format as above, but per component_id
+# /petadex-plasticome.v260701.catalytic_domain.{component_id}.fastaa
+
+# ─── PARAMETERS ─── #
+EVALUE_CUTOFF = 1.0e-5
+
+os.makedirs(os.path.dirname(PLASTICOME_CATALYTIC_DOMAINS), exist_ok=True)
+os.makedirs(PLASTICOME_CATALYTIC_DOMAIN_COMPONENT_DIR, exist_ok=True)
+
+# ──────────────────────── #
+# EXTRACT CATALYTIC DOMAIN #
+# ──────────────────────── #
+
+# ─── READ PLASTICOME SEQUENCES ─── #
+plasticome_sequences = {} # petadex_id -> (component_id, aa_sequence)
+with open(PLASTICOME_SEQUENCES) as infile:
+    petadex_id = None
+    for line in infile:
+        line = line.strip()
+        if line.startswith(">"):
+            fields = line[1:].split("|")
+            petadex_id, component_id = fields[0], fields[-1]
+            plasticome_sequences[petadex_id] = (component_id, "")
+        elif line:
+            component_id, sequence = plasticome_sequences[petadex_id]
+            plasticome_sequences[petadex_id] = (component_id, sequence + line)
+
+# ─── FILTER ANNOTATIONS AND WRITE DOMAINS ─── #
+plasticome_rows = 0
+domain_counts = Counter()
+component_sequences = defaultdict(set)
+component_handles = {}
+
+def get_component_handle(component_id):
+    handle = component_handles.get(component_id)
+    if handle is None:
+        handle = open(os.path.join(PLASTICOME_CATALYTIC_DOMAIN_COMPONENT_DIR, f"petadex-plasticome.v260701.catalytic_domain.{component_id}.fastaa"), "w")
+        component_handles[component_id] = handle
+    return handle
+
+try:
+    # ─── REDUCE TO THE SINGLE LOWEST-HMM_EVALUE HIT PER SEQUENCE ─── #
+    winners = {} # petadex_id -> winning annotations-csv row
+    with open(PLASTICOME_NR_CATALYTIC_ANNOTATIONS) as infile:
+        for row in csv.DictReader(infile):
+            if not re.fullmatch(r"PL\d+", row["petadex_id"]): # nr accessions can also start with "PL" (ex. PLA18208.1)
+                continue
+            plasticome_rows += 1
+            hmm_evalue = float(row["hmm_evalue"])
+            if hmm_evalue >= EVALUE_CUTOFF:
+                continue
+            current = winners.get(row["petadex_id"])
+            if current is None or hmm_evalue < float(current["hmm_evalue"]):
+                winners[row["petadex_id"]] = row
+
+    # ─── WRITE THE WINNING HIT ONLY IF IT IS COMPLETE ─── #
+    with open(PLASTICOME_CATALYTIC_DOMAINS, "w") as outfile:
+        for petadex_id, row in sorted(winners.items(), key=lambda kv: int(kv[0][2:])):
+            if row["complete_catalytic_hit"] != "TRUE":
+                continue
+            component_id = row["component_id"]
+            hmm_start, hmm_end = int(row["hmm_target_start"]), int(row["hmm_target_end"])
+            assert petadex_id in plasticome_sequences, f"{petadex_id} missing from {PLASTICOME_SEQUENCES}"
+            sequence = plasticome_sequences[petadex_id][1]
+            assert hmm_end <= len(sequence), f"{petadex_id} hit end {hmm_end} > sequence length {len(sequence)}"
+
+            hmm_name = row["hmm_name"].removesuffix(".hmm")
+            record = f">{petadex_id}|{hmm_name}|{row['hmm_evalue']}|{hmm_start}|{hmm_end}|{component_id}\n{sequence[hmm_start - 1:hmm_end]}\n" # 1-based inclusive coordinates
+            outfile.write(record)
+            get_component_handle(component_id).write(record)
+
+            domain_counts[component_id] += 1
+            component_sequences[component_id].add(petadex_id)
+finally:
+    for handle in component_handles.values():
+        handle.close()
+
+# ─── SUMMARY ─── #
+sequences_with_domain = set().union(*component_sequences.values())
+print(f"{plasticome_rows:,} plasticome hmm hits read")
+print(f"{sum(domain_counts.values()):,} catalytic domains (complete, e-value < {EVALUE_CUTOFF:.1e}) from {len(sequences_with_domain):,} sequences -> {PLASTICOME_CATALYTIC_DOMAINS}")
+print(f"{len(plasticome_sequences) - len(sequences_with_domain):,} of {len(plasticome_sequences):,} plasticome sequences have no catalytic domain")
+print(f"{len(component_handles)} component fastaas written -> {PLASTICOME_CATALYTIC_DOMAIN_COMPONENT_DIR}/")
+print()
+print(f"{'component':<10}{'domains':>10}{'sequences':>12}")
+for component_id in sorted(domain_counts):
+    print(f"{component_id:<10}{domain_counts[component_id]:>10,}{len(component_sequences[component_id]):>12,}")
+print(f"{'total':<10}{sum(domain_counts.values()):>10,}{len(sequences_with_domain):>12,}")
+```
+
+    647 plasticome hmm hits read
+    503 catalytic domains (complete, e-value &lt; 1.0e-05) from 487 sequences -> ../s3/7_petadex_clustering/petadex-plasticome.v260701.catalytic_domain.fastaa
+    6 of 493 plasticome sequences have no catalytic domain
+    46 component fastaas written -> ./7_petadex_clustering/output/plasticome_catalytic_domain_per_component/
+    
+    component    domains   sequences
+    C001             293         289
+    C002              18          18
+    C003              24          24
+    C004               2           2
+    C005              48          48
+    C006               5           5
+    C007               4           4
+    C008               5           5
+    C009               2           2
+    C010               1           1
+    C011               3           3
+    C012               5           5
+    C013               1           1
+    C014              26          14
+    C015               2           2
+    C016               1           1
+    C017               1           1
+    C018               7           7
+    C019               1           1
+    C020               1           1
+    C021               1           1
+    C022               1           1
+    C023               1           1
+    C024              11          11
+    C025               1           1
+    C026               8           8
+    C027               1           1
+    C028               1           1
+    C029               2           2
+    C030               2           2
+    C031               1           1
+    C032               1           1
+    C033               1           1
+    C034               4           4
+    C035               1           1
+    C036               2           2
+    C037               1           1
+    C038               1           1
+    C039               2           2
+    C040               1           1
+    C041               1           1
+    C042               1           1
+    C043               1           1
+    C044               1           1
+    C045               3           3
+    C046               2           2
+    total            503         487
+
+
+### 2.2. Return the NCBI nr catalytic domain fasta
+---
+In the previous notebook (5_creating_logan_query), the PETadex HMMs were ran against both Plasticome and NCBI nr sequences. In this section, I will extract the catalytic domains from the NCBI nr sequences (&lt;1.0e-5) that are annotated as catalytically complete.
+
+This section will also split the catalytic domains into per-component.
+
+
+```python
+# ───────────── #
+# SCRIPT SET UP #
+# ───────────── #
+
+import os
+from collections import Counter
+
+# ─── INPUT ─── #
+NR_SEQUENCES = "../s3/5_creating_logan_query/petadex-nr.v260701.proteins.fastaa"
+""" Format:
+>{petadex_id}|{genbank_accession}|{diamond_evalue}|{pid}|{bitscore}|{query_sequence}|{component_id}|{hmm_evalue}|{hmm_start}|{hmm_end}|{hmm_name}|{complete_boolean}
+aa_sequence
+
+ex. >NR782|3KSR_A|5.73e-06|26.0|60.1|PL118|C001|5.1e-28|5|238|C001.hmm|TRUE
+MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEA
+"""
+
+# ─── OUTPUT ─── #
+NR_CATALYTIC_DOMAINS = "../s3/7_petadex_clustering/petadex-nr.v260701.catalytic_domain.fastaa"
+""" Format: 
+>{petadex_id}|{hmm_name}|{hmm_evalue}|{hmm_start}|{hmm_end}|{component_id}
+aa_sequence
+
+ex. >NR1|C001-1|1.0e-10|10|230|C001
+"""
+
+NR_CATALYTIC_DOMAIN_COMPONENT_DIR = "./7_petadex_clustering/output/nr_catalytic_domain_per_component" # same format as above, but per component_id
+# /petadex-nr.v260701.catalytic_domain.{component_id}.fastaa
+
+# ─── PARAMETERS ─── #
+EVALUE_CUTOFF = 1.0e-5
+
+os.makedirs(os.path.dirname(NR_CATALYTIC_DOMAINS), exist_ok=True)
+os.makedirs(NR_CATALYTIC_DOMAIN_COMPONENT_DIR, exist_ok=True)
+
+# ──────────────────────── #
+# EXTRACT CATALYTIC DOMAIN #
+# ──────────────────────── #
+
+nr_records = 0
+incomplete_records = 0
+evalue_fail_records = 0
+domain_counts = Counter()
+component_handles = {}
+
+def get_component_handle(component_id):
+    handle = component_handles.get(component_id)
+    if handle is None:
+        handle = open(os.path.join(NR_CATALYTIC_DOMAIN_COMPONENT_DIR, f"petadex-nr.v260701.catalytic_domain.{component_id}.fastaa"), "w")
+        component_handles[component_id] = handle
+    return handle
+
+try:
+    with open(NR_SEQUENCES) as infile, open(NR_CATALYTIC_DOMAINS, "w") as outfile:
+        header = None
+        for line in infile:
+            line = line.strip()
+            if line.startswith(">"):
+                header = line[1:]
+                continue
+            if not line:
+                continue
+            nr_records += 1
+
+            petadex_id = header.split("|", 1)[0]
+            component_id, hmm_evalue, hmm_start, hmm_end, hmm_name, complete_boolean = header.rsplit("|", 6)[1:] # genbank_accession may itself contain "|" (ex. prf||1008249A), so split from the right
+            if complete_boolean != "TRUE":
+                incomplete_records += 1
+                continue
+            if float(hmm_evalue) >= EVALUE_CUTOFF:
+                evalue_fail_records += 1
+                continue
+
+            hmm_start, hmm_end = int(hmm_start), int(hmm_end)
+            assert hmm_end <= len(line), f"{petadex_id} hit end {hmm_end} > sequence length {len(line)}"
+
+            hmm_name = hmm_name.removesuffix(".hmm")
+            record = f">{petadex_id}|{hmm_name}|{hmm_evalue}|{hmm_start}|{hmm_end}|{component_id}\n{line[hmm_start - 1:hmm_end]}\n" # 1-based inclusive coordinates
+            outfile.write(record)
+            get_component_handle(component_id).write(record)
+
+            domain_counts[component_id] += 1
+finally:
+    for handle in component_handles.values():
+        handle.close()
+
+# ─── SUMMARY ─── #
+print(f"{nr_records:,} nr sequences read")
+print(f"{incomplete_records:,} removed as catalytically incomplete")
+print(f"{evalue_fail_records:,} removed with hmm e-value >= {EVALUE_CUTOFF:.1e}")
+print(f"{sum(domain_counts.values()):,} catalytic domains written -> {NR_CATALYTIC_DOMAINS}")
+print(f"{len(component_handles)} component fastaas written -> {NR_CATALYTIC_DOMAIN_COMPONENT_DIR}/")
+print()
+print(f"{'component':<10}{'domains':>12}")
+for component_id in sorted(domain_counts):
+    print(f"{component_id:<10}{domain_counts[component_id]:>12,}")
+print(f"{'total':<10}{sum(domain_counts.values()):>12,}")
+```
+
+    7,561,905 nr sequences read
+    797,288 removed as catalytically incomplete
+    0 removed with hmm e-value >= 1.0e-05
+    6,764,617 catalytic domains written -> ../s3/7_petadex_clustering/petadex-nr.v260701.catalytic_domain.fastaa
+    46 component fastaas written -> ./7_petadex_clustering/output/nr_catalytic_domain_per_component/
+    
+    component      domains
+    C001           359,934
+    C002            26,845
+    C003           818,742
+    C004           103,879
+    C005            62,813
+    C006            37,236
+    C007           336,805
+    C008             6,131
+    C009             6,826
+    C010             2,309
+    C011             7,539
+    C012            18,212
+    C013             4,074
+    C014           757,859
+    C015           206,215
+    C016           868,628
+    C017           529,963
+    C018            18,486
+    C019            39,373
+    C020            54,041
+    C021             1,818
+    C022           216,420
+    C023             1,093
+    C024            18,640
+    C025            92,941
+    C026           569,344
+    C027               363
+    C028             5,100
+    C029            27,358
+    C030            58,511
+    C031             3,796
+    C032            91,671
+    C033               841
+    C034           813,518
+    C035            73,500
+    C036           131,437
+    C037            59,413
+    C038            65,723
+    C039               599
+    C040           101,946
+    C041            15,156
+    C042            12,493
+    C043             6,314
+    C044            23,290
+    C045            26,430
+    C046            80,992
+    total        6,764,617
+
+
+### 2.3. Return the Logan catalytic domain fasta
+---
+In the previous notebook (6_logan_search_qc), the PETadex HMMs were ran against the Logan hits. In this section, I will extract the catalytic domains from the Logan sequences (&lt;1.0e-5) that are annotated as catalytically complete.
+
+This section will also split the catalytic domains into per-component.
+
+
+```python
+# ───────────── #
+# SCRIPT SET UP #
+# ───────────── #
+
+import os
+from collections import Counter
+
+# ─── INPUT ─── #
+LOGAN_SEQUENCES = "../s3/6_logan_search_qc/petadex-logan.v260701.proteins.fastaa"
+""" Format:
+>{petadex_id}|{logan_accession}|{diamond_evalue}|{pid}|{query_sequence}|{logan_redundancy}|{component_id}|{hmm_evalue}|{hmm_start}|{hmm_end}|{hmm_name}|{complete_boolean}
+aa_sequence
+
+ex.>LG5|DRR000980_55834_ka:f:3.720____|3.54e-39|43.4|NR970708|n_accessions=1|C001|2.5e-12|7|172|C001.hmm|TRUE
+MNFPRASRLMQAAVLGGLMAVSAAATAQTNPYARGPNPTAASLEA
+"""
+
+# ─── OUTPUT ─── #
+LOGAN_CATALYTIC_DOMAINS = "../s3/7_petadex_clustering/petadex-logan.v260701.catalytic_domain.fastaa"
+""" Format: 
+>{petadex_id}|{hmm_name}|{hmm_evalue}|{hmm_start}|{hmm_end}|{component_id}
+aa_sequence
+
+ex. >LG1|C001-1|1.0e-10|10|230|C001
+"""
+
+LOGAN_CATALYTIC_DOMAIN_COMPONENT_DIR = "./7_petadex_clustering/output/logan_catalytic_domain_per_component" # same format as above, but per component_id
+# /petadex-logan.v260701.catalytic_domain.{component_id}.fastaa
+
+# ─── PARAMETERS ─── #
+EVALUE_CUTOFF = 1.0e-5
+PROGRESS_EVERY = 100_000_000 # input is ~500 GB / ~1.5B records, expect ~30-60 min
+
+os.makedirs(os.path.dirname(LOGAN_CATALYTIC_DOMAINS), exist_ok=True)
+os.makedirs(LOGAN_CATALYTIC_DOMAIN_COMPONENT_DIR, exist_ok=True)
+
+# ──────────────────────── #
+# EXTRACT CATALYTIC DOMAIN #
+# ──────────────────────── #
+
+logan_records = 0
+incomplete_records = 0
+evalue_fail_records = 0
+domain_counts = Counter()
+component_handles = {}
+
+def get_component_handle(component_id):
+    handle = component_handles.get(component_id)
+    if handle is None:
+        handle = open(os.path.join(LOGAN_CATALYTIC_DOMAIN_COMPONENT_DIR, f"petadex-logan.v260701.catalytic_domain.{component_id}.fastaa"), "w")
+        component_handles[component_id] = handle
+    return handle
+
+try:
+    with open(LOGAN_SEQUENCES) as infile, open(LOGAN_CATALYTIC_DOMAINS, "w") as outfile:
+        header = None
+        for line in infile:
+            line = line.strip()
+            if line.startswith(">"):
+                header = line[1:]
+                continue
+            if not line:
+                continue
+            logan_records += 1
+            if logan_records % PROGRESS_EVERY == 0:
+                print(f"  {logan_records:,} logan sequences read, {sum(domain_counts.values()):,} catalytic domains written", flush=True)
+
+            petadex_id = header.split("|", 1)[0]
+            component_id, hmm_evalue, hmm_start, hmm_end, hmm_name, complete_boolean = header.rsplit("|", 6)[1:] # split from the right in case logan_accession ever contains "|"
+            if complete_boolean != "TRUE":
+                incomplete_records += 1
+                continue
+            if float(hmm_evalue) >= EVALUE_CUTOFF:
+                evalue_fail_records += 1
+                continue
+
+            hmm_start, hmm_end = int(hmm_start), int(hmm_end)
+            assert hmm_end <= len(line), f"{petadex_id} hit end {hmm_end} > sequence length {len(line)}"
+
+            hmm_name = hmm_name.removesuffix(".hmm")
+            record = f">{petadex_id}|{hmm_name}|{hmm_evalue}|{hmm_start}|{hmm_end}|{component_id}\n{line[hmm_start - 1:hmm_end]}\n" # 1-based inclusive coordinates
+            outfile.write(record)
+            get_component_handle(component_id).write(record)
+
+            domain_counts[component_id] += 1
+finally:
+    for handle in component_handles.values():
+        handle.close()
+
+# ─── SUMMARY ─── #
+print(f"{logan_records:,} logan sequences read")
+print(f"{incomplete_records:,} removed as catalytically incomplete")
+print(f"{evalue_fail_records:,} removed with hmm e-value >= {EVALUE_CUTOFF:.1e}")
+print(f"{sum(domain_counts.values()):,} catalytic domains written -> {LOGAN_CATALYTIC_DOMAINS}")
+print(f"{len(component_handles)} component fastaas written -> {LOGAN_CATALYTIC_DOMAIN_COMPONENT_DIR}/")
+print()
+print(f"{'component':<10}{'domains':>15}")
+for component_id in sorted(domain_counts):
+    print(f"{component_id:<10}{domain_counts[component_id]:>15,}")
+print(f"{'total':<10}{sum(domain_counts.values()):>15,}")
+```
+
+      100,000,000 logan sequences read, 33,237,388 catalytic domains written
+      200,000,000 logan sequences read, 50,451,750 catalytic domains written
+      300,000,000 logan sequences read, 59,370,891 catalytic domains written
+      400,000,000 logan sequences read, 75,730,015 catalytic domains written
+      500,000,000 logan sequences read, 89,967,031 catalytic domains written
+      600,000,000 logan sequences read, 101,850,556 catalytic domains written
+      700,000,000 logan sequences read, 115,960,784 catalytic domains written
+      800,000,000 logan sequences read, 145,561,689 catalytic domains written
+      900,000,000 logan sequences read, 179,193,377 catalytic domains written
+      1,000,000,000 logan sequences read, 199,498,589 catalytic domains written
+      1,100,000,000 logan sequences read, 214,171,441 catalytic domains written
+      1,200,000,000 logan sequences read, 223,979,921 catalytic domains written
+      1,300,000,000 logan sequences read, 230,462,113 catalytic domains written
+      1,400,000,000 logan sequences read, 241,087,501 catalytic domains written
+      1,500,000,000 logan sequences read, 253,653,542 catalytic domains written
+      1,600,000,000 logan sequences read, 263,185,624 catalytic domains written
+      1,700,000,000 logan sequences read, 282,324,108 catalytic domains written
+    1,740,282,847 logan sequences read
+    1,448,360,604 removed as catalytically incomplete
+    0 removed with hmm e-value >= 1.0e-05
+    291,922,243 catalytic domains written -> ../s3/7_petadex_clustering/petadex-logan.v260701.catalytic_domain.fastaa
+    46 component fastaas written -> ./7_petadex_clustering/output/logan_catalytic_domain_per_component/
+    
+    component         domains
+    C001           44,166,057
+    C002              489,564
+    C003           17,391,850
+    C004            6,467,732
+    C005            6,719,357
+    C006              521,304
+    C007           10,810,052
+    C008               44,413
+    C009               57,474
+    C010               73,692
+    C011              614,517
+    C012              232,527
+    C013              120,354
+    C014           21,699,417
+    C015           11,196,955
+    C016           69,968,416
+    C017           12,543,339
+    C018              278,912
+    C019            1,853,606
+    C020            6,379,715
+    C021               73,844
+    C022            7,148,165
+    C023               14,831
+    C024              730,543
+    C025            1,834,033
+    C026           10,631,997
+    C027                5,683
+    C028               69,816
+    C029              698,344
+    C030              280,634
+    C031               65,568
+    C032            4,879,740
+    C033              132,350
+    C034           22,675,402
+    C035              565,335
+    C036            3,000,620
+    C037            2,978,525
+    C038            1,407,280
+    C039               31,210
+    C040           15,421,103
+    C041              298,491
+    C042              104,778
+    C043              135,018
+    C044            3,571,063
+    C045              842,793
+    C046            2,695,824
+    total         291,922,243
+
