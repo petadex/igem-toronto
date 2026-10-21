@@ -19,14 +19,20 @@ date_created: 2026-10-11
 progress: Draft
 date_finished:
 ---
-# PETadex.v260701 Creation: 6. Cleaning the Logan-DIAMONDx results
+# PETadex.v260701 Creation: 7. Clustering PETadex
 
 > **Author:** Thomas Quigley\
-> **Date Started:** October 4th, 2026\
-> **Date Finished:** 
+> **Date Started:** October 11th, 2026\
+> **Date Finished:** \
 > **Input:** \
-> s3://serratus-rayan/beetles/logan_sep30_26_run/all-concat/peta*\
+> s3://petadex/petadex.v260701/1_pazy_cleaning/petadex-plasticome.v260701.100pid-centroids.fastaa\
+> s3://petadex/petadex.v260701/5_creating_logan_query/petadex-nr.v260701.catalytic_domain_annotations.csv\
+> s3://petadex/petadex.v260701/5_creating_logan_query/petadex-nr.v260701.proteins.fastaa\
+> s3://petadex/petadex.v260701/6_logan_search_qc/petadex-logan.v260701.proteins.fastaa\
 > **Output:** \
+> s3://petadex/petadex.v260701/7_petadex_clustering/petadex-plasticome.v260701.catalytic_domain.fastaa\
+> s3://petadex/petadex.v260701/7_petadex_clustering/petadex-nr.v260701.catalytic_domain.fastaa\
+> s3://petadex/petadex.v260701/7_petadex_clustering/petadex-logan.v260701.catalytic_domain.fastaa
 ---
 
 ## 1. Objective
