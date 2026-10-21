@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sequential Pipeline Crab Animation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        #pipeline-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 3 / 4; 
+            background-image: url('https://static.igem.wiki/teams/6187/wiki/drylab-page/figures/adi-figure-stuff/ingestionpipelinefigure-16.avif');
+            background-size: contain;
+            background-position: center top;
+            background-repeat: no-repeat;
+            margin: 0 auto;
+            overflow: hidden;
+            border: 2px solid #541911ff;
+            border-radius: 0.5rem;
+            background-color: #ac493dff;
+        }
+
+        .crab {
+            position: absolute;
+            transform-origin: center center;
+            transition-property: left, top;
+            transition-timing-function: linear; 
+            z-index: 10;
+            pointer-events: none; 
+        }
+
+        @keyframes walk-tilt {
+            0%   { transform: rotate(0deg); }
+            25%  { transform: rotate(20deg); }
+            50%  { transform: rotate(0deg); }
+            75%  { transform: rotate(-20deg); }
+            100% { transform: rotate(0deg); }
+        }
+
+        .walking {
+            animation: walk-tilt 0.6s infinite linear;
+        }
+
+        @keyframes walk-tilt-left {
+            0%   { transform: scaleX(-1) rotate(0deg); }
+            25%  { transform: scaleX(-1) rotate(20deg); }
+            50%  { transform: scaleX(-1) rotate(0deg); }
+            75%  { transform: scaleX(-1) rotate(-20deg); }
+            100% { transform: scaleX(-1) rotate(0deg); }
+        }
+
+        .walking-left {
+            animation: walk-tilt-left 0.6s infinite linear;
+        }
+    </style>
+</head>
+<body class="bg-slate-200 font-sans text-slate-800 flex justify-center items-center min-h-screen m-0 p-4">
+
+    <div id="pipeline-container"></div>
+
+    <script>
+        const CLAW_ANIM_INTERVAL = 300; 
+        const BASE_URL = 'https://static.igem.wiki/teams/6187/wiki/drylab-page/figures/adi-figure-stuff/';
+
+        const ASSETS = {
+            vertical: { 
+                frame1: BASE_URL + 'section-2-animals-crab-section-2-a.avif',
+                frame2: BASE_URL + 'section-2-animals-crab-section-2-a-2.avif'
+            },
+            horizontal: { 
+                frame1: BASE_URL + 'section-2-animals-crab-section-2-b.avif',
+                frame2: BASE_URL + 'section-2-animals-crab-section-2-b-2.avif'
+            },
+            data: { 
+                frame1: BASE_URL + 'data1.avif',
+                frame2: BASE_URL + 'data2.avif'
+            },
+            data1: { 
+                frame1: BASE_URL + 'data2-1.avif',
+                frame2: BASE_URL + 'data2-2.avif'
+            },
+            data2: { 
+                frame1: BASE_URL + 'data3-1.avif',
+                frame2: BASE_URL + 'data3-2.avif'
+            },
+            abstract: { 
+                frame1: BASE_URL + 'abstract1.avif',
+                frame2: BASE_URL + 'abstract2.avif'
+            },
+            paper: { 
+                frame1: BASE_URL + 'paper1.avif',
+                frame2: BASE_URL + 'paper2.avif'
+            },
+            json: { 
+                frame1: BASE_URL + 'json1.avif',
+                frame2: BASE_URL + 'json2.avif'
+            },
+            paper1: { 
+                frame1: BASE_URL + 'paper1-1.avif',
+                frame2: BASE_URL + 'paper1-2.avif'
+            },
+            filteredpaper: { 
+                frame1: BASE_URL + 'filteredpaper1.avif',
+                frame2: BASE_URL + 'filteredpaper2.avif'
+            },
+            filteredpaperLeft: { 
+                frame1: BASE_URL + 'filteredpaper1.avif',
+                frame2: BASE_URL + 'filteredpaper2.avif',
+                flip: true
+            },
+            abstractLeft: { 
+                frame1: BASE_URL + 'abstract1.avif',
+                frame2: BASE_URL + 'abstract2.avif',
+                flip: true 
+            },
+            paperLeft: { 
+                frame1: BASE_URL + 'paper1.avif',
+                frame2: BASE_URL + 'paper2.avif',
+                flip: true
+            }
+        };
+
+        const MASTER_SEQUENCE = [
+            {
+                name: "Phase 1: Database to Acquiring DOIs (Top Center)",
+                crabType: 'data',
+                sizePercent: 6,
+                speedMsPer100Percent: 28000,
+                runNextSimultaneously: true, 
+                delayBeforeNext: 0, 
+                waypoints: [
+                    { x: 55, y: 11 },  
+                    { x: 55, y: 11.5 }, 
+                    { x: 51.5, y: 11.5 }, 
+                    { x: 51.5, y: 14 }  
+                ]
+            },
+            {
+                name: "Phase 1: Database to Acquiring DOIs (Top Right)",
+                crabType: 'data2',
+                sizePercent: 6,
+                speedMsPer100Percent: 20000,
+                runNextSimultaneously: true, 
+                delayBeforeNext: 0, 
+                waypoints: [
+                    { x: 67, y: 23.5 },  
+                    { x: 58, y: 23.5 }
+                ]
+            },
+            {
+                name: "Phase 1: Database to Acquiring DOIs (Right Edge)",
+                crabType: 'data1',
+                sizePercent: 6,
+                speedMsPer100Percent: 8000, 
+                delayBeforeNext: 500, 
+                waypoints: [
+                    { x: 71, y: 12 },  
+                    { x: 65, y: 12 }, 
+                    { x: 65, y: 21.5 }, 
+                    { x: 58, y: 21.5 }  
+                ]
+            },
+            {
+                name: "Phase 2: Acquiring DOIs to Scraping (Wave of 6)",
+                crabType: 'abstract',
+                sizePercent: 9, 
+                speedMsPer100Percent: 10000, 
+                repeatCount: 6,           
+                repeatDelay: 500,         
+                runNextSimultaneously: true, 
+                waitForLastCrab: true,    
+                delayBeforeNext: 500,    
+                waypoints: [
+                    { x: 36, y: 29 }, 
+                    { x: 36, y: 33 }, 
+                    { x: 67, y: 33 }, 
+                    { x: 67, y: 35 }  
+                ]
+            },
+            {
+                name: "Phase 3: Scraping to Article Retrieval (Wave of 2)",
+                crabType: 'filteredpaperLeft',
+                sizePercent: 8,
+                speedMsPer100Percent: 10000, 
+                repeatCount: 2,
+                repeatDelay: 500,
+                runNextSimultaneously: true,
+                waitForLastCrab: true,
+                delayBeforeNext: 500, 
+                waypoints: [
+                    { x: 66.8, y: 46 }, 
+                    { x: 66.8, y: 61 }, 
+                    { x: 54, y: 61 }  
+                ]
+            },
+            {
+                name: "Phase 4: Literature Expansion (Wave of 8)",
+                crabType: 'paper1',
+                sizePercent: 6,
+                speedMsPer100Percent: 7000, 
+                repeatCount: 16,
+                repeatDelay: 400,
+                runNextSimultaneously: true,
+                waitForLastCrab: true,
+                delayBeforeNext: 500, 
+                waypoints: [
+                    { x: 38, y: 69 }, 
+                    { x: 38, y: 71.5 }, 
+                    { x: 88.5, y: 71.5 }, 
+                    { x: 88.5, y: 33 }, 
+                    { x: 69.5, y: 33 },  
+                    { x: 69.5, y: 34 }  
+                ]
+            },
+            {
+                name: "Phase 5: Filter to Scraping",
+                crabType: 'filteredpaper',
+                repeatCount: 4,
+                repeatDelay: 500,
+                sizePercent: 8,
+                speedMsPer100Percent: 7000,
+                runNextSimultaneously: true,
+                waitForLastCrab: true, 
+                delayBeforeNext: 500, 
+                waypoints: [
+                    { x: 68.5, y: 46.5 }, 
+                    { x: 68.5, y: 60 }, 
+                    { x: 71, y: 60 }, 
+                    { x: 71, y: 73.5 }
+                ]
+            },
+            {
+                name: "Phase 6: Scraping",
+                crabType: 'paperLeft',
+                repeatCount: 4,
+                repeatDelay: 500,
+                sizePercent: 9,
+                runNextSimultaneously: true,
+                waitForLastCrab: true,
+                speedMsPer100Percent: 10000, 
+                delayBeforeNext: 500, 
+                waypoints: [
+                    { x: 45.5, y: 83.5 }, 
+                    { x: 40.5, y: 83.5 }, 
+                    { x: 40.5, y: 89.5 }, 
+                    { x: 36.5, y: 89.5 }
+                ]
+            },
+            {
+                name: "Phase 7: Article to Json",
+                crabType: 'json',
+                repeatCount: 4,
+                repeatDelay: 500,
+                runNextSimultaneously: true,
+                waitForLastCrab: true,
+                sizePercent: 9,
+                speedMsPer100Percent: 7000, 
+                delayBeforeNext: 500, 
+                waypoints: [
+                    { x: 24, y: 97 }, 
+                    { x: 24, y: 99 }, 
+                    { x: 41, y: 99 }, 
+                    { x: 41, y: 96.5 }, 
+                    { x: 45, y: 96.5 }
+                ]
+            }
+        ];
+
+        class CrabSequence {
+            constructor(config) {
+                this.config = config;
+                this.isFrame1 = true;
+                this.el = null;
+                this.clawInterval = null;
+            }
+
+            async execute() {
+                this.createDOMElement();
+                this.startClawAnimation();
+                await this.sleep(50);
+                for (let i = 1; i < this.config.waypoints.length; i++) {
+                    await this.moveTo(this.config.waypoints[i]);
+                }
+                this.destroy();
+            }
+
+            createDOMElement() {
+                const container = document.getElementById('pipeline-container');
+                this.el = document.createElement('img');
+                const frames = ASSETS[this.config.crabType];
+                this.el.src = frames.frame1;
+                
+                if (frames.flip) {
+                    this.el.className = 'crab walking-left';
+                } else {
+                    this.el.className = 'crab walking';
+                }
+                
+                this.el.style.width = `${this.config.sizePercent}%`;
+                
+                const startPoint = this.config.waypoints[0];
+                this.setPosition(startPoint.x, startPoint.y);
+                
+                container.appendChild(this.el);
+            }
+
+            startClawAnimation() {
+                const frames = ASSETS[this.config.crabType];
+                this.clawInterval = setInterval(() => {
+                    this.isFrame1 = !this.isFrame1;
+                    this.el.src = this.isFrame1 ? frames.frame1 : frames.frame2;
+                }, CLAW_ANIM_INTERVAL);
+            }
+
+            setPosition(xPercent, yPercent) {
+                this.el.style.left = `calc(${xPercent}% - ${this.config.sizePercent / 2}%)`;
+                this.el.style.top = `calc(${yPercent}% - ${this.config.sizePercent / 2}%)`;
+                this.currentX = xPercent;
+                this.currentY = yPercent;
+            }
+
+            moveTo(targetPoint) {
+                return new Promise((resolve) => {
+                    const dx = targetPoint.x - this.currentX;
+                    const dy = targetPoint.y - this.currentY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const durationMs = (distance / 100) * this.config.speedMsPer100Percent;
+                    
+                    this.el.style.transitionDuration = `${durationMs}ms`;
+
+                    const transitionEndHandler = (e) => {
+                        if (e.propertyName === 'left' || e.propertyName === 'top') {
+                            this.el.removeEventListener('transitionend', transitionEndHandler);
+                            resolve();
+                        }
+                    };
+                    this.el.addEventListener('transitionend', transitionEndHandler);
+                    this.setPosition(targetPoint.x, targetPoint.y);
+                });
+            }
+
+            destroy() {
+                if (this.clawInterval) clearInterval(this.clawInterval);
+                if (this.el && this.el.parentNode) {
+                    this.el.parentNode.removeChild(this.el);
+                }
+            }
+
+            sleep(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+        }
+
+        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        async function runMasterSequence() {
+            while (true) {
+                for (let i = 0; i < MASTER_SEQUENCE.length; i++) {
+                    const phaseConfig = MASTER_SEQUENCE[i];
+                    const repeats = phaseConfig.repeatCount || 1;
+                    const rDelay = phaseConfig.repeatDelay !== undefined ? phaseConfig.repeatDelay : 0;
+                    
+                    for (let r = 0; r < repeats; r++) {
+                        const crab = new CrabSequence(phaseConfig);
+                        const isLastCrab = (r === repeats - 1);
+                        
+                        if (!phaseConfig.runNextSimultaneously || (isLastCrab && phaseConfig.waitForLastCrab)) {
+                            await crab.execute(); 
+                        } else {
+                            crab.execute(); 
+                        }
+                        
+                        const delayToWait = isLastCrab ? phaseConfig.delayBeforeNext : rDelay;
+                        if (delayToWait > 0) {
+                            await sleep(delayToWait);
+                        }
+                    }
+                }
+                await sleep(2000); 
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            runMasterSequence();
+        });
+    </script>
+</body>
+</html>
